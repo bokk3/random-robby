@@ -48,6 +48,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Zombie")
 	bool IsRealPhysicalZombie() const noexcept { return !bIsMirrorDecoy; }
 
+	UFUNCTION(BlueprintPure, Category = "Zombie|Visual")
+	int32 GetActiveDirectionalRow() const noexcept { return ActiveDirectionalRow; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Visual")
+	int32 GetActiveWalkFrameColumn() const noexcept { return ActiveWalkFrameColumn; }
+
+	void AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept;
+
 	void ApplyZombieDamage(float DamageAmount, AActor* DamageInstigator);
 
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnZombieStepTriggered, const FDungeoneerStepEvent&);
@@ -55,7 +63,7 @@ public:
 
 protected:
 	void MoveAlongOctant(ECompassOctant Octant, float Scale = 1.0f) noexcept;
-	void UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant) noexcept;
+	void UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, int32 FrameColumn = -1) noexcept;
 	void AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept;
 	virtual void OnZombieDied();
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept { return TEXT("Exploder"); }
@@ -97,7 +105,10 @@ protected:
 private:
 	FVector PreviousLocation = FVector::ZeroVector;
 	float StepDistanceAccumulator = 0.0f;
+	float WalkCycleDistanceUU = 0.0f;
 	int32 StepSequenceCounter = 0;
 	int32 ActiveDirectionalRow = -1;
+	int32 ActiveWalkFrameColumn = 1;
+	int32 ActiveDirectionalCellIndex = -1;
 	bool bTexturedVisualsApplied = false;
 };

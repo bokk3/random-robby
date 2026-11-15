@@ -11,6 +11,23 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.6] - 2026-11-15
+
+### Fixed
+- **Alternating 4-Frame Walk-Cycle Sprite Sheets (`DungeoneerHero`, `ZombieExploder`, `ZombieFastThrower`)**:
+  - Replaced near-static duplicate stride poses in `Content/Art/Rigs/{DungeoneerHero,ZombieExploder,ZombieFastThrower}/Rig_*_Raw_D.png` with distinct 4-frame alternating locomotion cycles (`Col 0: Contact-L -> Col 1: Upright Passing A -> Col 2: Contact-R -> Col 3: Upright Passing B`) including opposing arm/lantern/chain counter-swing, hip bob, and front/back leg depth separation across all 4 directional rows.
+  - Fixed `Rig_ZombieFastThrower_Raw_D.png` missing cardinal directions (adding authentic skull-masked South Front and North Back sprint rows alongside East & West sprints) and removed the purple glow halo around the raised flask.
+  - Re-sliced `_D`, `_N`, `_E`, `_ORM`, `AtlasMetadata.json`, `rig_sockets.json`, and updated SHA-256 hashes in `Content/AssetManifest.json` via `slice_normal_rig.py`.
+- **Distance-Locked 16-Cell Runtime Flipbook Stepping (`DungeoneerAssetBootstrapSubsystem`, `ADungeoneerCharacter`, `AZombieBase`)**:
+  - Updated `UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles` to extract all `16` cells (`Row 0..3`, `Col 0..3`) with corresponding silhouette masks (`SpriteMaskTextures`) for `Hero`, `Exploder`, and `Thrower`, plus backward-compatible `*_Row{0..3}_*` and `*_Cell0_*` aliases (`136` cached entries total).
+  - Expanded `DirectionalHeroMIDs` (`ADungeoneerCharacter`) and `DirectionalZombieMIDs` (`AZombieBase`) to pre-allocate all `16` MIDs at initialization (zero `Tick` heap allocations) and swap active material cell (`Row * 4 + Col`) deterministically from accumulated XY distance traveled via `AdvanceWalkFlipbookByDistance` (`WalkCycleStrideUU = 140 UU`, snapping cleanly to upright `Col 1` when idle and aligning zombie footstep triggers cleanly to `Col 0` and `Col 2`).
+
+### Verified
+- Expanded `DungeoneerVerificationSpecs.cpp` (`HUDAndTradeModalAndAssetBootstrap`) to verify all `136` extracted cells, all `48` diffuse/normal/mask walk-frame combinations, and deterministic distance-driven frame transitions (`Col 0 -> 1 -> 2 -> 3 -> idle Col 1`) on `ADungeoneerCharacter` and `AZombieFastThrower`.
+- `DarkDungeoneerEditor Win64 Development` (`8` actions) and `DarkDungeoneer Win64 Development` (`7` actions) compiled cleanly, `python scripts/verify_architecture_invariants.py` exited `0` (`85` files verified), and all `8` headless UE `5.8.2` automation tests passed (`UE_TEST_EXIT=0`).
+
+---
+
 ## [0.9.5] - 2026-11-15
 
 ### Fixed

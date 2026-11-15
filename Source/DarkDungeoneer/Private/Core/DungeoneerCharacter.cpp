@@ -90,7 +90,7 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
 
-	DirectionalHeroMIDs.Reserve(4);
+	DirectionalHeroMIDs.Reserve(16);
 }
 
 void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
@@ -121,40 +121,32 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 				{
 					HeroVisualMesh->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
 
-					static constexpr const TCHAR* RowDiffuseKeys[4] =
-					{
-						TEXT("Hero_Row0_D"),
-						TEXT("Hero_Row1_D"),
-						TEXT("Hero_Row2_D"),
-						TEXT("Hero_Row3_D")
-					};
-					static constexpr const TCHAR* RowNormalKeys[4] =
-					{
-						TEXT("Hero_Row0_N"),
-						TEXT("Hero_Row1_N"),
-						TEXT("Hero_Row2_N"),
-						TEXT("Hero_Row3_N")
-					};
-
 					DirectionalHeroMIDs.Reset();
 					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
 					{
-						UMaterialInstanceDynamic* RowMID = Bootstrap->CreateDungeonOrRigMaterial(
-							this,
-							FName(RowDiffuseKeys[RowIdx]),
-							FName(RowNormalKeys[RowIdx]),
-							FLinearColor::White,
-							0.45f,
-							false,
-							true);
-						DirectionalHeroMIDs.Add(RowMID);
+						for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+						{
+							const FName DiffKey(*FString::Printf(TEXT("Hero_R%d_C%d_D"), RowIdx, ColIdx));
+							const FName NormKey(*FString::Printf(TEXT("Hero_R%d_C%d_N"), RowIdx, ColIdx));
+							UMaterialInstanceDynamic* CellMID = Bootstrap->CreateDungeonOrRigMaterial(
+								this,
+								DiffKey,
+								NormKey,
+								FLinearColor::White,
+								0.45f,
+								false,
+								true);
+							DirectionalHeroMIDs.Add(CellMID);
+						}
 					}
 
 					bTexturedVisualsApplied = true;
 					ActiveDirectionalRow = -1;
+					ActiveWalkFrameColumn = 1;
+					ActiveDirectionalCellIndex = -1;
 					const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
 					const ECompassOctant InitialFacing = MoveComp ? MoveComp->GetAimOctant() : ReplicatedAimOctant;
-					UpdateHeroDirectionalVisual(InitialFacing);
+					UpdateHeroDirectionalVisual(InitialFacing, ActiveWalkFrameColumn);
 					return;
 				}
 			}
@@ -178,7 +170,25 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 	}
 }
 
-void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOctant) noexcept
+void ADungeoneerCharacter::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept
+{
+	const float ClampedDist = FMath::Max(DeltaDistanceUU, 0.0f);
+	if (bIsMoving || ClampedDist > 0.25f)
+	{
+		WalkDistanceAccumulatorUU += ClampedDist;
+		const float SafeStride = FMath::Max(WalkCycleStrideUU, 20.0f);
+		const float RawPhase = WalkDistanceAccumulatorUU / SafeStride;
+		const float PhaseFrac = FMath::Clamp(RawPhase - FMath::FloorToFloat(RawPhase), 0.0f, 0.99999f);
+		ActiveWalkFrameColumn = FMath::Clamp(FMath::FloorToInt(PhaseFrac * 4.0f), 0, 3);
+	}
+	else
+	{
+		// Stand upright (Col 1 passing/neutral stance) when idle instead of frozen mid-stride
+		ActiveWalkFrameColumn = 1;
+	}
+}
+
+void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOctant, int32 FrameColumn) noexcept
 {
 	if (!HeroVisualMesh)
 	{
@@ -186,15 +196,20 @@ void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOcta
 	}
 
 	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(FacingOctant));
-	if (DesiredRow == ActiveDirectionalRow)
+	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
+	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
+
+	if (DesiredCell == ActiveDirectionalCellIndex)
 	{
 		return;
 	}
 
-	if (DirectionalHeroMIDs.IsValidIndex(DesiredRow) && DirectionalHeroMIDs[DesiredRow])
+	if (DirectionalHeroMIDs.IsValidIndex(DesiredCell) && DirectionalHeroMIDs[DesiredCell])
 	{
-		HeroVisualMesh->SetMaterial(0, DirectionalHeroMIDs[DesiredRow].Get());
+		HeroVisualMesh->SetMaterial(0, DirectionalHeroMIDs[DesiredCell].Get());
 		ActiveDirectionalRow = DesiredRow;
+		ActiveWalkFrameColumn = DesiredCol;
+		ActiveDirectionalCellIndex = DesiredCell;
 	}
 }
 
@@ -433,14 +448,31 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 		? MoveComp->GetAimOctant()
 		: ReplicatedAimOctant;
 
-	UpdateHeroDirectionalVisual(ActiveFacingOctant);
+	const FVector CurrentLoc = GetActorLocation();
+	float DeltaMoveDistUU = 0.0f;
+	if (bHasPreviousWalkLocation)
+	{
+		DeltaMoveDistUU = static_cast<float>(FVector::Dist2D(PreviousWalkLocation, CurrentLoc));
+	}
+	PreviousWalkLocation = CurrentLoc;
+	bHasPreviousWalkLocation = true;
+
+	const bool bHasMoveInput = MoveComp && MoveComp->HasActiveMoveInput();
+	if (bHasMoveInput && DeltaMoveDistUU <= 0.1f && MoveComp)
+	{
+		DeltaMoveDistUU = static_cast<float>(MoveComp->Velocity.Size2D()) * FMath::Max(DeltaSeconds, 0.0f);
+	}
+	AdvanceWalkFlipbookByDistance(DeltaMoveDistUU, bHasMoveInput);
+
+	UpdateHeroDirectionalVisual(ActiveFacingOctant, ActiveWalkFrameColumn);
 
 	if (DirectionalRigComponent)
 	{
 		DirectionalRigComponent->SetHeadingOctant(ActiveFacingOctant);
+		DirectionalRigComponent->SetFrameIndex(ActiveWalkFrameColumn);
 		if (MoveComp)
 		{
-			DirectionalRigComponent->SetAnimationPlaying(MoveComp->HasActiveMoveInput());
+			DirectionalRigComponent->SetAnimationPlaying(bHasMoveInput);
 		}
 	}
 

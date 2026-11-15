@@ -326,34 +326,7 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),         TEXT("Mirror_Intact_D"),     0, false, true,  false },
 		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),         TEXT("Mirror_Intact_N"),     0, true,  false, false },
 		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_D.png"),       TEXT("Breakable_Intact_D"),  0, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false, false },
-		// Hero 4-Directional Sprite Cells (Row0=Front/Cell0, Row1=Back/Cell4, Row2=Right/Cell8, Row3=Left/Cell12)
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row0_D"),         0,  false, true,  true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row0_N"),         0,  true,  false, true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row1_D"),         4,  false, true,  true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row1_N"),         4,  true,  false, true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row2_D"),         8,  false, true,  true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row2_N"),         8,  true,  false, true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row3_D"),         12, false, true,  true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row3_N"),         12, true,  false, true },
-		// Zombie Exploder 4-Directional Sprite Cells
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row0_D"),     0,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row0_N"),     0,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row1_D"),     4,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row1_N"),     4,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row2_D"),     8,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row2_N"),     8,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row3_D"),     12, false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row3_N"),     12, true,  false, true },
-		// Zombie Fast Thrower 4-Directional Sprite Cells
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row0_D"),      0,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row0_N"),      0,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row1_D"),      4,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row1_N"),      4,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row2_D"),      8,  false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row2_N"),      8,  true,  false, true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row3_D"),      12, false, true,  true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row3_N"),      12, true,  false, true }
+		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false, false }
 	};
 
 	for (const FCellExtractSpec& Spec : Specs)
@@ -370,7 +343,21 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 			Spec.bIsCharacterSprite);
 	}
 
-	// Backward-compatible Cell0 aliases pointing to Row0 (zero duplicate allocation)
+	// Extract all 16 directional walk-cycle cells (4 rows x 4 alternating stride frames) for each character/zombie rig
+	struct FRigExtractDef
+	{
+		const TCHAR* SubDir;
+		const TCHAR* DiffuseFile;
+		const TCHAR* NormalFile;
+		const TCHAR* KeyPrefix;
+	};
+	const FRigExtractDef RigDefs[3] =
+	{
+		{ TEXT("DungeoneerHero"),    TEXT("Rig_DungeoneerHero_Raw_D.png"),    TEXT("Rig_DungeoneerHero_Raw_N.png"),    TEXT("Hero") },
+		{ TEXT("ZombieExploder"),    TEXT("Rig_ZombieExploder_Raw_D.png"),    TEXT("Rig_ZombieExploder_Raw_N.png"),    TEXT("Exploder") },
+		{ TEXT("ZombieFastThrower"), TEXT("Rig_ZombieFastThrower_Raw_D.png"), TEXT("Rig_ZombieFastThrower_Raw_N.png"), TEXT("Thrower") }
+	};
+
 	auto AliasCellKey = [this](const TCHAR* AliasKey, const TCHAR* SourceKey)
 	{
 		if (TObjectPtr<UTexture2D>* Src = ExtractedCellTextures.Find(FName(SourceKey)))
@@ -382,12 +369,41 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 			SpriteMaskTextures.Add(FName(AliasKey), *SrcMask);
 		}
 	};
-	AliasCellKey(TEXT("Hero_Cell0_D"),     TEXT("Hero_Row0_D"));
-	AliasCellKey(TEXT("Hero_Cell0_N"),     TEXT("Hero_Row0_N"));
-	AliasCellKey(TEXT("Exploder_Cell0_D"), TEXT("Exploder_Row0_D"));
-	AliasCellKey(TEXT("Exploder_Cell0_N"), TEXT("Exploder_Row0_N"));
-	AliasCellKey(TEXT("Thrower_Cell0_D"),  TEXT("Thrower_Row0_D"));
-	AliasCellKey(TEXT("Thrower_Cell0_N"),  TEXT("Thrower_Row0_N"));
+
+	for (const FRigExtractDef& Rig : RigDefs)
+	{
+		const FString DiffusePath = FString(RigsRoot) / Rig.SubDir / Rig.DiffuseFile;
+		const FString NormalPath = FString(RigsRoot) / Rig.SubDir / Rig.NormalFile;
+
+		for (int32 Row = 0; Row < 4; ++Row)
+		{
+			for (int32 Col = 0; Col < 4; ++Col)
+			{
+				const int32 CellIdx = Row * 4 + Col;
+				const FString DiffKey = FString::Printf(TEXT("%s_R%d_C%d_D"), Rig.KeyPrefix, Row, Col);
+				const FString NormKey = FString::Printf(TEXT("%s_R%d_C%d_N"), Rig.KeyPrefix, Row, Col);
+
+				ExtractAtlasCellTexture(DiffusePath, FName(*DiffKey), CellIdx, 4, 4, false, true, true);
+				ExtractAtlasCellTexture(NormalPath, FName(*NormKey), CellIdx, 4, 4, true, false, true);
+
+				if (Col == 0)
+				{
+					const FString RowAliasD = FString::Printf(TEXT("%s_Row%d_D"), Rig.KeyPrefix, Row);
+					const FString RowAliasN = FString::Printf(TEXT("%s_Row%d_N"), Rig.KeyPrefix, Row);
+					AliasCellKey(*RowAliasD, *DiffKey);
+					AliasCellKey(*RowAliasN, *NormKey);
+
+					if (Row == 0)
+					{
+						const FString Cell0AliasD = FString::Printf(TEXT("%s_Cell0_D"), Rig.KeyPrefix);
+						const FString Cell0AliasN = FString::Printf(TEXT("%s_Cell0_N"), Rig.KeyPrefix);
+						AliasCellKey(*Cell0AliasD, *DiffKey);
+						AliasCellKey(*Cell0AliasN, *NormKey);
+					}
+				}
+			}
+		}
+	}
 
 	return ExtractedCellTextures.Num();
 }

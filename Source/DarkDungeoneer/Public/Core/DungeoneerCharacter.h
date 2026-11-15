@@ -98,13 +98,22 @@ public:
 	/** Tests whether a world location lies inside this player's active flashlight cone. */
 	bool IsPointLitByFlashlight(const FVector& TargetWorldLocation) const noexcept;
 
+	/** Advances distance-locked 4-frame walk cycle cleanly with zero heap allocation. */
+	void AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Rendering")
+	int32 GetActiveDirectionalRow() const noexcept { return ActiveDirectionalRow; }
+
+	UFUNCTION(BlueprintPure, Category = "Rendering")
+	int32 GetActiveWalkFrameColumn() const noexcept { return ActiveWalkFrameColumn; }
+
 protected:
 	void HandleMoveInput(const FInputActionValue& Value);
 	void HandleMoveCompleted(const FInputActionValue& Value);
 	void HandleAimInput(const FInputActionValue& Value);
 	void BindLocalInputContext();
 	void EnsureDefaultVisualsInitialized();
-	void UpdateHeroDirectionalVisual(ECompassOctant FacingOctant) noexcept;
+	void UpdateHeroDirectionalVisual(ECompassOctant FacingOctant, int32 FrameColumn = -1) noexcept;
 	void PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept;
 	void SyncFlashlightTransform(float DeltaSeconds) noexcept;
 
@@ -165,16 +174,24 @@ protected:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Locomotion")
 	ECompassOctant ReplicatedAimOctant = ECompassOctant::E;
 
-	/** Pre-allocated 4 directional sprite materials (Rows 0..3: Front/Camera, Back, Right, Left) for zero Tick allocation. */
+	/** Pre-allocated 16 directional walk-cycle sprite materials (4 rows x 4 columns) for zero Tick allocation. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DirectionalHeroMIDs;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Rendering", meta = (ClampMin = "20.0"))
+	float WalkCycleStrideUU = 140.0f;
+
 private:
 	FVector2D LastMouseSample = FVector2D::ZeroVector;
+	FVector PreviousWalkLocation = FVector::ZeroVector;
 	float CurrentFlashlightYawDeg = 0.0f;
 	float OctantSyncAccumulator = 0.0f;
 	float TimeSinceMouseMoved = 10.0f;
+	float WalkDistanceAccumulatorUU = 0.0f;
 	int32 ActiveDirectionalRow = -1;
+	int32 ActiveWalkFrameColumn = 1;
+	int32 ActiveDirectionalCellIndex = -1;
 	bool bHasMouseSample = false;
+	bool bHasPreviousWalkLocation = false;
 	bool bTexturedVisualsApplied = false;
 };

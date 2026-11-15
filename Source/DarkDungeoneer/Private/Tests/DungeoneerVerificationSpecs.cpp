@@ -370,7 +370,23 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestNotNull(TEXT("ATLAS_Dungeon_Floors_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("ATLAS_Dungeon_Floors_4x4_D"))));
 
 		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
-		TestEqual(TEXT("40 single-cell tile textures extracted from 4x4 atlases"), ExtractedCells, 40);
+		TestEqual(TEXT("All 136 4x4 atlas cells & rig walk frames extracted (10 dungeon + 96 rig + 30 compat aliases)"), ExtractedCells, 136);
+
+		static constexpr const TCHAR* WalkRigPrefixes[3] = { TEXT("Hero"), TEXT("Exploder"), TEXT("Thrower") };
+		for (const TCHAR* Prefix : WalkRigPrefixes)
+		{
+			for (int32 Row = 0; Row < 4; ++Row)
+			{
+				for (int32 Col = 0; Col < 4; ++Col)
+				{
+					const FName DiffCellKey(*FString::Printf(TEXT("%s_R%d_C%d_D"), Prefix, Row, Col));
+					const FName NormCellKey(*FString::Printf(TEXT("%s_R%d_C%d_N"), Prefix, Row, Col));
+					TestNotNull(FString::Printf(TEXT("%s extracted"), *DiffCellKey.ToString()), Bootstrap->GetExtractedCellTexture(DiffCellKey));
+					TestNotNull(FString::Printf(TEXT("%s extracted"), *NormCellKey.ToString()), Bootstrap->GetExtractedCellTexture(NormCellKey));
+					TestNotNull(FString::Printf(TEXT("%s mask cached"), *DiffCellKey.ToString()), Bootstrap->GetSpriteMaskTexture(DiffCellKey));
+				}
+			}
+		}
 
 		TestEqual(TEXT("ScreenDirectionalRow W (-X toward camera) -> Row 0 (Front)"),
 			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::W), static_cast<uint8>(0));
@@ -449,6 +465,29 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 			FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Materials/DA_25DMaterialConfig.uasset")));
 		TestTrue(TEXT("DA_MovementConfig.uasset exists on disk"),
 			FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Core/DA_MovementConfig.uasset")));
+	}
+
+	// Verify distance-locked 4-frame alternating walk cycle advancement on Character & Zombie
+	if (ADungeoneerCharacter* HeroProbe = TestWorld->SpawnActor<ADungeoneerCharacter>())
+	{
+		HeroProbe->AdvanceWalkFlipbookByDistance(10.0f, true);
+		TestEqual(TEXT("Hero walk col 0 on stride start [0..35 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 0);
+		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
+		TestEqual(TEXT("Hero walk col 1 on passing phase [35..70 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 1);
+		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
+		TestEqual(TEXT("Hero walk col 2 on opposite contact [70..105 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 2);
+		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
+		TestEqual(TEXT("Hero walk col 3 on second passing phase [105..140 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 3);
+		HeroProbe->AdvanceWalkFlipbookByDistance(0.0f, false);
+		TestEqual(TEXT("Hero snaps cleanly to upright neutral Col 1 when idle"), HeroProbe->GetActiveWalkFrameColumn(), 1);
+	}
+
+	if (AZombieFastThrower* ThrowerProbe = TestWorld->SpawnActor<AZombieFastThrower>())
+	{
+		ThrowerProbe->AdvanceWalkFlipbookByDistance(10.0f, true);
+		TestEqual(TEXT("Thrower sprint col 0 on contact start"), ThrowerProbe->GetActiveWalkFrameColumn(), 0);
+		ThrowerProbe->AdvanceWalkFlipbookByDistance(110.0f, true);
+		TestEqual(TEXT("Thrower sprint col 2 on opposite half-stride contact"), ThrowerProbe->GetActiveWalkFrameColumn(), 2);
 	}
 
 	TestWorld->DestroyWorld(false);

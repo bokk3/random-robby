@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.5` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.6` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -25,6 +25,7 @@
 | `v0.9.3` | Dungeon Texture Bootstrap, 4-Axis Corridor Carving & Live Room Encounters | Done | `UDungeoneerAssetBootstrapSubsystem` single-cell extraction + textured HISM/rig materials, carved doorways, deduplicated corridors, `AZombieBase`/encounter visuals & spawner, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.4` | Camera-Relative 2.5D Facing & Integrated-GPU Dynamic Lighting | Done | `OctantToScreenDirectionalRow`, 4-row `Hero`/`Exploder`/`Thrower` extraction, masked 2-sided `Plane.Plane` cutouts, idle-mouse arbitration, Lumen/VSM/TSR removal preserving dynamic flashlight & Volumetric Fog, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.5` | Cutout Silhouette `OpacityMask` Fix & Billboard Front-Fill Lighting | Done | `SpriteMaskTextures` transient silhouette extraction (`GetSpriteMaskTexture`), `OpacityMask` parameter binding on `M_Shader_SimpleMaskedTwoSided` / `M_ES_Phong_Masked_Master_2sided`, `45°` plane tilt, `SetCastShadow(false)` & front-positioned fill lights, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.9.6` | Alternating 4-Frame Walk Cycles & Distance-Locked 16-Cell Flipbook | Done | Articulated 4x4 walk cycles (`Hero`, `Exploder`, `Thrower`), 136 extracted cells & masks (`ExtractDefaultSingleCellTiles`), pre-allocated 16 MIDs driven by `AdvanceWalkFlipbookByDistance`, 8 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 
 ---
 
@@ -118,6 +119,12 @@
 - [x] **`TASK-911` — Silhouette Mask Texture Synthesis, `OpacityMask` Shader Binding & Cutout Lighting**
   - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Private/Core/DungeoneerCharacter.cpp`, `Private/AI/ZombieBase.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
   - **Scope**: Add `SpriteMaskTextures` / `GetSpriteMaskTexture` in `UDungeoneerAssetBootstrapSubsystem` generating crisp binary alpha silhouette masks for extracted character rows (including mirrored cells and `Cell0` aliases), prefer `/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided` and bind `OpacityMask` across both masked two-sided engine shaders so sprite cutouts no longer clip against black `T_Emissive`, tilt cutout planes to `45°`, set `SetCastShadow(false)` on hero/zombie cutout meshes, shift `HeroLanternFillLight` (`(-65, 0, 110)`) and `ZombieEmissiveLight` (`(-45, 0, 65)`) in front of billboards, and verify `OpacityMask` binding in `DungeoneerVerificationSpecs.cpp`.
+
+### Milestone `v0.9.6` — Alternating 4-Frame Walk Cycles & Distance-Locked 16-Cell Flipbook (`TASK-912`)
+
+- [x] **`TASK-912` — 4x4 Alternating Stride Sheets & Runtime 16-Frame Flipbook Stepping**
+  - **Files**: `Content/Art/Rigs/{DungeoneerHero,ZombieExploder,ZombieFastThrower}/*`, `Content/AssetManifest.json`, `Source/DarkDungeoneer/Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Source/DarkDungeoneer/Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Rebuild `Hero`, `Exploder`, and `Thrower` 4x4 sheets with unmistakable alternating `Contact-L -> Passing-A -> Contact-R -> Passing-B` footsteps (including true South/North cardinal rows and halo cleanup on `FastThrower`), re-slice normal/emissive/ORM atlases with updated SHA-256 manifest hashes, extract all `16` walk cells + silhouette masks (`136` total cache keys), pre-allocate `16` MIDs per character/zombie, and step `Row * 4 + Col` deterministically via XY distance traveled (`AdvanceWalkFlipbookByDistance`).
 
 ---
 

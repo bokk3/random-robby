@@ -36,7 +36,7 @@ AZombieBase::AZombieBase()
 	ZombieEmissiveLight->SetAttenuationRadius(360.0f);
 	ZombieEmissiveLight->CastShadows = false;
 
-	DirectionalZombieMIDs.Reserve(4);
+	DirectionalZombieMIDs.Reserve(16);
 }
 
 void AZombieBase::OnConstruction(const FTransform& Transform)
@@ -83,22 +83,27 @@ void AZombieBase::EnsureVisualMeshInitialized()
 					DirectionalZombieMIDs.Reset();
 					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
 					{
-						const FName DiffKey(*FString::Printf(TEXT("%s_Row%d_D"), Prefix, RowIdx));
-						const FName NormKey(*FString::Printf(TEXT("%s_Row%d_N"), Prefix, RowIdx));
-						UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
-							this,
-							DiffKey,
-							NormKey,
-							Tint,
-							0.45f,
-							false,
-							true);
-						DirectionalZombieMIDs.Add(Mat);
+						for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+						{
+							const FName DiffKey(*FString::Printf(TEXT("%s_R%d_C%d_D"), Prefix, RowIdx, ColIdx));
+							const FName NormKey(*FString::Printf(TEXT("%s_R%d_C%d_N"), Prefix, RowIdx, ColIdx));
+							UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
+								this,
+								DiffKey,
+								NormKey,
+								Tint,
+								0.45f,
+								false,
+								true);
+							DirectionalZombieMIDs.Add(Mat);
+						}
 					}
 
 					bTexturedVisualsApplied = true;
 					ActiveDirectionalRow = -1;
-					UpdateZombieDirectionalVisual(CurrentHeadingOctant);
+					ActiveWalkFrameColumn = 1;
+					ActiveDirectionalCellIndex = -1;
+					UpdateZombieDirectionalVisual(CurrentHeadingOctant, ActiveWalkFrameColumn);
 					return;
 				}
 			}
@@ -121,7 +126,24 @@ void AZombieBase::EnsureVisualMeshInitialized()
 	}
 }
 
-void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant) noexcept
+void AZombieBase::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept
+{
+	const float ClampedDist = FMath::Max(DeltaDistanceUU, 0.0f);
+	if (bIsMoving || ClampedDist > 0.1f)
+	{
+		WalkCycleDistanceUU += ClampedDist;
+		const float FullStrideCycleUU = FMath::Max(StepCycleDistanceUU * 2.0f, 40.0f);
+		const float RawPhase = WalkCycleDistanceUU / FullStrideCycleUU;
+		const float PhaseFrac = FMath::Clamp(RawPhase - FMath::FloorToFloat(RawPhase), 0.0f, 0.99999f);
+		ActiveWalkFrameColumn = FMath::Clamp(FMath::FloorToInt(PhaseFrac * 4.0f), 0, 3);
+	}
+	else
+	{
+		ActiveWalkFrameColumn = 1;
+	}
+}
+
+void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, int32 FrameColumn) noexcept
 {
 	if (!ZombieVisualMesh)
 	{
@@ -129,15 +151,19 @@ void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant) no
 	}
 
 	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(HeadingOctant));
-	if (DesiredRow == ActiveDirectionalRow)
+	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
+	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
+	if (DesiredCell == ActiveDirectionalCellIndex)
 	{
 		return;
 	}
 
-	if (DirectionalZombieMIDs.IsValidIndex(DesiredRow) && DirectionalZombieMIDs[DesiredRow])
+	if (DirectionalZombieMIDs.IsValidIndex(DesiredCell) && DirectionalZombieMIDs[DesiredCell])
 	{
-		ZombieVisualMesh->SetMaterial(0, DirectionalZombieMIDs[DesiredRow].Get());
+		ZombieVisualMesh->SetMaterial(0, DirectionalZombieMIDs[DesiredCell].Get());
 		ActiveDirectionalRow = DesiredRow;
+		ActiveWalkFrameColumn = DesiredCol;
+		ActiveDirectionalCellIndex = DesiredCell;
 	}
 }
 
@@ -183,8 +209,6 @@ void AZombieBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	UpdateZombieDirectionalVisual(CurrentHeadingOctant);
-
 	if (IsZombieAlive() && !bIsMirrorDecoy)
 	{
 		AdvanceDeterministicStepAccumulator(DeltaSeconds);
@@ -213,12 +237,14 @@ void AZombieBase::Tick(float DeltaSeconds)
 			SetNetUpdateFrequency(bVisibleToAnyPlayer ? 15.0f : 2.0f);
 		}
 	}
+
+	UpdateZombieDirectionalVisual(CurrentHeadingOctant, ActiveWalkFrameColumn);
 }
 
 void AZombieBase::MoveAlongOctant(ECompassOctant Octant, float Scale) noexcept
 {
 	CurrentHeadingOctant = Octant;
-	UpdateZombieDirectionalVisual(Octant);
+	UpdateZombieDirectionalVisual(Octant, ActiveWalkFrameColumn);
 	const FVector UnitDir = DungeoneerMath::OctantToDirection3D(Octant);
 	AddMovementInput(UnitDir, Scale);
 }
@@ -231,10 +257,13 @@ void AZombieBase::AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexce
 
 	if (DistSq <= static_cast<double>(KINDA_SMALL_NUMBER))
 	{
+		AdvanceWalkFlipbookByDistance(0.0f, GetVelocity().SizeSquared2D() > 25.0);
 		return;
 	}
 
-	StepDistanceAccumulator += static_cast<float>(FMath::Sqrt(DistSq));
+	const float DeltaDistUU = static_cast<float>(FMath::Sqrt(DistSq));
+	AdvanceWalkFlipbookByDistance(DeltaDistUU, true);
+	StepDistanceAccumulator += DeltaDistUU;
 	while (StepDistanceAccumulator >= StepCycleDistanceUU)
 	{
 		StepDistanceAccumulator -= StepCycleDistanceUU;
