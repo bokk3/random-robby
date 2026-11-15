@@ -5,6 +5,7 @@
 #include "Rendering/25DDirectionalRigComponent.h"
 #include "Audio/DungeoneerTimedAudioComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
+#include "Dungeon/MirrorLightBounceComponent.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "Blueprint/UserWidget.h"
@@ -59,6 +60,7 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
+	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
 }
 
 void ADungeoneerCharacter::BeginPlay()

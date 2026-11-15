@@ -17,6 +17,7 @@ class USensoryPerkComponent;
 class U25DDirectionalRigComponent;
 class UDungeoneerTimedAudioComponent;
 class UDungeoneerInventoryComponent;
+class UMirrorLightBounceComponent;
 
 /**
  * Primary playable 2.5D Dark Dungeoneer character.
@@ -57,6 +58,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	UDungeoneerInventoryComponent* GetInventoryComponent() const noexcept { return InventoryComponent.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Mirror|LightBounce")
+	UMirrorLightBounceComponent* GetMirrorBounceComponent() const noexcept { return MirrorBounceComponent.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Locomotion")
 	ECompassOctant GetReplicatedMoveOctant() const noexcept { return ReplicatedMoveOctant; }
@@ -115,6 +119,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UDungeoneerInventoryComponent> InventoryComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|LightBounce")
+	TObjectPtr<UMirrorLightBounceComponent> MirrorBounceComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
