@@ -6,6 +6,8 @@
 #include "Audio/DungeoneerTimedAudioComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "UI/DungeoneerPlayerHUDWidget.h"
+#include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "EnhancedInputComponent.h"
@@ -83,6 +85,21 @@ void ADungeoneerCharacter::BeginPlay()
 	}
 
 	BindLocalInputContext();
+
+	if (!IsRunningCommandlet() && GetWorld() && GetWorld()->IsGameWorld())
+	{
+		if (ULocalPlayer* LP = GetOwningLocalPlayer())
+		{
+			if (APlayerController* OwningPC = LP->GetPlayerController(GetWorld()))
+			{
+				if (UDungeoneerPlayerHUDWidget* PlayerHUD = CreateWidget<UDungeoneerPlayerHUDWidget>(OwningPC, UDungeoneerPlayerHUDWidget::StaticClass()))
+				{
+					PlayerHUD->RefreshHUDFromCharacter(this);
+					PlayerHUD->AddToPlayerScreen(5);
+				}
+			}
+		}
+	}
 }
 
 void ADungeoneerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)

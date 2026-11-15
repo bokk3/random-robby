@@ -37,6 +37,21 @@ public:
 	/** Pure deterministic helper mapping a character to grain index [0..23] and semitone pitch offset. */
 	static void EvaluateCharacterPhoneme(TCHAR Character, int32& OutGrainIndex, float& OutSemitoneOffset) noexcept;
 
+	UFUNCTION(BlueprintPure, Category = "Voice|State")
+	const FString& GetActiveDialogueLine() const noexcept { return ActiveLine; }
+
+	UFUNCTION(BlueprintPure, Category = "Voice|State")
+	int32 GetCurrentCharCursor() const noexcept { return CurrentCharCursor; }
+
+	UFUNCTION(BlueprintPure, Category = "Voice|State")
+	int32 GetLastSyllableIndex() const noexcept { return LastSyllableIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "Voice|State")
+	float GetLastPitchOffsetSemitones() const noexcept { return LastPitchOffsetSemitones; }
+
+	UFUNCTION(BlueprintPure, Category = "Voice|State")
+	bool IsPlayingGibberish() const noexcept { return bPlayingGibberish; }
+
 	static constexpr int32 NumSyllableGrains = 24;
 
 protected:
