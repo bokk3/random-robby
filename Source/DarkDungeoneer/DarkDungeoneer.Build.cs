@@ -12,6 +12,7 @@ public class DarkDungeoneer : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"PhysicsCore",
 			"InputCore",
 			"EnhancedInput",
 			"GameplayTags",
