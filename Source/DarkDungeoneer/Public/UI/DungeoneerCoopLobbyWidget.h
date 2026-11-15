@@ -62,6 +62,7 @@ public:
 	UDungeoneerCoopLobbyWidget(const FObjectInitializer& ObjectInitializer);
 
 	virtual void NativeConstruct() override;
+	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 	/** Polls ULocalPlayer array, per-viewport sensory tiers, and online social squad state. */
 	UFUNCTION(BlueprintCallable, Category = "UI|Coop")
@@ -93,6 +94,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|Coop", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Txt_SplitscreenBadge;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> ProgrammaticSlotTextBlocks;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|Coop")
 	TArray<FCoopSquadSlotViewModel> SquadSlots;

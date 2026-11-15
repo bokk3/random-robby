@@ -23,6 +23,7 @@ public:
 
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 	/** Subscribes to ADungeoneerGameState::OnFloorSeedChanged and synchronizes initial seed state. */
 	UFUNCTION(BlueprintCallable, Category = "UI|Telemetry")

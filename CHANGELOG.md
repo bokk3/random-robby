@@ -12,6 +12,16 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.8.1] - 2026-11-15
+
+### Fixed & Added
+- Compiled standalone monolithic Win64 game executable `Binaries/Win64/DarkDungeoneer.exe` (`DarkDungeoneer Win64 Development`) alongside `DarkDungeoneerEditor Win64 Development` (`UnrealEditor-DarkDungeoneer.dll`).
+- Guarded `UTexture2D::MipGenSettings` in `Dungeoneer25DMaterialBuilder.cpp` with `#if WITH_EDITORONLY_DATA` so `TargetType.Game` compiles with zero errors.
+- Added programmatic C++ `RebuildWidget()` UMG trees (`UCanvasPanel`, `UBorder`, `UVerticalBox`, `UButton`, `UTextBlock`) to `UDungeoneerMainMenuWidget`, `UDungeoneerCoopLobbyWidget`, and `UDungeoneerMenuFooterWidget`, and wired `ADungeoneerGameMode::StartPlay()` to spawn `AMenuDioramaStageActor` and attach the menu widgets to the owning `ULocalPlayer` viewport (`ZOrder 10–12`).
+- Added root `Launch-DarkDungeoneer.bat` to launch cooked `Binaries\Win64\DarkDungeoneer.exe` or fall back cleanly to `UnrealEditor.exe ... -game` before `.uasset` cooking.
+
+---
+
 ## [0.8.0] - 2026-11-15
 
 ### Added

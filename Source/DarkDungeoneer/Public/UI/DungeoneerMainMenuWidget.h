@@ -36,6 +36,7 @@ public:
 
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 	/** Selects one of the 8 menu entries cleanly (wraps around boundaries) and emits preview callbacks. */
 	UFUNCTION(BlueprintCallable, Category = "UI|Menu")

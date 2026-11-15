@@ -19,7 +19,9 @@ bool FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(UTexture2D* Texture, 
 
 	Texture->LODGroup = TEXTUREGROUP_Pixels2D;
 	Texture->Filter = TF_Nearest;
+#if WITH_EDITORONLY_DATA
 	Texture->MipGenSettings = TMGS_NoMipmaps;
+#endif
 	Texture->SRGB = bSRGB;
 	Texture->CompressionSettings = bIsNormalMap ? TC_Normalmap : (bSRGB ? TC_Default : TC_Masks);
 

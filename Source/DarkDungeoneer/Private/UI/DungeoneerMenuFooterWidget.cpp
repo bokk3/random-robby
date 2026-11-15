@@ -1,11 +1,52 @@
 #include "UI/DungeoneerMenuFooterWidget.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Border.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 #include "Engine/World.h"
 
 UDungeoneerMenuFooterWidget::UDungeoneerMenuFooterWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+}
+
+TSharedRef<SWidget> UDungeoneerMenuFooterWidget::RebuildWidget()
+{
+	if (WidgetTree && !WidgetTree->RootWidget)
+	{
+		UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("FooterRootCanvas"));
+		WidgetTree->RootWidget = RootCanvas;
+
+		UBorder* FooterStrip = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("FooterStripBorder"));
+		FooterStrip->SetBrushColor(FLinearColor(0.025f, 0.03f, 0.04f, 0.88f));
+		FooterStrip->SetPadding(FMargin(18.0f, 10.0f));
+		if (UCanvasPanelSlot* StripSlot = RootCanvas->AddChildToCanvas(FooterStrip))
+		{
+			StripSlot->SetAnchors(FAnchors(0.0f, 1.0f, 0.0f, 1.0f));
+			StripSlot->SetPosition(FVector2D(48.0, -124.0));
+			StripSlot->SetSize(FVector2D(860.0, 96.0));
+		}
+
+		UVerticalBox* FooterStack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("FooterStack"));
+		FooterStrip->SetContent(FooterStack);
+
+		Txt_FloorSeedHex = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_FloorSeedHex"));
+		Txt_FloorSeedHex->SetColorAndOpacity(FSlateColor(FLinearColor(0.92f, 0.72f, 0.32f, 1.0f)));
+		FooterStack->AddChildToVerticalBox(Txt_FloorSeedHex);
+
+		Txt_OctantTelemetry = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_OctantTelemetry"));
+		Txt_OctantTelemetry->SetColorAndOpacity(FSlateColor(FLinearColor(0.84f, 0.88f, 0.90f, 1.0f)));
+		FooterStack->AddChildToVerticalBox(Txt_OctantTelemetry);
+
+		Txt_ChronoConservation = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_ChronoConservation"));
+		Txt_ChronoConservation->SetColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.90f, 0.75f, 1.0f)));
+		FooterStack->AddChildToVerticalBox(Txt_ChronoConservation);
+	}
+
+	return Super::RebuildWidget();
 }
 
 void UDungeoneerMenuFooterWidget::NativeConstruct()
