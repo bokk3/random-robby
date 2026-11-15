@@ -64,10 +64,11 @@ protected:
 	EThrowPayload SelectNextPayload(int32 ThrowCount) const noexcept;
 	void ExecutePooledThrow(const FVector& TargetLocation);
 	virtual void OnZombieDied() override;
-	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Thrower_Cell0_D")); }
-	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Thrower_Cell0_N")); }
+	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("Thrower"); }
+	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Thrower_Row0_D")); }
+	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Thrower_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(0.15f, 0.88f, 0.96f); }
-	virtual FVector GetArchetypeVisualScale() const noexcept override { return FVector(0.70, 0.70, 1.45); }
+	virtual FVector GetArchetypeVisualScale() const noexcept override { return FVector(1.45, 1.45, 1.45); }
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Thrower|Config", meta = (ClampMin = "100.0"))
 	float OptimalThrowRange = 620.0f;

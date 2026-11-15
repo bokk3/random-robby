@@ -120,6 +120,7 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	FloorHISM->SetCastShadow(false);
 	FloorHISM->bCastHiddenShadow = false;
 	FloorHISM->SetCollisionProfileName(TEXT("BlockAll"));
+	FloorHISM->SetCullDistances(0, 3800);
 
 	WallHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("WallHISM"));
 	WallHISM->SetupAttachment(SceneRoot);
@@ -128,6 +129,7 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	WallHISM->bCastHiddenShadow = true;
 	WallHISM->SetCollisionProfileName(TEXT("BlockAll"));
 	WallHISM->ComponentTags.Add(TEXT("DungeonWall"));
+	WallHISM->SetCullDistances(0, 3800);
 
 	MirrorHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("MirrorHISM"));
 	MirrorHISM->SetupAttachment(SceneRoot);
@@ -136,6 +138,7 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	MirrorHISM->bCastHiddenShadow = true;
 	MirrorHISM->SetCollisionProfileName(TEXT("BlockAll"));
 	MirrorHISM->ComponentTags.Add(TEXT("MirrorReflective"));
+	MirrorHISM->SetCullDistances(0, 3800);
 
 	BreakableHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("BreakableHISM"));
 	BreakableHISM->SetupAttachment(SceneRoot);
@@ -144,6 +147,7 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	BreakableHISM->bCastHiddenShadow = true;
 	BreakableHISM->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	BreakableHISM->ComponentTags.Add(TEXT("BreakableNoiseProp"));
+	BreakableHISM->SetCullDistances(0, 3800);
 
 	ScratchSweepHits.Reserve(32);
 }

@@ -84,6 +84,33 @@ namespace DungeoneerMath
 			return 3; // West row
 		}
 	}
+
+	/**
+	 * Maps an octant to the 4-row sprite sheet orientation matching our top-down camera (Yaw = 0 deg, looking +X):
+	 *   -X (W)  = Screen Down (toward camera) -> Row 0 (Front)
+	 *   +X (E)  = Screen Up (into dungeon)    -> Row 1 (Back)
+	 *   +Y (N/NE/NW) = Screen Right           -> Row 2 (Right profile)
+	 *   -Y (S/SE/SW) = Screen Left            -> Row 3 (Left profile)
+	 */
+	[[nodiscard]] constexpr uint8 OctantToScreenDirectionalRow(ECompassOctant Octant) noexcept
+	{
+		switch (Octant)
+		{
+		case ECompassOctant::W:
+			return 0;
+		case ECompassOctant::E:
+			return 1;
+		case ECompassOctant::N:
+		case ECompassOctant::NE:
+		case ECompassOctant::NW:
+			return 2;
+		case ECompassOctant::S:
+		case ECompassOctant::SE:
+		case ECompassOctant::SW:
+		default:
+			return 3;
+		}
+	}
 }
 
 USTRUCT(BlueprintType)

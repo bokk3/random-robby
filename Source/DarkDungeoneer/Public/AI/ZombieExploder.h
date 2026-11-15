@@ -41,10 +41,11 @@ public:
 protected:
 	void IgniteFuse() noexcept;
 	void ExecuteDetonation();
-	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Exploder_Cell0_D")); }
-	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Exploder_Cell0_N")); }
+	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("Exploder"); }
+	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Exploder_Row0_D")); }
+	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Exploder_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(0.95f, 0.36f, 0.08f); }
-	virtual FVector GetArchetypeVisualScale() const noexcept override { return FVector(0.95, 0.95, 1.35); }
+	virtual FVector GetArchetypeVisualScale() const noexcept override { return FVector(1.65, 1.65, 1.65); }
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Exploder|Config", meta = (ClampMin = "50.0"))
 	float IgnitionRadius = 280.0f;

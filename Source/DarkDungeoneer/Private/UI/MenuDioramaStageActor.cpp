@@ -37,6 +37,7 @@ AMenuDioramaStageActor::AMenuDioramaStageActor()
 	HeroFlashlightSpot->AttenuationRadius = 2200.0f;
 	HeroFlashlightSpot->Intensity = 24000.0f;
 	HeroFlashlightSpot->SetLightColor(FLinearColor(1.0f, 0.88f, 0.62f));
+	HeroFlashlightSpot->CastShadows = false;
 
 	DioramaAmbientFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("DioramaAmbientFillLight"));
 	DioramaAmbientFillLight->SetupAttachment(StageRoot);

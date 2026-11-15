@@ -14,6 +14,49 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
+
+namespace DungeoneerGameModePrivate
+{
+	static void ApplyLowSpecDynamicLightingCVars() noexcept
+	{
+		IConsoleManager& ConsoleMgr = IConsoleManager::Get();
+		auto SetIntCVar = [&ConsoleMgr](const TCHAR* Name, int32 Value) noexcept
+		{
+			if (IConsoleVariable* Var = ConsoleMgr.FindConsoleVariable(Name))
+			{
+				if (!Var->TestFlags(ECVF_ReadOnly))
+				{
+					Var->Set(Value, ECVF_SetByCode);
+				}
+			}
+		};
+
+		SetIntCVar(TEXT("r.DynamicGlobalIlluminationMethod"), 0);
+		SetIntCVar(TEXT("r.Lumen.DiffuseIndirect.Allow"), 0);
+		SetIntCVar(TEXT("r.ReflectionMethod"), 0);
+		SetIntCVar(TEXT("r.Lumen.Reflections.Allow"), 0);
+		SetIntCVar(TEXT("r.Lumen.TraceMeshSDFs.Allow"), 0);
+		SetIntCVar(TEXT("r.Shadow.Virtual.Enable"), 0);
+		SetIntCVar(TEXT("r.ShadowQuality"), 2);
+		SetIntCVar(TEXT("r.Shadow.MaxResolution"), 1024);
+		SetIntCVar(TEXT("r.Shadow.MaxCSMResolution"), 1024);
+		SetIntCVar(TEXT("r.DistanceFieldShadowing"), 0);
+		SetIntCVar(TEXT("r.DistanceFieldAO"), 0);
+		SetIntCVar(TEXT("r.CapsuleShadows"), 0);
+		SetIntCVar(TEXT("r.VolumetricFog"), 1);
+		SetIntCVar(TEXT("r.VolumetricFog.GridPixelSize"), 16);
+		SetIntCVar(TEXT("r.VolumetricFog.GridSizeZ"), 64);
+		SetIntCVar(TEXT("r.VolumetricFog.HistoryMissSupersampleCount"), 1);
+		SetIntCVar(TEXT("r.AntiAliasingMethod"), 1);
+		SetIntCVar(TEXT("r.MotionBlurQuality"), 0);
+		SetIntCVar(TEXT("r.DepthOfFieldQuality"), 0);
+		SetIntCVar(TEXT("r.AmbientOcclusionLevels"), 1);
+		SetIntCVar(TEXT("r.BloomQuality"), 2);
+		SetIntCVar(TEXT("r.ScreenPercentage"), 75);
+		SetIntCVar(TEXT("t.MaxFPS"), 60);
+	}
+}
 
 ADungeoneerGameMode::ADungeoneerGameMode()
 {
@@ -29,6 +72,11 @@ void ADungeoneerGameMode::StartPlay()
 	if (!World)
 	{
 		return;
+	}
+
+	if (!IsRunningCommandlet() && World->IsGameWorld())
+	{
+		DungeoneerGameModePrivate::ApplyLowSpecDynamicLightingCVars();
 	}
 
 	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())

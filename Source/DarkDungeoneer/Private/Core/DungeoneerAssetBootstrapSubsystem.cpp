@@ -2,6 +2,7 @@
 #include "Core/DungeoneerMovementConfig.h"
 #include "Rendering/Dungeoneer25DMaterialBuilder.h"
 #include "Audio.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
 #include "IImageWrapper.h"
@@ -14,7 +15,10 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "Rendering/PositionVertexBuffer.h"
+#include "Rendering/StaticMeshVertexBuffer.h"
 #include "Sound/SoundWave.h"
+#include "StaticMeshResources.h"
 #include "TextureResource.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -57,6 +61,7 @@ void UDungeoneerAssetBootstrapSubsystem::Initialize(FSubsystemCollectionBase& Co
 	Super::Initialize(Collection);
 
 	// Auto-import generated 2.5D rig and dungeon textures and crop single-cell tiles on startup
+	ComputeSpritePlaneOrientation();
 	ImportAllRigTexturesFromDisk();
 	ImportAllDungeonTexturesFromDisk();
 	ExtractDefaultSingleCellTiles();
@@ -194,8 +199,105 @@ int32 UDungeoneerAssetBootstrapSubsystem::ImportAllDungeonTexturesFromDisk()
 	return LoadedDungeonTextures.Num();
 }
 
+void UDungeoneerAssetBootstrapSubsystem::ComputeSpritePlaneOrientation() const noexcept
+{
+	if (bSpritePlaneOrientationComputed)
+	{
+		return;
+	}
+
+	// Default /Engine/BasicShapes/Plane.Plane basis fallback in case CPU vertex buffers are stripped
+	FVector LocalRightU(0.0, 1.0, 0.0);
+	FVector LocalUpNegV(1.0, 0.0, 0.0);
+	FVector LocalNormal(0.0, 0.0, 1.0);
+
+	if (UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")))
+	{
+		if (const FStaticMeshRenderData* RenderData = PlaneMesh->GetRenderData();
+			RenderData && RenderData->LODResources.Num() > 0)
+		{
+			const FStaticMeshLODResources& LOD = RenderData->LODResources[0];
+			const uint32 NumVerts = LOD.VertexBuffers.PositionVertexBuffer.GetNumVertices();
+			const uint32 NumIndices = static_cast<uint32>(LOD.IndexBuffer.GetNumIndices());
+			if (NumVerts >= 3 && NumIndices >= 3)
+			{
+				const uint32 I0 = LOD.IndexBuffer.GetIndex(0);
+				const uint32 I1 = LOD.IndexBuffer.GetIndex(1);
+				const uint32 I2 = LOD.IndexBuffer.GetIndex(2);
+				if (I0 < NumVerts && I1 < NumVerts && I2 < NumVerts)
+				{
+					const FVector P0 = FVector(LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(I0));
+					const FVector P1 = FVector(LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(I1));
+					const FVector P2 = FVector(LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(I2));
+					const FVector2f UV0 = LOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(I0, 0);
+					const FVector2f UV1 = LOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(I1, 0);
+					const FVector2f UV2 = LOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(I2, 0);
+
+					const FVector E1 = P1 - P0;
+					const FVector E2 = P2 - P0;
+					const double dU1 = static_cast<double>(UV1.X - UV0.X);
+					const double dV1 = static_cast<double>(UV1.Y - UV0.Y);
+					const double dU2 = static_cast<double>(UV2.X - UV0.X);
+					const double dV2 = static_cast<double>(UV2.Y - UV0.Y);
+					const double DetUV = dU1 * dV2 - dU2 * dV1;
+
+					if (FMath::Abs(DetUV) > 1e-6)
+					{
+						const FVector TangentU = (E1 * dV2 - E2 * dV1) / DetUV;
+						const FVector TangentV = (E2 * dU1 - E1 * dU2) / DetUV;
+						LocalRightU = TangentU.GetSafeNormal(UE_SMALL_NUMBER, LocalRightU);
+						// Image V=0 is top (head), V=1 is bottom (boots) -> upright sprite vector is -TangentV
+						LocalUpNegV = (-TangentV).GetSafeNormal(UE_SMALL_NUMBER, LocalUpNegV);
+						const FVector3f TangentZ = LOD.VertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(I0);
+						LocalNormal = FVector(TangentZ).GetSafeNormal(UE_SMALL_NUMBER, LocalNormal);
+					}
+				}
+			}
+		}
+	}
+
+	// Orthonormal right/left-handed local basis (e1 = LocalUpNegV, e2 = LocalNormal x e1, e3 = LocalNormal)
+	const FVector E1 = LocalUpNegV.GetSafeNormal(UE_SMALL_NUMBER, FVector(1.0, 0.0, 0.0));
+	const FVector Nrm = LocalNormal.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 0.0, 1.0));
+	const FVector E2 = FVector::CrossProduct(Nrm, E1).GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 1.0, 0.0));
+
+	// Desired world frame for -60 deg pitched camera looking along +X:
+	// - Sprite head (V=0) above boots (V=1): WorldUp = (0.5, 0.0, 0.8660254)
+	// - Plane front (+Z) tilted toward camera:   WorldNormal = (-0.8660254, 0.0, 0.5)
+	// - Cross(WorldNormal, WorldUp) = (0, +1, 0) = Screen Right (+Y)
+	const FVector WorldUp = FVector(0.5, 0.0, 0.8660254037844386).GetSafeNormal();
+	const FVector WorldNormal = FVector(-0.8660254037844386, 0.0, 0.5).GetSafeNormal();
+	const FVector WorldRight = FVector::CrossProduct(WorldNormal, WorldUp).GetSafeNormal();
+
+	FMatrix SrcMat = FMatrix::Identity;
+	SrcMat.SetAxes(&E1, &E2, &Nrm);
+	FMatrix DstMat = FMatrix::Identity;
+	DstMat.SetAxes(&WorldUp, &WorldRight, &WorldNormal);
+
+	const FMatrix RotMat = SrcMat.GetTransposed() * DstMat;
+	CachedSpritePlaneRotation = RotMat.Rotator();
+
+	const FVector TransformedRightU = CachedSpritePlaneRotation.RotateVector(LocalRightU);
+	bFlipHorizontalForSpritePlane = (FVector::DotProduct(TransformedRightU, FVector(0.0, 1.0, 0.0)) < 0.0);
+	bSpritePlaneOrientationComputed = true;
+}
+
+FRotator UDungeoneerAssetBootstrapSubsystem::GetCameraFacingSpritePlaneRotation() const noexcept
+{
+	ComputeSpritePlaneOrientation();
+	return CachedSpritePlaneRotation;
+}
+
+bool UDungeoneerAssetBootstrapSubsystem::ShouldMirrorSpritePlaneU() const noexcept
+{
+	ComputeSpritePlaneOrientation();
+	return bFlipHorizontalForSpritePlane;
+}
+
 int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 {
+	ComputeSpritePlaneOrientation();
+
 	const FString DungeonRoot = FPaths::ProjectContentDir() / TEXT("Art/Dungeon");
 	const FString RigsRoot = FPaths::ProjectContentDir() / TEXT("Art/Rigs");
 
@@ -208,35 +310,79 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		int32 CellIndex;
 		bool bIsNormalMap;
 		bool bSRGB;
+		bool bIsCharacterSprite;
 	};
 
 	const FCellExtractSpec Specs[] =
 	{
 		// Dungeon Environment Cells (4x4 atlases)
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Tile0_D"),       0, false, true },
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_N.png"),            TEXT("Floor_Tile0_N"),       0, true,  false },
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Wet0_D"),        4, false, true },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Full0_D"),        0, false, true },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_N.png"), TEXT("Wall_Full0_N"),        0, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Cutaway_D"),      4, false, true },
-		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),         TEXT("Mirror_Intact_D"),     0, false, true },
-		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),         TEXT("Mirror_Intact_N"),     0, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_D.png"),       TEXT("Breakable_Intact_D"),  0, false, true },
-		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false },
-		// Character & Zombie Sprite Cells (Cell 0 = South Idle/Step0)
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Cell0_D"),        0, false, true },
-		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Cell0_N"),        0, true,  false },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Cell0_D"),    0, false, true },
-		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Cell0_N"),    0, true,  false },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Cell0_D"),     0, false, true },
-		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Cell0_N"),     0, true,  false }
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Tile0_D"),       0, false, true,  false },
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_N.png"),            TEXT("Floor_Tile0_N"),       0, true,  false, false },
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Wet0_D"),        4, false, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Full0_D"),        0, false, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_N.png"), TEXT("Wall_Full0_N"),        0, true,  false, false },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Cutaway_D"),      4, false, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),         TEXT("Mirror_Intact_D"),     0, false, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),         TEXT("Mirror_Intact_N"),     0, true,  false, false },
+		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_D.png"),       TEXT("Breakable_Intact_D"),  0, false, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false, false },
+		// Hero 4-Directional Sprite Cells (Row0=Front/Cell0, Row1=Back/Cell4, Row2=Right/Cell8, Row3=Left/Cell12)
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row0_D"),         0,  false, true,  true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row0_N"),         0,  true,  false, true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row1_D"),         4,  false, true,  true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row1_N"),         4,  true,  false, true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row2_D"),         8,  false, true,  true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row2_N"),         8,  true,  false, true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Row3_D"),         12, false, true,  true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Row3_N"),         12, true,  false, true },
+		// Zombie Exploder 4-Directional Sprite Cells
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row0_D"),     0,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row0_N"),     0,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row1_D"),     4,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row1_N"),     4,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row2_D"),     8,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row2_N"),     8,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Row3_D"),     12, false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Row3_N"),     12, true,  false, true },
+		// Zombie Fast Thrower 4-Directional Sprite Cells
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row0_D"),      0,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row0_N"),      0,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row1_D"),      4,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row1_N"),      4,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row2_D"),      8,  false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row2_N"),      8,  true,  false, true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Row3_D"),      12, false, true,  true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Row3_N"),      12, true,  false, true }
 	};
 
 	for (const FCellExtractSpec& Spec : Specs)
 	{
 		const FString FullPath = FString(Spec.BaseDir) / Spec.SubDir / Spec.FileName;
-		ExtractAtlasCellTexture(FullPath, FName(Spec.CacheKey), Spec.CellIndex, 4, 4, Spec.bIsNormalMap, Spec.bSRGB);
+		ExtractAtlasCellTexture(
+			FullPath,
+			FName(Spec.CacheKey),
+			Spec.CellIndex,
+			4,
+			4,
+			Spec.bIsNormalMap,
+			Spec.bSRGB,
+			Spec.bIsCharacterSprite);
 	}
+
+	// Backward-compatible Cell0 aliases pointing to Row0 (zero duplicate allocation)
+	auto AliasCellKey = [this](const TCHAR* AliasKey, const TCHAR* SourceKey)
+	{
+		if (TObjectPtr<UTexture2D>* Src = ExtractedCellTextures.Find(FName(SourceKey)))
+		{
+			ExtractedCellTextures.Add(FName(AliasKey), *Src);
+		}
+	};
+	AliasCellKey(TEXT("Hero_Cell0_D"),     TEXT("Hero_Row0_D"));
+	AliasCellKey(TEXT("Hero_Cell0_N"),     TEXT("Hero_Row0_N"));
+	AliasCellKey(TEXT("Exploder_Cell0_D"), TEXT("Exploder_Row0_D"));
+	AliasCellKey(TEXT("Exploder_Cell0_N"), TEXT("Exploder_Row0_N"));
+	AliasCellKey(TEXT("Thrower_Cell0_D"),  TEXT("Thrower_Row0_D"));
+	AliasCellKey(TEXT("Thrower_Cell0_N"),  TEXT("Thrower_Row0_N"));
 
 	return ExtractedCellTextures.Num();
 }
@@ -248,7 +394,8 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::ExtractAtlasCellTexture(
 	const int32 GridCols,
 	const int32 GridRows,
 	const bool bIsNormalMap,
-	const bool bSRGB)
+	const bool bSRGB,
+	const bool bIsCharacterSprite)
 {
 	if (TObjectPtr<UTexture2D>* Existing = ExtractedCellTextures.Find(CacheKey))
 	{
@@ -318,12 +465,29 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::ExtractAtlasCellTexture(
 	const int64 SrcStride = static_cast<int64>(FullWidth) * 4;
 	const int64 DestStride = static_cast<int64>(CellWidth) * 4;
 	const uint8* SrcBase = RawBGRA.GetData();
+	const bool bMirrorHorizontal = bIsCharacterSprite && ShouldMirrorSpritePlaneU();
 
 	for (int32 RowY = 0; RowY < CellHeight; ++RowY)
 	{
 		const uint8* SrcRow = SrcBase + static_cast<int64>(StartY + RowY) * SrcStride + static_cast<int64>(StartX) * 4;
 		uint8* DstRow = DestBytes + static_cast<int64>(RowY) * DestStride;
-		FMemory::Memcpy(DstRow, SrcRow, DestStride);
+		if (!bMirrorHorizontal)
+		{
+			FMemory::Memcpy(DstRow, SrcRow, DestStride);
+		}
+		else
+		{
+			for (int32 ColX = 0; ColX < CellWidth; ++ColX)
+			{
+				const int32 SrcCol = CellWidth - 1 - ColX;
+				DstRow[ColX * 4 + 0] = SrcRow[SrcCol * 4 + 0];
+				DstRow[ColX * 4 + 1] = SrcRow[SrcCol * 4 + 1];
+				DstRow[ColX * 4 + 2] = bIsNormalMap
+					? static_cast<uint8>(255 - SrcRow[SrcCol * 4 + 2])
+					: SrcRow[SrcCol * 4 + 2];
+				DstRow[ColX * 4 + 3] = SrcRow[SrcCol * 4 + 3];
+			}
+		}
 	}
 
 	Mip.BulkData.Unlock();
@@ -360,14 +524,63 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 	const FName NormalKey,
 	const FLinearColor& FallbackTint,
 	const float RoughnessVal,
-	const bool bForHISM)
+	const bool bForHISM,
+	const bool bMaskedSprite)
 {
 	UObject* EffectiveOuter = Outer ? Outer : this;
 	UTexture2D* DiffuseTex = ResolveAnyTextureByKey(DiffuseKey);
 	UTexture2D* NormalTex = ResolveAnyTextureByKey(NormalKey);
 
+	const FString KeyStr = DiffuseKey.ToString();
+	const bool bUseMaskedCutout = bMaskedSprite
+		|| KeyStr.StartsWith(TEXT("Hero_"))
+		|| KeyStr.StartsWith(TEXT("Exploder_"))
+		|| KeyStr.StartsWith(TEXT("Thrower_"));
+
 	if (DiffuseTex)
 	{
+		if (bUseMaskedCutout && !bForHISM)
+		{
+			if (UMaterialInterface* MaskedPhongMat = LoadObject<UMaterialInterface>(
+				nullptr, TEXT("/Engine/Engine_MI_Shaders/M_ES_Phong_Masked_Master_2sided.M_ES_Phong_Masked_Master_2sided")))
+			{
+				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedPhongMat, EffectiveOuter))
+				{
+					MID->SetTextureParameterValue(FName(TEXT("Diffuse_01")), DiffuseTex);
+					if (NormalTex)
+					{
+						MID->SetTextureParameterValue(FName(TEXT("Normal_01")), NormalTex);
+					}
+					if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse_01"))) == DiffuseTex)
+					{
+						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
+						MID->SetVectorParameterValue(FName(TEXT("Diffuse_01_Color")), SubtleTint);
+						return MID;
+					}
+				}
+			}
+
+			if (UMaterialInterface* MaskedSimpleMat = LoadObject<UMaterialInterface>(
+				nullptr, TEXT("/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided.M_Shader_SimpleMaskedTwoSided")))
+			{
+				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedSimpleMat, EffectiveOuter))
+				{
+					MID->SetTextureParameterValue(FName(TEXT("Diffuse")), DiffuseTex);
+					if (NormalTex)
+					{
+						MID->SetTextureParameterValue(FName(TEXT("Normal")), NormalTex);
+					}
+					if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse"))) == DiffuseTex)
+					{
+						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
+						MID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), SubtleTint);
+						MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+						return MID;
+					}
+				}
+			}
+		}
+
 		const TCHAR* EngineMatPath = bForHISM
 			? TEXT("/Engine/EngineDebugMaterials/VertexPaint_2Tex_Color.VertexPaint_2Tex_Color")
 			: TEXT("/Engine/Engine_MI_Shaders/M_Shader_Simple.M_Shader_Simple");
@@ -394,7 +607,7 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 				// Verify the pre-compiled engine shader actually exposes "Diffuse"
 				if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse"))) == DiffuseTex)
 				{
-					const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.25f);
+					const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, bUseMaskedCutout ? 0.08f : 0.25f);
 					MID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), SubtleTint);
 					MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
 					MID->SetScalarParameterValue(FName(TEXT("UsePinkDebug")), 0.0f);

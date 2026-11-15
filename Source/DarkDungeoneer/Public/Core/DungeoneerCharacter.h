@@ -20,6 +20,7 @@ class U25DDirectionalRigComponent;
 class UDungeoneerTimedAudioComponent;
 class UDungeoneerInventoryComponent;
 class UMirrorLightBounceComponent;
+class UMaterialInstanceDynamic;
 
 /**
  * Primary playable 2.5D Dark Dungeoneer character.
@@ -103,7 +104,8 @@ protected:
 	void HandleAimInput(const FInputActionValue& Value);
 	void BindLocalInputContext();
 	void EnsureDefaultVisualsInitialized();
-	void PollDirectKeyboardAndMouseFallback() noexcept;
+	void UpdateHeroDirectionalVisual(ECompassOctant FacingOctant) noexcept;
+	void PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept;
 	void SyncFlashlightTransform(float DeltaSeconds) noexcept;
 
 	UFUNCTION(Server, Unreliable)
@@ -158,13 +160,21 @@ protected:
 	float FlashlightBattery = 100.0f;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Locomotion")
-	ECompassOctant ReplicatedMoveOctant = ECompassOctant::S;
+	ECompassOctant ReplicatedMoveOctant = ECompassOctant::E;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Locomotion")
-	ECompassOctant ReplicatedAimOctant = ECompassOctant::S;
+	ECompassOctant ReplicatedAimOctant = ECompassOctant::E;
+
+	/** Pre-allocated 4 directional sprite materials (Rows 0..3: Front/Camera, Back, Right, Left) for zero Tick allocation. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> DirectionalHeroMIDs;
 
 private:
-	float CurrentFlashlightYawDeg = 270.0f;
+	FVector2D LastMouseSample = FVector2D::ZeroVector;
+	float CurrentFlashlightYawDeg = 0.0f;
 	float OctantSyncAccumulator = 0.0f;
+	float TimeSinceMouseMoved = 10.0f;
+	int32 ActiveDirectionalRow = -1;
+	bool bHasMouseSample = false;
 	bool bTexturedVisualsApplied = false;
 };

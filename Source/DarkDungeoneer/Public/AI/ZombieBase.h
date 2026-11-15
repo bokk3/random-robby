@@ -6,6 +6,7 @@
 #include "ZombieBase.generated.h"
 
 class ADungeoneerCharacter;
+class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UStaticMeshComponent;
 class UZombieSpatialSubsystem;
@@ -54,12 +55,14 @@ public:
 
 protected:
 	void MoveAlongOctant(ECompassOctant Octant, float Scale = 1.0f) noexcept;
+	void UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant) noexcept;
 	void AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept;
 	virtual void OnZombieDied();
-	virtual FName GetArchetypeDiffuseKey() const noexcept { return FName(TEXT("Exploder_Cell0_D")); }
-	virtual FName GetArchetypeNormalKey() const noexcept { return FName(TEXT("Exploder_Cell0_N")); }
+	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept { return TEXT("Exploder"); }
+	virtual FName GetArchetypeDiffuseKey() const noexcept { return FName(TEXT("Exploder_Row0_D")); }
+	virtual FName GetArchetypeNormalKey() const noexcept { return FName(TEXT("Exploder_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept { return FLinearColor(0.85f, 0.30f, 0.12f); }
-	virtual FVector GetArchetypeVisualScale() const noexcept { return FVector(0.75, 0.75, 1.45); }
+	virtual FVector GetArchetypeVisualScale() const noexcept { return FVector(1.55, 1.55, 1.55); }
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zombie|Visual")
 	TObjectPtr<UStaticMeshComponent> ZombieVisualMesh;
@@ -83,14 +86,18 @@ protected:
 	float CurrentHealth = 120.0f;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "State")
-	ECompassOctant CurrentHeadingOctant = ECompassOctant::S;
+	ECompassOctant CurrentHeadingOctant = ECompassOctant::W;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mirror")
 	bool bIsMirrorDecoy = false;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> DirectionalZombieMIDs;
 
 private:
 	FVector PreviousLocation = FVector::ZeroVector;
 	float StepDistanceAccumulator = 0.0f;
 	int32 StepSequenceCounter = 0;
+	int32 ActiveDirectionalRow = -1;
 	bool bTexturedVisualsApplied = false;
 };

@@ -11,6 +11,26 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.4] - 2026-11-15
+
+### Fixed
+- **Camera-Relative 2.5D Character & Zombie Facing**:
+  - Added `DungeoneerMath::OctantToScreenDirectionalRow` in `DungeoneerTypes.h` mapping `W -> 0` (camera-facing Front), `E -> 1` (dungeon-facing Back/+X), `N/NE/NW -> 2` (Right/+Y), and `S/SE/SW -> 3` (Left/-Y), while preserving `OctantToCardinalRow` for the animation orchestrator.
+  - Updated `UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles` to extract all 4 directional sprite rows (`Row0..Row3` at cells `0, 4, 8, 12`) for `Hero`, `Exploder`, and `Thrower` alongside backward-compatible `*_Cell0_*` aliases (`40` extracted tile entries total).
+  - Solved `/Engine/BasicShapes/Plane.Plane` UV/tangent basis orientation (`ComputeSpritePlaneOrientation`, `GetCameraFacingSpritePlaneRotation`, `ShouldMirrorSpritePlaneU`, horizontally flipping albedo/normal red channel on `bFlipHorizontalForSpritePlane`) and bound masked 2-sided shaders (`M_ES_Phong_Masked_Master_2sided` / `M_Shader_SimpleMaskedTwoSided`) via `CreateDungeonOrRigMaterial(..., bMaskedSprite)`.
+  - Changed default movement/aim octants to `ECompassOctant::E` (`+X` into the dungeon) and `CurrentFlashlightYawDeg = 0.0f` for the hero (`ECompassOctant::W` for zombies), pre-allocated `4` directional `MID` instances per character/zombie (`UpdateHeroDirectionalVisual`, `UpdateZombieDirectionalVisual`), and added `LastMouseSample` / `TimeSinceMouseMoved` tracking (`> 4.0 px²` movement threshold, `0.45s` idle window) in `ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback` so resting cursor positions do not override `WASD` movement facing.
+
+### Changed & Optimized
+- **Integrated-GPU Dynamic Lighting Optimization (`Intel HD Graphics 520`)**:
+  - Disabled Lumen GI/reflections, Virtual Shadow Maps (`r.Shadow.Virtual.Enable=0`, `r.ShadowQuality=2`, `r.Shadow.MaxResolution=1024`), DistanceField AO/Shadowing, Capsule Shadows, and TSR 200% in `Config/DefaultEngine.ini` and via runtime `ECVF_SetByCode` overrides in `ADungeoneerGameMode::ApplyLowSpecDynamicLightingCVars` so cached `Scalability@3` INI values cannot override low-spec rendering.
+  - Preserved real-time dynamic flashlight shadows, light shafts, and Volumetric Fog using lighter froxel dimensions (`GridPixelSize=16`, `GridSizeZ=64`, `HistoryMissSupersampleCount=1`), FXAA (`r.AntiAliasingMethod=1`), `r.ScreenPercentage=75`, `t.MaxFPS=60`, and `1280x720` default window dimensions in `Launch-DarkDungeoneer.bat`.
+  - Disabled dynamic shadow casting on secondary fill/campfire point lights (`ARestingGroundActor::CampfireLight`, `AMenuDioramaStageActor::HeroFlashlightSpot`) and enabled distance culling (`SetCullDistances(0, 3800)`) on all `ADungeoneerTileMapInstancer` HISM components (`FloorHISM`, `WallHISM`, `MirrorHISM`, `BreakableHISM`).
+
+### Verified
+- Expanded `DungeoneerVerificationSpecs.cpp` (`40` extracted cell textures, `OctantToScreenDirectionalRow`, all 12 `*_Row{0..3}_D` textures, `GetCameraFacingSpritePlaneRotation()`, and masked 2-sided Hero `MID`); `DarkDungeoneerEditor Win64 Development` (`15` actions) and `DarkDungeoneer Win64 Development` (`14` actions) compiled cleanly, `verify_architecture_invariants.py` passed (`85` files), and all `8` headless UE `5.8.2` automation tests passed (`EXIT CODE: 0`).
+
+---
+
 ## [0.9.3] - 2026-11-15
 
 ### Added

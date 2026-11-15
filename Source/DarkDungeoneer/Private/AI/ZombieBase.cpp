@@ -25,7 +25,7 @@ AZombieBase::AZombieBase()
 
 	ZombieVisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ZombieVisualMesh"));
 	ZombieVisualMesh->SetupAttachment(RootComponent);
-	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, -5.0));
+	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, 8.0));
 	ZombieVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	ZombieEmissiveLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ZombieEmissiveLight"));
@@ -34,6 +34,8 @@ AZombieBase::AZombieBase()
 	ZombieEmissiveLight->SetIntensity(1100.0f);
 	ZombieEmissiveLight->SetAttenuationRadius(360.0f);
 	ZombieEmissiveLight->CastShadows = false;
+
+	DirectionalZombieMIDs.Reserve(4);
 }
 
 void AZombieBase::OnConstruction(const FTransform& Transform)
@@ -51,11 +53,12 @@ void AZombieBase::EnsureVisualMeshInitialized()
 
 	if (!ZombieVisualMesh->GetStaticMesh())
 	{
-		if (UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		if (UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")))
 		{
-			ZombieVisualMesh->SetStaticMesh(CylinderMesh);
+			ZombieVisualMesh->SetStaticMesh(PlaneMesh);
 		}
 	}
+	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, 8.0));
 	ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale());
 
 	const FLinearColor Tint = GetArchetypeVisualTint();
@@ -72,21 +75,34 @@ void AZombieBase::EnsureVisualMeshInitialized()
 			{
 				if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
 				{
-					if (UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
-						this,
-						GetArchetypeDiffuseKey(),
-						GetArchetypeNormalKey(),
-						Tint,
-						0.45f,
-						false))
+					ZombieVisualMesh->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
+
+					const TCHAR* Prefix = GetArchetypeKeyPrefix();
+					DirectionalZombieMIDs.Reset();
+					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
 					{
-						ZombieVisualMesh->SetMaterial(0, Mat);
-						bTexturedVisualsApplied = true;
-						return;
+						const FName DiffKey(*FString::Printf(TEXT("%s_Row%d_D"), Prefix, RowIdx));
+						const FName NormKey(*FString::Printf(TEXT("%s_Row%d_N"), Prefix, RowIdx));
+						UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
+							this,
+							DiffKey,
+							NormKey,
+							Tint,
+							0.45f,
+							false,
+							true);
+						DirectionalZombieMIDs.Add(Mat);
 					}
+
+					bTexturedVisualsApplied = true;
+					ActiveDirectionalRow = -1;
+					UpdateZombieDirectionalVisual(CurrentHeadingOctant);
+					return;
 				}
 			}
 		}
+
+		ZombieVisualMesh->SetRelativeRotation(FRotator(60.0f, 180.0f, 0.0f));
 	}
 
 	if (!ZombieVisualMesh->GetMaterial(0))
@@ -100,6 +116,26 @@ void AZombieBase::EnsureVisualMeshInitialized()
 				ZombieVisualMesh->SetMaterial(0, MID);
 			}
 		}
+	}
+}
+
+void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant) noexcept
+{
+	if (!ZombieVisualMesh)
+	{
+		return;
+	}
+
+	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(HeadingOctant));
+	if (DesiredRow == ActiveDirectionalRow)
+	{
+		return;
+	}
+
+	if (DirectionalZombieMIDs.IsValidIndex(DesiredRow) && DirectionalZombieMIDs[DesiredRow])
+	{
+		ZombieVisualMesh->SetMaterial(0, DirectionalZombieMIDs[DesiredRow].Get());
+		ActiveDirectionalRow = DesiredRow;
 	}
 }
 
@@ -145,6 +181,8 @@ void AZombieBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	UpdateZombieDirectionalVisual(CurrentHeadingOctant);
+
 	if (IsZombieAlive() && !bIsMirrorDecoy)
 	{
 		AdvanceDeterministicStepAccumulator(DeltaSeconds);
@@ -178,6 +216,7 @@ void AZombieBase::Tick(float DeltaSeconds)
 void AZombieBase::MoveAlongOctant(ECompassOctant Octant, float Scale) noexcept
 {
 	CurrentHeadingOctant = Octant;
+	UpdateZombieDirectionalVisual(Octant);
 	const FVector UnitDir = DungeoneerMath::OctantToDirection3D(Octant);
 	AddMovementInput(UnitDir, Scale);
 }

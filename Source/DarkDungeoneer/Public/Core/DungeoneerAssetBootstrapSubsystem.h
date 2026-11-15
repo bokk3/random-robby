@@ -47,7 +47,8 @@ public:
 		int32 GridCols = 4,
 		int32 GridRows = 4,
 		bool bIsNormalMap = false,
-		bool bSRGB = true);
+		bool bSRGB = true,
+		bool bIsCharacterSprite = false);
 
 	/**
 	 * Builds a textured UMaterialInstanceDynamic using pre-compiled Engine materials (zero shader-compile hitch),
@@ -59,7 +60,16 @@ public:
 		FName NormalKey,
 		const FLinearColor& FallbackTint,
 		float RoughnessVal = 0.75f,
-		bool bForHISM = false);
+		bool bForHISM = false,
+		bool bMaskedSprite = false);
+
+	/** Exact 3D rotation for /Engine/BasicShapes/Plane.Plane so sprite V:1->0 points up-screen and front faces the -60 deg camera. */
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	FRotator GetCameraFacingSpritePlaneRotation() const noexcept;
+
+	/** True when /Engine/BasicShapes/Plane.Plane's U axis maps opposite to Screen Right (+Y), requiring horizontal mirror on character cell extraction. */
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	bool ShouldMirrorSpritePlaneU() const noexcept;
 
 	/** Imports all WAV voice stems & 24-syllable gibberish banks from Content/Audio/Voices. */
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
@@ -108,6 +118,11 @@ public:
 
 private:
 	UTexture2D* ResolveAnyTextureByKey(FName Key) const noexcept;
+	void ComputeSpritePlaneOrientation() const noexcept;
+
+	mutable FRotator CachedSpritePlaneRotation = FRotator(60.0f, 180.0f, 0.0f);
+	mutable bool bFlipHorizontalForSpritePlane = false;
+	mutable bool bSpritePlaneOrientationComputed = false;
 
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UTexture2D>> LoadedRigTextures;

@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.3` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.4` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -23,6 +23,7 @@
 | `v0.9.1` | 2.5D Modular Dungeon HISM Assembly, South-Wall Cutaways & Mirror Light-Bounce | Done | `slice_normal_rig.py --mode dungeon`, `ADungeoneerTileMapInstancer`, `UMirrorLightBounceComponent`, 4 Dungeon Atlases/Props, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.2` | Startup Black-Screen Fix, Visible Diorama/HISM Materials & In-Place Dungeon Play | Done | `/Engine/Maps/Entry`, `AMenuDioramaStageActor` meshes/fill light, `ADungeoneerCharacter` hero mesh + WASD/mouse fallback, `ADungeoneerGameMode::EnterLiveDungeonFromMenu`, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.3` | Dungeon Texture Bootstrap, 4-Axis Corridor Carving & Live Room Encounters | Done | `UDungeoneerAssetBootstrapSubsystem` single-cell extraction + textured HISM/rig materials, carved doorways, deduplicated corridors, `AZombieBase`/encounter visuals & spawner, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.9.4` | Camera-Relative 2.5D Facing & Integrated-GPU Dynamic Lighting | Done | `OctantToScreenDirectionalRow`, 4-row `Hero`/`Exploder`/`Thrower` extraction, masked 2-sided `Plane.Plane` cutouts, idle-mouse arbitration, Lumen/VSM/TSR removal preserving dynamic flashlight & Volumetric Fog, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 
 ---
 
@@ -101,6 +102,15 @@
 - [x] **`TASK-908` — Doorway Carving, Deduplicated 4-Axis Corridors & Live Room Encounter Spawning**
   - **Files**: `Source/DarkDungeoneer/Public/Dungeon/DungeoneerTileMapInstancer.h`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Public/AI/ZombieExploder.h`, `Private/AI/ZombieExploder.cpp`, `Public/AI/ZombieFastThrower.h`, `Public/Dungeon/DungeonEncounterActors.h`, `Private/Dungeon/DungeonEncounterActors.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
   - **Scope**: Carve doorway apertures across open-void and flush-abutting rooms in `BuildDungeonFromFloorGraph`, merge T-junction corridor floor cells via `TSet<FIntPoint>` with cutaway-aware flanking corridor walls, attach visible meshes + beacon lights to zombies, Resting Ground, Vendor, and Major Loot Vault actors, and spawn/track room encounters deterministically.
+
+### Milestone `v0.9.4` — Camera-Relative 2.5D Facing & Integrated-GPU Dynamic Lighting
+
+- [x] **`TASK-909` — Camera-Relative 4-Row Sprite Extraction, Cutout Orientation & Input Aim Arbitration**
+  - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerTypes.h`, `Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Public/Core/DungeoneerMovementComponent.h`, `Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Public/AI/ZombieExploder.h`, `Public/AI/ZombieFastThrower.h`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Add `OctantToScreenDirectionalRow`, extract all 4 directional sprite rows (`Row0..Row3` = cells `0, 4, 8, 12`) for `Hero`/`Exploder`/`Thrower` (`40` cells total), align `/Engine/BasicShapes/Plane.Plane` UV/normal orientation (`bFlipHorizontalForSpritePlane`), bind masked 2-sided shaders (`M_ES_Phong_Masked_Master_2sided` / `M_Shader_SimpleMaskedTwoSided`), default hero facing East (`+X`) and zombies West (`-X`), swap pre-allocated directional MIDs (`UpdateHeroDirectionalVisual` / `UpdateZombieDirectionalVisual`), and gate mouse cursor aiming on motion (`> 4.0 px²` within `0.45s`) so idle cursors never override `WASD` facing.
+- [x] **`TASK-910` — Integrated-GPU (`Intel HD 520`) Rendering Optimization Preserving Dynamic Lighting**
+  - **Files**: `Config/DefaultEngine.ini`, `Source/DarkDungeoneer/Private/Core/DungeoneerGameMode.cpp`, `Private/Dungeon/DungeonEncounterActors.cpp`, `Private/UI/MenuDioramaStageActor.cpp`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Launch-DarkDungeoneer.bat`
+  - **Scope**: Disable Lumen GI/reflections, Virtual Shadow Maps, DistanceField AO/Shadowing, Capsule Shadows, and TSR in INI and via `ADungeoneerGameMode::ApplyLowSpecDynamicLightingCVars` (`ECVF_SetByCode`), preserve dynamic flashlight shadows & Volumetric Fog with lighter froxel budgets (`GridPixelSize=16`, `GridSizeZ=64`, `HistoryMissSupersampleCount=1`), FXAA, `r.ScreenPercentage=75`, `t.MaxFPS=60`, `1280x720` launcher resolution, disable shadows on `CampfireLight` and diorama fill spot, and cull HISM instances (`SetCullDistances(0, 3800)`).
 
 ---
 

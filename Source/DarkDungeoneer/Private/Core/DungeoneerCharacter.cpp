@@ -81,12 +81,15 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 
 	HeroVisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroVisualMesh"));
 	HeroVisualMesh->SetupAttachment(RootComponent);
-	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -5.0f));
+	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
+	HeroVisualMesh->SetRelativeScale3D(FVector(1.65, 1.65, 1.65));
 	HeroVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
+
+	DirectionalHeroMIDs.Reserve(4);
 }
 
 void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
@@ -98,12 +101,13 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 
 	if (!HeroVisualMesh->GetStaticMesh())
 	{
-		if (UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		if (UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")))
 		{
-			HeroVisualMesh->SetStaticMesh(CylinderMesh);
-			HeroVisualMesh->SetRelativeScale3D(FVector(0.85, 0.85, 1.65));
+			HeroVisualMesh->SetStaticMesh(PlaneMesh);
 		}
 	}
+	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
+	HeroVisualMesh->SetRelativeScale3D(FVector(1.65, 1.65, 1.65));
 
 	if (!bTexturedVisualsApplied)
 	{
@@ -113,20 +117,49 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 			{
 				if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
 				{
-					if (UMaterialInstanceDynamic* HeroMat = Bootstrap->CreateDungeonOrRigMaterial(
-						this,
-						FName(TEXT("Hero_Cell0_D")),
-						FName(TEXT("Hero_Cell0_N")),
-						FLinearColor(0.95f, 0.78f, 0.28f),
-						0.45f,
-						false))
+					HeroVisualMesh->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
+
+					static constexpr const TCHAR* RowDiffuseKeys[4] =
 					{
-						HeroVisualMesh->SetMaterial(0, HeroMat);
-						bTexturedVisualsApplied = true;
+						TEXT("Hero_Row0_D"),
+						TEXT("Hero_Row1_D"),
+						TEXT("Hero_Row2_D"),
+						TEXT("Hero_Row3_D")
+					};
+					static constexpr const TCHAR* RowNormalKeys[4] =
+					{
+						TEXT("Hero_Row0_N"),
+						TEXT("Hero_Row1_N"),
+						TEXT("Hero_Row2_N"),
+						TEXT("Hero_Row3_N")
+					};
+
+					DirectionalHeroMIDs.Reset();
+					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
+					{
+						UMaterialInstanceDynamic* RowMID = Bootstrap->CreateDungeonOrRigMaterial(
+							this,
+							FName(RowDiffuseKeys[RowIdx]),
+							FName(RowNormalKeys[RowIdx]),
+							FLinearColor::White,
+							0.45f,
+							false,
+							true);
+						DirectionalHeroMIDs.Add(RowMID);
 					}
+
+					bTexturedVisualsApplied = true;
+					ActiveDirectionalRow = -1;
+					const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+					const ECompassOctant InitialFacing = MoveComp ? MoveComp->GetAimOctant() : ReplicatedAimOctant;
+					UpdateHeroDirectionalVisual(InitialFacing);
+					return;
 				}
 			}
 		}
+
+		// Bare test-world fallback without a GameInstance: orient upright plane facing the -60 deg camera
+		HeroVisualMesh->SetRelativeRotation(FRotator(60.0f, 180.0f, 0.0f));
 	}
 
 	if (!HeroVisualMesh->GetMaterial(0))
@@ -141,10 +174,25 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 			}
 		}
 	}
+}
 
-	if (DirectionalRigComponent)
+void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOctant) noexcept
+{
+	if (!HeroVisualMesh)
 	{
-		DirectionalRigComponent->RegisterSocketPrimitive(E25DRigSocket::Torso, HeroVisualMesh.Get());
+		return;
+	}
+
+	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(FacingOctant));
+	if (DesiredRow == ActiveDirectionalRow)
+	{
+		return;
+	}
+
+	if (DirectionalHeroMIDs.IsValidIndex(DesiredRow) && DirectionalHeroMIDs[DesiredRow])
+	{
+		HeroVisualMesh->SetMaterial(0, DirectionalHeroMIDs[DesiredRow].Get());
+		ActiveDirectionalRow = DesiredRow;
 	}
 }
 
@@ -302,7 +350,7 @@ void ADungeoneerCharacter::HandleAimInput(const FInputActionValue& Value)
 	}
 }
 
-void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback() noexcept
+void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept
 {
 	APlayerController* PC = GetController<APlayerController>();
 	UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
@@ -310,6 +358,8 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback() noexcept
 	{
 		return;
 	}
+
+	TimeSinceMouseMoved = FMath::Min(TimeSinceMouseMoved + DeltaSeconds, 10.0f);
 
 	double MoveX = 0.0;
 	double MoveY = 0.0;
@@ -330,18 +380,36 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback() noexcept
 	float MouseY = 0.0f;
 	int32 ViewW = 0;
 	int32 ViewH = 0;
+	bool bMouseActivelyAiming = false;
 	if (PC->GetMousePosition(MouseX, MouseY))
 	{
-		PC->GetViewportSize(ViewW, ViewH);
-		if (ViewW > 0 && ViewH > 0)
+		const FVector2D CurrentMouse(static_cast<double>(MouseX), static_cast<double>(MouseY));
+		if (!bHasMouseSample)
 		{
-			const float CenterX = static_cast<float>(ViewW) * 0.5f;
-			const float CenterY = static_cast<float>(ViewH) * 0.5f;
-			const FVector2D AimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
-			MoveComp->SetAimInputVector(AimVec);
+			LastMouseSample = CurrentMouse;
+			bHasMouseSample = true;
+		}
+		else if (FVector2D::DistSquared(CurrentMouse, LastMouseSample) > 4.0)
+		{
+			LastMouseSample = CurrentMouse;
+			TimeSinceMouseMoved = 0.0f;
+		}
+
+		if (TimeSinceMouseMoved <= 0.45f)
+		{
+			PC->GetViewportSize(ViewW, ViewH);
+			if (ViewW > 0 && ViewH > 0)
+			{
+				const float CenterX = static_cast<float>(ViewW) * 0.5f;
+				const float CenterY = static_cast<float>(ViewH) * 0.5f;
+				const FVector2D AimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
+				MoveComp->SetAimInputVector(AimVec);
+				bMouseActivelyAiming = true;
+			}
 		}
 	}
-	else if (MoveComp->HasActiveMoveInput())
+
+	if (!bMouseActivelyAiming && MoveComp->HasActiveMoveInput())
 	{
 		MoveComp->SetAimInputVector(MoveVec);
 	}
@@ -353,37 +421,41 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 
 	if (IsLocallyControlled() && !DefaultMappingContext)
 	{
-		PollDirectKeyboardAndMouseFallback();
+		PollDirectKeyboardAndMouseFallback(DeltaSeconds);
 	}
 
 	SyncFlashlightTransform(DeltaSeconds);
 
+	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+	const ECompassOctant ActiveFacingOctant = (IsLocallyControlled() && MoveComp)
+		? MoveComp->GetAimOctant()
+		: ReplicatedAimOctant;
+
+	UpdateHeroDirectionalVisual(ActiveFacingOctant);
+
 	if (DirectionalRigComponent)
 	{
-		DirectionalRigComponent->SetHeadingOctant(ReplicatedAimOctant);
-		if (const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+		DirectionalRigComponent->SetHeadingOctant(ActiveFacingOctant);
+		if (MoveComp)
 		{
 			DirectionalRigComponent->SetAnimationPlaying(MoveComp->HasActiveMoveInput());
 		}
 	}
 
-	if (IsLocallyControlled())
+	if (IsLocallyControlled() && MoveComp)
 	{
-		if (const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
-		{
-			const ECompassOctant LocalMove = MoveComp->GetMoveOctant();
-			const ECompassOctant LocalAim = MoveComp->GetAimOctant();
-			OctantSyncAccumulator += DeltaSeconds;
+		const ECompassOctant LocalMove = MoveComp->GetMoveOctant();
+		const ECompassOctant LocalAim = MoveComp->GetAimOctant();
+		OctantSyncAccumulator += DeltaSeconds;
 
-			if ((LocalMove != ReplicatedMoveOctant || LocalAim != ReplicatedAimOctant) && OctantSyncAccumulator >= 0.05f)
+		if ((LocalMove != ReplicatedMoveOctant || LocalAim != ReplicatedAimOctant) && OctantSyncAccumulator >= 0.05f)
+		{
+			ReplicatedMoveOctant = LocalMove;
+			ReplicatedAimOctant = LocalAim;
+			OctantSyncAccumulator = 0.0f;
+			if (!HasAuthority())
 			{
-				ReplicatedMoveOctant = LocalMove;
-				ReplicatedAimOctant = LocalAim;
-				OctantSyncAccumulator = 0.0f;
-				if (!HasAuthority())
-				{
-					Server_UpdateOctants(LocalMove, LocalAim);
-				}
+				Server_UpdateOctants(LocalMove, LocalAim);
 			}
 		}
 	}

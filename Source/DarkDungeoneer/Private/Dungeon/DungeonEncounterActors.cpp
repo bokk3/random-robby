@@ -68,6 +68,7 @@ ARestingGroundActor::ARestingGroundActor()
 	CampfireLight->SetIntensity(9000.0f);
 	CampfireLight->SetAttenuationRadius(1100.0f);
 	CampfireLight->VolumetricScatteringIntensity = 1.6f;
+	CampfireLight->CastShadows = false;
 }
 
 void ARestingGroundActor::BeginPlay()

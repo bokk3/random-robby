@@ -72,8 +72,8 @@ protected:
 private:
 	FVector2D CachedRawMoveInput = FVector2D::ZeroVector;
 	FVector2D CachedRawAimInput = FVector2D::ZeroVector;
-	ECompassOctant CurrentMoveOctant = ECompassOctant::S;
-	ECompassOctant CurrentAimOctant = ECompassOctant::S;
+	ECompassOctant CurrentMoveOctant = ECompassOctant::E;
+	ECompassOctant CurrentAimOctant = ECompassOctant::E;
 	bool bHasActiveMoveInput = false;
 
 	// Chrono-Leech debuff ratio S in [0.0, MaxSlowRatio]

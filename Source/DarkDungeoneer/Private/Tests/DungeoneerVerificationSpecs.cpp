@@ -370,7 +370,34 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestNotNull(TEXT("ATLAS_Dungeon_Floors_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("ATLAS_Dungeon_Floors_4x4_D"))));
 
 		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
-		TestEqual(TEXT("16 single-cell tile textures extracted from 4x4 atlases"), ExtractedCells, 16);
+		TestEqual(TEXT("40 single-cell tile textures extracted from 4x4 atlases"), ExtractedCells, 40);
+
+		TestEqual(TEXT("ScreenDirectionalRow W (-X toward camera) -> Row 0 (Front)"),
+			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::W), static_cast<uint8>(0));
+		TestEqual(TEXT("ScreenDirectionalRow E (+X into dungeon) -> Row 1 (Back)"),
+			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::E), static_cast<uint8>(1));
+		TestEqual(TEXT("ScreenDirectionalRow N (+Y screen right) -> Row 2 (Right)"),
+			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::N), static_cast<uint8>(2));
+		TestEqual(TEXT("ScreenDirectionalRow NE -> Row 2 (Right)"),
+			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::NE), static_cast<uint8>(2));
+		TestEqual(TEXT("ScreenDirectionalRow S (-Y screen left) -> Row 3 (Left)"),
+			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::S), static_cast<uint8>(3));
+
+		const FRotator SpriteRot = Bootstrap->GetCameraFacingSpritePlaneRotation();
+		const FVector SpriteWorldNormal = SpriteRot.RotateVector(FVector(0.0, 0.0, 1.0));
+		TestTrue(TEXT("Sprite plane world normal faces -60 deg camera (X < 0, Z > 0)"),
+			SpriteWorldNormal.X < -0.5 && SpriteWorldNormal.Z > 0.25);
+
+		static constexpr const TCHAR* DirectionalDiffKeys[12] =
+		{
+			TEXT("Hero_Row0_D"), TEXT("Hero_Row1_D"), TEXT("Hero_Row2_D"), TEXT("Hero_Row3_D"),
+			TEXT("Exploder_Row0_D"), TEXT("Exploder_Row1_D"), TEXT("Exploder_Row2_D"), TEXT("Exploder_Row3_D"),
+			TEXT("Thrower_Row0_D"), TEXT("Thrower_Row1_D"), TEXT("Thrower_Row2_D"), TEXT("Thrower_Row3_D")
+		};
+		for (const TCHAR* Key : DirectionalDiffKeys)
+		{
+			TestNotNull(FString::Printf(TEXT("%s extracted"), Key), Bootstrap->GetExtractedCellTexture(FName(Key)));
+		}
 
 		UTexture2D* FloorTileTex = Bootstrap->GetExtractedCellTexture(FName(TEXT("Floor_Tile0_D")));
 		TestNotNull(TEXT("Extracted single-cell Floor_Tile0_D cached"), FloorTileTex);
@@ -382,6 +409,8 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestNotNull(TEXT("Extracted Hero_Cell0_D cached"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Hero_Cell0_D"))));
 		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds HISM textured material"),
 			Bootstrap->CreateDungeonOrRigMaterial(Bootstrap, FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor::White, 0.72f, true));
+		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds masked two-sided Hero sprite material"),
+			Bootstrap->CreateDungeonOrRigMaterial(Bootstrap, FName(TEXT("Hero_Row1_D")), FName(TEXT("Hero_Row1_N")), FLinearColor::White, 0.45f, false, true));
 
 		UTexture2D* HeroDiffuse = Bootstrap->GetLoadedRigTexture(FName(TEXT("Hero_D")));
 		TestNotNull(TEXT("Hero_D texture present in cache"), HeroDiffuse);

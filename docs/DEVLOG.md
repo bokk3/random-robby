@@ -136,3 +136,30 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
 - **Live Room Encounters (`SpawnEncountersForFloorGraph`)**:
   - `AZombieBase` (`AZombieExploder`, `AZombieFastThrower`), `ARestingGroundActor`, `AVendorActor`, and `AMajorLootVaultActor` now instantiate visible 2.5D meshes and atmospheric `UPointLightComponent` beacons (magma orange, chrono cyan, sanctuary amber, merchant cyan, vault gold) and spawn deterministically per room node, tracked in `SpawnedEncounterActors` and cleaned up on rebuilds.
 - Extended `DungeoneerVerificationSpecs.cpp` with assertions for all `16` dungeon atlases, `16` extracted single-cell tiles, `CreateDungeonOrRigMaterial`, non-zero connecting corridor tiles, Entry East doorway aperture clearance, and spawned room encounters (`>= 5`); all `8` headless UE `5.8.2` specs passed (`EXIT CODE: 0`).
+
+---
+
+## Devlog #09 — Camera-Relative 2.5D Sprite Facing & Integrated-GPU Dynamic Lighting Optimization (`v0.9.4`)
+
+### 1. Fixing Character & Zombie Directional Facing
+- **Root Cause Analysis**:
+  1. `ExtractDefaultSingleCellTiles` previously cropped only `Cell 0` (Front view `-X`), leaving all actors stuck displaying the camera-facing sprite regardless of heading.
+  2. `HeroVisualMesh` was a cylinder overwritten with `(-1, 1, 1)` scale by `DirectionalRigComponent`, and both hero movement/aim defaults started at `ECompassOctant::S` rather than `ECompassOctant::E` (`+X`, facing deeper into the dungeon from the `-60°` overhead `CameraBoom`).
+  3. `ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback` continuously aimed at `GetMousePosition`, so clicking Play on the left-hand menu or resting the laptop trackpad forced the hero to face backward (`-X` / `W`) even while running East with `WASD`.
+- **Implementation**:
+  - Added `DungeoneerMath::OctantToScreenDirectionalRow` (`W -> 0`, `E -> 1`, `N/NE/NW -> 2`, `S/SE/SW -> 3`) while preserving `OctantToCardinalRow` for the distance-driven animation contract.
+  - Extended `ExtractDefaultSingleCellTiles` to crop all 4 directional rows (`Row0..Row3`, cells `0, 4, 8, 12`) for `Hero`, `Exploder`, and `Thrower` (`40` entries in `ExtractedCellTextures`), solved the `/Engine/BasicShapes/Plane.Plane` tangent/UV orientation (`ComputeSpritePlaneOrientation`, `GetCameraFacingSpritePlaneRotation`, `ShouldMirrorSpritePlaneU`, horizontally mirroring albedo pixels and tangent-X red normals when `bFlipHorizontalForSpritePlane` applies), and bound masked 2-sided materials (`M_ES_Phong_Masked_Master_2sided` / `M_Shader_SimpleMaskedTwoSided`).
+  - Pre-allocated `4` directional `MID` instances on `ADungeoneerCharacter` and `AZombieBase` (`UpdateHeroDirectionalVisual`, `UpdateZombieDirectionalVisual`) with zero per-tick allocations, defaulted the hero to `ECompassOctant::E` (`CurrentFlashlightYawDeg = 0.0f`) and zombies to `ECompassOctant::W`, and gated mouse-cursor aiming behind a `> 4.0 px²` motion check with a `0.45s` active-mouse window so `WASD` movement cleanly drives facing when the cursor is idle.
+
+### 2. Fixing ~3 FPS on Integrated Graphics (`Intel(R) HD Graphics 520`) While Keeping Dynamic Lighting
+- **Profiling Diagnosis (`Saved/Logs/DarkDungeoneer.log`)**:
+  - UE 5.8 defaulted to `Scalability@3` (High), enabling Lumen GI/reflections, Virtual Shadow Maps, DistanceField AO/Shadowing, Capsule Shadows, TSR 200% upscaling, full-res volumetric fog froxels, shadow-casting secondary point lights, and unculled HISM dungeon instances at `1600x900` on an `i5-6300U` / `Intel(R) HD Graphics 520`.
+- **Rendering Budget Rebalance**:
+  - Updated `Config/DefaultEngine.ini` and added runtime `ECVF_SetByCode` console variable enforcement in `ADungeoneerGameMode::ApplyLowSpecDynamicLightingCVars()` (active in game worlds outside commandlets) so cached scalability settings cannot override the low-spec budget.
+  - Turned off Lumen GI/reflections, VSM (`r.Shadow.Virtual.Enable=0`, standard cascade/projection shadows at `r.ShadowQuality=2`, `r.Shadow.MaxResolution=1024`), DistanceField AO/Shadowing, Capsule Shadows, and TSR; switched anti-aliasing to FXAA (`r.AntiAliasingMethod=1`), scaled internal resolution (`r.ScreenPercentage=75`, `t.MaxFPS=60`), and lowered `Launch-DarkDungeoneer.bat` to `1280x720`.
+  - Preserved the core atmospheric dynamic flashlight shadows and Volumetric Fog at 8x lighter froxel resolution (`GridPixelSize=16`, `GridSizeZ=64`, `HistoryMissSupersampleCount=1`), disabled shadows on non-hero secondary lights (`ARestingGroundActor::CampfireLight`, `AMenuDioramaStageActor::HeroFlashlightSpot`), and set `SetCullDistances(0, 3800)` on all `ADungeoneerTileMapInstancer` HISM components (`FloorHISM`, `WallHISM`, `MirrorHISM`, `BreakableHISM`).
+
+### 3. Build & Verification (`v0.9.4`)
+- Compiled `DarkDungeoneerEditor Win64 Development` (`15` actions, exit code `0`) and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`, `14` actions, exit code `0`) cleanly.
+- Verified `python scripts/verify_architecture_invariants.py` (`ALL CHECKS PASSED: 85 core/subsystem/tool files verified`).
+- Verified all `8` headless UE `5.8.2` automation tests passed (`EXIT CODE: 0`), including updated `40`-cell bootstrap checks, `OctantToScreenDirectionalRow`, all 12 `*_Row{0..3}_D` textures, plane normal orientation, and masked 2-sided Hero `MID` verification.
