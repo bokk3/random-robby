@@ -127,3 +127,15 @@ void U25DDirectionalRigComponent::PushCustomPrimitiveData() noexcept
 		}
 	}
 }
+
+void U25DDirectionalRigComponent::ConfigureVolumetricShadowProxy(UPrimitiveComponent* ProxyMesh) noexcept
+{
+	if (!ProxyMesh)
+	{
+		return;
+	}
+
+	ProxyMesh->SetRenderInMainPass(false);
+	ProxyMesh->SetCastHiddenShadow(true);
+	ProxyMesh->SetCastShadow(true);
+}

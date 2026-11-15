@@ -23,6 +23,10 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual bool IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const override;
+
+	/** Evaluates whether this zombie falls inside any flashlight cone, Dark Vision radius, or active noise pulse. */
+	bool IsDetectedByViewer(const AActor* ViewerActor, const FVector& ViewerOrigin) const noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Zombie")
 	ECompassOctant GetCurrentHeadingOctant() const noexcept { return CurrentHeadingOctant; }

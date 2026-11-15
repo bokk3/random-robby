@@ -4,6 +4,8 @@
 #include "Components/SpotLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 AMirrorWall_Solid::AMirrorWall_Solid()
 {
@@ -93,6 +95,14 @@ void AMirrorWall_Phantasm::BeginPlay()
 		HalfResTarget->InitAutoFormat(512, 288);
 		PortalReflectionCapture->TextureTarget = HalfResTarget;
 	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UMirrorCaptureBudgetSubsystem* BudgetSys = World->GetSubsystem<UMirrorCaptureBudgetSubsystem>())
+		{
+			BudgetSys->RegisterPortal(this);
+		}
+	}
 }
 
 AMirrorDecoyNode::AMirrorDecoyNode()
@@ -136,4 +146,150 @@ void AMirrorDecoyNode::Tick(float DeltaSeconds)
 		const FVector ReflectedPos = AnchorLoc + Delta - 2.0 * FVector::DotProduct(Delta, Normal) * Normal;
 		DecoyVisualPlane->SetWorldLocation(ReflectedPos);
 	}
+}
+
+void AMirrorWall_Phantasm::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UMirrorCaptureBudgetSubsystem* BudgetSys = World->GetSubsystem<UMirrorCaptureBudgetSubsystem>())
+		{
+			BudgetSys->UnregisterPortal(this);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void AMirrorWall_Phantasm::CapturePortalDeferred() noexcept
+{
+	if (PortalReflectionCapture)
+	{
+		PortalReflectionCapture->CaptureSceneDeferred();
+	}
+}
+
+void UMirrorCaptureBudgetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	NumRegisteredPortals = 0;
+	RoundRobinCursor = 0;
+	FrameTickCounter = 0;
+}
+
+void UMirrorCaptureBudgetSubsystem::Deinitialize()
+{
+	for (int32 i = 0; i < NumRegisteredPortals; ++i)
+	{
+		RegisteredPortals[i].Reset();
+	}
+	NumRegisteredPortals = 0;
+	Super::Deinitialize();
+}
+
+void UMirrorCaptureBudgetSubsystem::RegisterPortal(AMirrorWall_Phantasm* Portal) noexcept
+{
+	if (!Portal)
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < NumRegisteredPortals; ++i)
+	{
+		if (RegisteredPortals[i].Get() == Portal)
+		{
+			return;
+		}
+	}
+
+	if (NumRegisteredPortals < MaxTrackedMirrorPortals)
+	{
+		RegisteredPortals[NumRegisteredPortals++] = Portal;
+	}
+}
+
+void UMirrorCaptureBudgetSubsystem::UnregisterPortal(AMirrorWall_Phantasm* Portal) noexcept
+{
+	if (!Portal)
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < NumRegisteredPortals; ++i)
+	{
+		if (RegisteredPortals[i].Get() == Portal)
+		{
+			RegisteredPortals[i] = RegisteredPortals[NumRegisteredPortals - 1];
+			RegisteredPortals[NumRegisteredPortals - 1].Reset();
+			--NumRegisteredPortals;
+			if (NumRegisteredPortals > 0)
+			{
+				RoundRobinCursor %= NumRegisteredPortals;
+			}
+			else
+			{
+				RoundRobinCursor = 0;
+			}
+			return;
+		}
+	}
+}
+
+int32 UMirrorCaptureBudgetSubsystem::ComputeFrameCaptureBudget() const noexcept
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	const int32 ActiveLocalPlayers = GI ? FMath::Max(1, GI->GetNumLocalPlayers()) : 1;
+
+	if (ActiveLocalPlayers <= 1)
+	{
+		return MaxCapturesPerFrameBase;
+	}
+	if (ActiveLocalPlayers == 2)
+	{
+		return 1;
+	}
+
+	return ((FrameTickCounter & 1U) == 0U) ? 1 : 0;
+}
+
+void UMirrorCaptureBudgetSubsystem::ExecuteBudgetedCaptures() noexcept
+{
+	++FrameTickCounter;
+
+	// Compact stale weak pointers in-place with zero heap allocations
+	for (int32 i = NumRegisteredPortals - 1; i >= 0; --i)
+	{
+		if (!RegisteredPortals[i].IsValid())
+		{
+			RegisteredPortals[i] = RegisteredPortals[NumRegisteredPortals - 1];
+			RegisteredPortals[NumRegisteredPortals - 1].Reset();
+			--NumRegisteredPortals;
+		}
+	}
+
+	if (NumRegisteredPortals <= 0)
+	{
+		RoundRobinCursor = 0;
+		return;
+	}
+
+	RoundRobinCursor %= NumRegisteredPortals;
+
+	const int32 FrameBudget = ComputeFrameCaptureBudget();
+	const int32 CapturesToRun = FMath::Min(FrameBudget, NumRegisteredPortals);
+	for (int32 Step = 0; Step < CapturesToRun; ++Step)
+	{
+		if (AMirrorWall_Phantasm* Portal = RegisteredPortals[RoundRobinCursor].Get())
+		{
+			Portal->CapturePortalDeferred();
+		}
+		RoundRobinCursor = (RoundRobinCursor + 1) % NumRegisteredPortals;
+	}
+}
+
+void UMirrorCaptureBudgetSubsystem::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	ExecuteBudgetedCaptures();
 }

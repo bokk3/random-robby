@@ -140,3 +140,61 @@ void UDungeoneerMovementComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		StepDistanceAccumulator = 0.0f;
 	}
 }
+
+void FSavedMove_Dungeoneer::Clear()
+{
+	Super::Clear();
+	SavedQuantizedChronoSlow = 0;
+}
+
+bool FSavedMove_Dungeoneer::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
+{
+	if (!Super::CanCombineWith(NewMove, InCharacter, MaxDelta) || !NewMove.IsValid())
+	{
+		return false;
+	}
+
+	const FSavedMove_Dungeoneer* OtherDungeoneerMove = static_cast<const FSavedMove_Dungeoneer*>(NewMove.Get());
+	return SavedQuantizedChronoSlow == OtherDungeoneerMove->SavedQuantizedChronoSlow;
+}
+
+void FSavedMove_Dungeoneer::SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, FNetworkPredictionData_Client_Character& ClientData)
+{
+	Super::SetMoveFor(C, InDeltaTime, NewAccel, ClientData);
+
+	if (const UDungeoneerMovementComponent* MoveComp = C ? Cast<UDungeoneerMovementComponent>(C->GetCharacterMovement()) : nullptr)
+	{
+		SavedQuantizedChronoSlow = QuantizeSlowRatioToByte(MoveComp->GetChronoSlowRatio(), MoveComp->GetMaxChronoSlowConfig());
+	}
+}
+
+void FSavedMove_Dungeoneer::PrepMoveFor(ACharacter* C)
+{
+	Super::PrepMoveFor(C);
+
+	if (UDungeoneerMovementComponent* MoveComp = C ? Cast<UDungeoneerMovementComponent>(C->GetCharacterMovement()) : nullptr)
+	{
+		MoveComp->SetChronoSlowRatio(DequantizeByteToSlowRatio(SavedQuantizedChronoSlow, MoveComp->GetMaxChronoSlowConfig()));
+	}
+}
+
+FSavedMovePtr FNetworkPredictionData_Client_Dungeoneer::AllocateNewMove()
+{
+	return FSavedMovePtr(new FSavedMove_Dungeoneer());
+}
+
+FNetworkPredictionData_Client* UDungeoneerMovementComponent::GetPredictionData_Client() const
+{
+	if (ClientPredictionData == nullptr)
+	{
+		UDungeoneerMovementComponent* MutableThis = const_cast<UDungeoneerMovementComponent*>(this);
+		MutableThis->ClientPredictionData = new FNetworkPredictionData_Client_Dungeoneer(*this);
+	}
+	return ClientPredictionData;
+}
+
+void UDungeoneerMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
+{
+	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+	ChronoSlowRatio = FMath::Clamp(ChronoSlowRatio, 0.0f, GetMaxChronoSlowConfig());
+}

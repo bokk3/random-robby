@@ -25,6 +25,8 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
 	virtual float GetMaxSpeed() const override;
+	virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
+	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 
 	/**
 	 * Protocol A: Quantizes a 2D input vector to the nearest 45-degree octant (PI/4 rad).
@@ -86,4 +88,54 @@ private:
 	static constexpr float DefaultDeadZoneSq = 0.04f;
 	static constexpr float DefaultStepCycleUU = 120.0f;
 	static constexpr float DefaultMaxSlowRatio = 0.65f;
+};
+
+/**
+ * Custom client SavedMove packing quantized uint8 ChronoSlowRatio alongside octant inputs
+ * so client-side prediction replays cleanly across Slo-Mo Gas boundaries without rubber-banding.
+ */
+class DARKDUNGEONEER_API FSavedMove_Dungeoneer : public FSavedMove_Character
+{
+public:
+	using Super = FSavedMove_Character;
+
+	static uint8 QuantizeSlowRatioToByte(float SlowRatio, float MaxSlowRatio) noexcept
+	{
+		if (MaxSlowRatio <= KINDA_SMALL_NUMBER)
+		{
+			return 0;
+		}
+		const float Normalized = FMath::Clamp(SlowRatio / MaxSlowRatio, 0.0f, 1.0f);
+		return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Normalized * 255.0f), 0, 255));
+	}
+
+	static float DequantizeByteToSlowRatio(uint8 QuantizedByte, float MaxSlowRatio) noexcept
+	{
+		if (MaxSlowRatio <= KINDA_SMALL_NUMBER)
+		{
+			return 0.0f;
+		}
+		const float Normalized = static_cast<float>(QuantizedByte) / 255.0f;
+		return Normalized * MaxSlowRatio;
+	}
+
+	virtual void Clear() override;
+	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override;
+	virtual void SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, FNetworkPredictionData_Client_Character& ClientData) override;
+	virtual void PrepMoveFor(ACharacter* C) override;
+
+	uint8 SavedQuantizedChronoSlow = 0;
+};
+
+class DARKDUNGEONEER_API FNetworkPredictionData_Client_Dungeoneer : public FNetworkPredictionData_Client_Character
+{
+public:
+	using Super = FNetworkPredictionData_Client_Character;
+
+	explicit FNetworkPredictionData_Client_Dungeoneer(const UCharacterMovementComponent& ClientMovement)
+		: Super(ClientMovement)
+	{
+	}
+
+	virtual FSavedMovePtr AllocateNewMove() override;
 };

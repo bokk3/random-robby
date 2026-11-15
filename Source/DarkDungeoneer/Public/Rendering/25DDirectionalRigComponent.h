@@ -102,6 +102,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "2.5D Rig")
 	void SetIs8CompassBillboard(bool bEnable8Compass) noexcept { bIs8CompassBillboard = bEnable8Compass; }
 
+	/** Configures an unrendered volumetric shadow proxy (bRenderInMainPass=false, bCastHiddenShadow=true, CastShadow=true). */
+	UFUNCTION(BlueprintCallable, Category = "2.5D Rig")
+	void ConfigureVolumetricShadowProxy(UPrimitiveComponent* ProxyMesh) noexcept;
+
 protected:
 	void PushCustomPrimitiveData() noexcept;
 

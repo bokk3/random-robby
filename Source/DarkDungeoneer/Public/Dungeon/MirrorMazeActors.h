@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Subsystems/WorldSubsystem.h"
+#include "Containers/StaticArray.h"
 #include "MirrorMazeActors.generated.h"
 
 class UStaticMeshComponent;
@@ -61,6 +63,10 @@ public:
 	AMirrorWall_Phantasm();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Triggers a single deferred scene capture for this portal without per-frame ticking. */
+	void CapturePortalDeferred() noexcept;
 
 	/** Returns true so Acute Hearing renders an inverted-phase ripple upon acoustic ping reflection. */
 	UFUNCTION(BlueprintPure, Category = "Mirror|Illusion")
@@ -75,6 +81,39 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mirror|Illusion")
 	float SubtleRoughnessDivergence = 0.22f;
+};
+
+/**
+ * Budgeted round-robin world subsystem for USceneCaptureComponent2D mirror portals (Rule 05.4).
+ * Caps updates to <= 2 portals per frame via CaptureSceneDeferred(), scaled inversely by active
+ * local split-screen viewport count, using fixed-size static buffers (zero Tick allocations).
+ */
+UCLASS()
+class DARKDUNGEONEER_API UMirrorCaptureBudgetSubsystem : public UTickableWorldSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	static constexpr int32 MaxTrackedMirrorPortals = 64;
+	static constexpr int32 MaxCapturesPerFrameBase = 2;
+
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+	virtual void Tick(float DeltaTime) override;
+	virtual TStatId GetStatId() const override { RETURN_QUICK_DECLARE_CYCLE_STAT(UMirrorCaptureBudgetSubsystem, STATGROUP_Tickables); }
+	virtual bool IsTickable() const override { return !IsTemplate(); }
+
+	void RegisterPortal(AMirrorWall_Phantasm* Portal) noexcept;
+	void UnregisterPortal(AMirrorWall_Phantasm* Portal) noexcept;
+	int32 ComputeFrameCaptureBudget() const noexcept;
+	void ExecuteBudgetedCaptures() noexcept;
+	int32 GetRegisteredPortalCount() const noexcept { return NumRegisteredPortals; }
+
+private:
+	TStaticArray<TWeakObjectPtr<AMirrorWall_Phantasm>, MaxTrackedMirrorPortals> RegisteredPortals;
+	int32 NumRegisteredPortals = 0;
+	int32 RoundRobinCursor = 0;
+	uint32 FrameTickCounter = 0;
 };
 
 /**

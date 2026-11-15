@@ -1,8 +1,12 @@
 #include "AI/ZombieBase.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Rendering/SensoryPerkComponent.h"
 #include "Core/DungeoneerMovementComponent.h"
+#include "Core/DungeoneerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
 
 AZombieBase::AZombieBase()
 {
@@ -20,14 +24,15 @@ void AZombieBase::BeginPlay()
 	PreviousLocation = GetActorLocation();
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 
-	if (!bIsMirrorDecoy)
+	if (bIsMirrorDecoy)
 	{
-		if (UWorld* World = GetWorld())
+		SetReplicates(false);
+	}
+	else if (UWorld* World = GetWorld())
+	{
+		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 		{
-			if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
-			{
-				SpatialSys->RegisterZombie(this);
-			}
+			SpatialSys->RegisterZombie(this);
 		}
 	}
 }
@@ -55,6 +60,30 @@ void AZombieBase::Tick(float DeltaSeconds)
 	if (IsZombieAlive() && !bIsMirrorDecoy)
 	{
 		AdvanceDeterministicStepAccumulator(DeltaSeconds);
+
+		if (HasAuthority())
+		{
+			bool bVisibleToAnyPlayer = false;
+			if (const UWorld* World = GetWorld())
+			{
+				if (const UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+				{
+					const int32 PlayerCount = SpatialSys->GetTrackedPlayerCount();
+					for (int32 i = 0; i < PlayerCount; ++i)
+					{
+						if (const ADungeoneerCharacter* Player = SpatialSys->GetTrackedPlayerAt(i))
+						{
+							if (IsDetectedByViewer(Player, Player->GetActorLocation()))
+							{
+								bVisibleToAnyPlayer = true;
+								break;
+							}
+						}
+					}
+				}
+			}
+			SetNetUpdateFrequency(bVisibleToAnyPlayer ? 15.0f : 2.0f);
+		}
 	}
 }
 
@@ -121,4 +150,73 @@ void AZombieBase::OnZombieDied()
 {
 	SetActorEnableCollision(false);
 	GetCharacterMovement()->StopMovementImmediately();
+}
+
+bool AZombieBase::IsDetectedByViewer(const AActor* ViewerActor, const FVector& ViewerOrigin) const noexcept
+{
+	const ADungeoneerCharacter* CharacterViewer = Cast<ADungeoneerCharacter>(ViewerActor);
+	if (!CharacterViewer)
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(ViewerActor))
+		{
+			CharacterViewer = Cast<ADungeoneerCharacter>(PC->GetPawn());
+		}
+	}
+
+	const FVector ZombieLocation = GetActorLocation();
+	if (!CharacterViewer)
+	{
+		return FVector::DistSquared2D(ZombieLocation, ViewerOrigin) <= FMath::Square(350.0);
+	}
+
+	const FVector ViewerLocation = CharacterViewer->GetActorLocation();
+	const double DistSq2D = FVector::DistSquared2D(ZombieLocation, ViewerLocation);
+
+	if (const USensoryPerkComponent* Sensory = CharacterViewer->GetSensoryPerkComponent())
+	{
+		const float DarkVisionRadius = Sensory->GetDarkVisionRadius();
+		if (DarkVisionRadius > 0.0f && DistSq2D <= FMath::Square(static_cast<double>(DarkVisionRadius)))
+		{
+			return true;
+		}
+
+		if (const UWorld* World = GetWorld())
+		{
+			if (const UDungeoneerSensoryWorldSubsystem* SensoryWorld = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+			{
+				FDungeoneerNoiseEvent StrongestNoise;
+				const float HearingMult = Sensory->GetAcuteHearingRangeMultiplier();
+				const float HearingRange = PerceptionHearingRange * HearingMult;
+				if (DistSq2D <= FMath::Square(static_cast<double>(HearingRange))
+					&& SensoryWorld->QueryStrongestActivePulse(ViewerLocation, HearingMult, StrongestNoise)
+					&& StrongestNoise.bActive)
+				{
+					const double PulseCoverRadius = static_cast<double>(StrongestNoise.CurrentRadius) + 150.0;
+					if (FVector::DistSquared2D(StrongestNoise.WorldOrigin, ZombieLocation) <= FMath::Square(PulseCoverRadius))
+					{
+						return true;
+					}
+				}
+			}
+		}
+	}
+
+	return CharacterViewer->IsPointLitByFlashlight(ZombieLocation);
+}
+
+bool AZombieBase::IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const
+{
+	// Mirror-Palace zombie decoys are strictly client-side seed-driven illusions; never replicate.
+	if (bIsMirrorDecoy)
+	{
+		return false;
+	}
+
+	const AActor* EffectiveViewer = ViewTarget ? ViewTarget : RealViewer;
+	if (!EffectiveViewer)
+	{
+		return false;
+	}
+
+	return IsDetectedByViewer(EffectiveViewer, SrcLocation);
 }

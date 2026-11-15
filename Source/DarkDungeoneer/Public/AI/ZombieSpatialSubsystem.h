@@ -61,6 +61,13 @@ public:
 	void RegisterZombie(AZombieBase* Zombie);
 	void UnregisterZombie(AZombieBase* Zombie);
 
+	/** Zero-allocation read-only accessors over registered players for visibility/net-relevancy culling. */
+	int32 GetTrackedPlayerCount() const noexcept { return NumTrackedPlayers; }
+	ADungeoneerCharacter* GetTrackedPlayerAt(int32 Index) const noexcept
+	{
+		return (Index >= 0 && Index < NumTrackedPlayers) ? TrackedPlayers[Index].Get() : nullptr;
+	}
+
 	/** Rebuilds the fixed 2D spatial hash grid in O(N) with zero heap allocations. */
 	void RefreshSpatialGrid() noexcept;
 
