@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dark Dungeoneer // UE 5.8 Menu Mockup</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-0 m-0">
+  <div class="py-1.5 space-y-2 select-none">
+
+    <!-- Top Title & Status Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--card-border)]">
+      <div class="flex items-center gap-2.5">
+        <div class="w-2.5 h-2.5 rounded-sm bg-[var(--warning)] shadow-sm"></div>
+        <span class="font-bold tracking-wider uppercase text-sm text-[var(--foreground)]">Dark Dungeoneer</span>
+        <span class="px-1.5 py-0.5 rounded text-xs font-mono bg-[var(--card)] border border-[var(--card-border)] text-[var(--muted-foreground)]">UE 5.8 · 2.5D</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <span id="launch-status" class="font-mono text-[var(--muted-foreground)]">Floor 1 · Seed 0x5D8F2A11</span>
+        <button id="btn-launch" class="px-3 py-1 rounded font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 transition cursor-pointer">
+          Deploy Squad
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex flex-wrap gap-1 border-b border-[var(--card-border)] pb-1.5 text-xs">
+      <button data-tab="play" class="tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--primary)] text-[var(--primary-foreground)]">1. Play &amp; 2.5D Stage</button>
+      <button data-tab="coop" class="tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--card)] text-[var(--muted-foreground)] border border-[var(--card-border)]">2. Co-Op &amp; Split-Screen</button>
+      <button data-tab="sensory" class="tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--card)] text-[var(--muted-foreground)] border border-[var(--card-border)]">3. Sensory Perks</button>
+      <button data-tab="dungeon" class="tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--card)] text-[var(--muted-foreground)] border border-[var(--card-border)]">4. Seed, 2PC Trade &amp; Voice</button>
+    </div>
+
+    <!-- TAB 1: PLAY & LIVE 2.5D FLASHLIGHT STAGE -->
+    <div id="panel-play" class="tab-panel grid grid-cols-1 md:grid-cols-12 gap-2.5 items-stretch">
+      <!-- Left Menu Column -->
+      <div class="md:col-span-5 flex flex-col justify-between gap-2">
+        <div class="space-y-1">
+          <button data-mode="floor1" class="mode-btn w-full text-left px-2.5 py-1.5 rounded border border-[var(--primary)] bg-[var(--card)] flex items-center justify-between text-xs cursor-pointer">
+            <span class="font-semibold text-[var(--foreground)]">New Expedition · Floor 1</span>
+            <span class="font-mono text-[var(--primary)]">CO-OP</span>
+          </button>
+          <button data-mode="continue" class="mode-btn w-full text-left px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between text-xs cursor-pointer hover:border-[var(--primary)]">
+            <span class="text-[var(--foreground)]">Resume Resting Ground</span>
+            <span class="font-mono text-[var(--muted-foreground)]">F3 · 2P</span>
+          </button>
+          <button data-mode="mirror" class="mode-btn w-full text-left px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between text-xs cursor-pointer hover:border-[var(--primary)]">
+            <span class="text-[var(--foreground)]">Mirror-Palace Phantasm Trial</span>
+            <span class="font-mono text-[var(--muted-foreground)]">MAZE</span>
+          </button>
+          <button data-mode="chrono" class="mode-btn w-full text-left px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between text-xs cursor-pointer hover:border-[var(--primary)]">
+            <span class="text-[var(--foreground)]">Chrono-Gas Horde Survival</span>
+            <span class="font-mono text-[var(--muted-foreground)]">ZOMBIE</span>
+          </button>
+        </div>
+
+        <!-- 8-Compass Quantizer & Flashlight Controls -->
+        <div class="p-2 rounded bg-[var(--card)] border border-[var(--card-border)] space-y-1.5 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-[var(--foreground)]">8-Compass Aim &amp; Step</span>
+            <span id="octant-readout" class="font-mono tabular-nums text-[var(--primary)]">NE (45°) · 450 UU/s</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1 font-mono">
+            <button data-oct="3" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">NW</button>
+            <button data-oct="2" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">N</button>
+            <button data-oct="1" class="oct-btn py-0.5 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">NE</button>
+            <button data-oct="0" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">E</button>
+            <button data-oct="4" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">W</button>
+            <button data-oct="5" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">SW</button>
+            <button data-oct="6" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">S</button>
+            <button data-oct="7" class="oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">SE</button>
+          </div>
+          <div class="flex items-center justify-between gap-2 pt-0.5">
+            <button id="btn-step-pulse" class="flex-1 py-1 rounded border border-[var(--card-border)] hover:border-[var(--primary)] text-[var(--foreground)] cursor-pointer">
+              Ping Step Ripple
+            </button>
+            <button id="btn-chrono-sim" class="flex-1 py-1 rounded border border-[var(--card-border)] hover:border-[var(--warning)] text-[var(--foreground)] cursor-pointer">
+              Chrono-Gas: <span id="chrono-state" class="font-mono">OFF</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Interactive 2.5D Preview Canvas -->
+      <div class="md:col-span-7 flex flex-col gap-1.5">
+        <div class="relative rounded border border-[var(--card-border)] overflow-hidden">
+          <canvas id="stage-canvas" width="520" height="248" class="w-full h-[248px] block cursor-crosshair"></canvas>
+          <div class="px-2 py-1 border-t border-[var(--card-border)] bg-[var(--card)] flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span class="text-[var(--muted-foreground)]">Hover stage to sweep flashlight cone · Reveal Exploder, Chrono-Gas &amp; Phantasm</span>
+            <span id="leech-readout" class="font-mono tabular-nums text-[var(--foreground)]">V_p=450 | V_z=410</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: CO-OP PARTY & LOCAL SPLIT-SCREEN -->
+    <div id="panel-coop" class="tab-panel hidden grid grid-cols-1 md:grid-cols-12 gap-2.5">
+      <div class="md:col-span-7 space-y-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-semibold">Local Split-Screen + Online Party Slots</span>
+          <span class="font-mono text-[var(--muted-foreground)]">UDungeoneerSocialSubsystem</span>
+        </div>
+        <div id="coop-slots" class="space-y-1.5"></div>
+        <div class="flex items-center gap-1.5 pt-1 text-xs">
+          <input id="chat-input" type="text" placeholder="Party chat (ULocalPlayer routed)..." class="flex-1 px-2 py-1 rounded bg-[var(--card)] border border-[var(--card-border)] text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:outline-none focus:border-[var(--primary)]" />
+          <button id="btn-send-chat" class="px-2.5 py-1 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">Send</button>
+        </div>
+        <div id="chat-log" class="px-2 py-1 rounded bg-[var(--card)] border border-[var(--card-border)] font-mono text-xs text-[var(--muted-foreground)] truncate">
+          [Party] P1 (Split 0): Watch the west Phantasm wall — roughness is 0.48!
+        </div>
+      </div>
+
+      <!-- Visual Split-Screen Viewport Partition Preview -->
+      <div class="md:col-span-5 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] flex flex-col justify-between gap-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">Viewport Allocator</span>
+          <span id="split-layout-label" class="font-mono text-[var(--primary)]">2P Horizontal</span>
+        </div>
+        <div id="split-grid-preview" class="grid gap-1 p-1 rounded border border-[var(--card-border)] h-[150px] bg-[var(--background)]"></div>
+        <div class="flex gap-1 font-mono">
+          <button data-local="1" class="local-cnt-btn flex-1 py-1 rounded border border-[var(--card-border)] cursor-pointer">1P</button>
+          <button data-local="2" class="local-cnt-btn flex-1 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">2P</button>
+          <button data-local="3" class="local-cnt-btn flex-1 py-1 rounded border border-[var(--card-border)] cursor-pointer">3P</button>
+          <button data-local="4" class="local-cnt-btn flex-1 py-1 rounded border border-[var(--card-border)] cursor-pointer">4P</button>
+        </div>
+        <div class="text-[var(--muted-foreground)]">Per-ULocalPlayer SceneViewExtension prevents post-process bleed.</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: SENSORY PERKS (PER-VIEWPORT ISOLATION) -->
+    <div id="panel-sensory" class="tab-panel hidden grid grid-cols-1 md:grid-cols-12 gap-2.5">
+      <div class="md:col-span-7 p-2.5 rounded bg-[var(--card)] border border-[var(--card-border)] space-y-2.5 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">Edit Local Viewport Sensory Loadout</span>
+          <div class="flex gap-1 font-mono">
+            <button data-vp="0" class="vp-select-btn px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">Local P1</button>
+            <button data-vp="1" class="vp-select-btn px-2 py-0.5 rounded border border-[var(--card-border)] text-[var(--muted-foreground)] cursor-pointer">Local P2</button>
+          </div>
+        </div>
+
+        <label class="block space-y-1">
+          <div class="flex justify-between">
+            <span>Dark Vision Sphere (Ambient Fog Piercing)</span>
+            <span id="val-dv" class="font-mono tabular-nums text-[var(--primary)]">Tier 2 · 650 UU</span>
+          </div>
+          <input id="rng-dv" type="range" min="0" max="3" value="2" class="w-full accent-[var(--primary)] cursor-pointer" />
+        </label>
+
+        <label class="block space-y-1">
+          <div class="flex justify-between">
+            <span>Acute Hearing (CustomStencil 105 Wave Rings)</span>
+            <span id="val-ah" class="font-mono tabular-nums text-[var(--primary)]">Tier 1 · 1.4x</span>
+          </div>
+          <input id="rng-ah" type="range" min="0" max="3" value="1" class="w-full accent-[var(--primary)] cursor-pointer" />
+        </label>
+
+        <label class="block space-y-1">
+          <div class="flex justify-between">
+            <span>Scent / Thermal Sense (Decoy vs True Trails)</span>
+            <span id="val-st" class="font-mono tabular-nums text-[var(--primary)]">Tier 3 · True Thermal</span>
+          </div>
+          <input id="rng-st" type="range" min="0" max="3" value="3" class="w-full accent-[var(--primary)] cursor-pointer" />
+        </label>
+      </div>
+
+      <!-- Viewport Isolation Comparison -->
+      <div class="md:col-span-5 p-2.5 rounded bg-[var(--card)] border border-[var(--card-border)] flex flex-col justify-between gap-2 text-xs">
+        <div class="font-semibold">Viewport Isolation Monitor</div>
+        <div id="vp-compare" class="space-y-1.5 font-mono"></div>
+        <div class="pt-1 border-t border-[var(--card-border)] text-[var(--muted-foreground)]">
+          Stencil Channels: <span class="text-[var(--foreground)] font-mono">101 Solid · 104 Phantasm · 106 Decoy</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: PROCEDURAL SEED DAG, 2PC TRADE & GIBBERISH VOICE -->
+    <div id="panel-dungeon" class="tab-panel hidden grid grid-cols-1 md:grid-cols-12 gap-2.5 text-xs">
+      <!-- Seed & Floor DAG -->
+      <div class="md:col-span-12 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] space-y-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="font-semibold">Deterministic Seed Graph (<span id="dag-seed" class="font-mono text-[var(--primary)]">0x5D8F2A11</span>)</span>
+          <button id="btn-reroll-seed" class="px-2 py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] font-mono cursor-pointer">Reroll FRandomStream</button>
+        </div>
+        <div id="dag-nodes" class="grid grid-cols-3 md:grid-cols-6 gap-1.5 font-mono"></div>
+      </div>
+
+      <!-- 2PC Trade Simulator -->
+      <div class="md:col-span-6 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">Two-Phase Commit Trade</span>
+          <span id="trade-phase" class="px-1.5 py-0.5 rounded font-mono bg-[var(--background)] border border-[var(--card-border)]">Idle</span>
+        </div>
+        <div class="text-[var(--muted-foreground)]">P1 offers 180g ↔ Vendor "Thermal Lens" (180g)</div>
+        <div class="flex gap-1 font-mono">
+          <button id="btn-trade-lock" class="flex-1 py-1 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer">1. Lock</button>
+          <button id="btn-trade-commit" class="flex-1 py-1 rounded bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">2. Commit</button>
+          <button id="btn-trade-drop" class="flex-1 py-1 rounded border border-[var(--card-border)] hover:border-[var(--error)] text-[var(--error)] cursor-pointer">Drop Pkt</button>
+        </div>
+        <div id="trade-log" class="font-mono text-[var(--muted-foreground)] truncate">Escrow ready · Zero item duplication invariant</div>
+      </div>
+
+      <!-- MS_GibberishSynth Phoneme Tester -->
+      <div class="md:col-span-6 p-2 rounded bg-[var(--card)] border border-[var(--card-border)] space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">MS_GibberishSynth (CharCode % 24)</span>
+          <button id="btn-speak" class="px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer">Chatter</button>
+        </div>
+        <input id="gibberish-phrase" type="text" value="Lantern oil, rare relics?" class="w-full px-2 py-1 rounded bg-[var(--card)] border border-[var(--card-border)] font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+        <div id="phoneme-out" class="font-mono text-[var(--muted-foreground)] truncate">Grains: syl_14 · syl_01 · syl_14 ... (? +3st)</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (() => {
+      // --- State ---
+      const octantNames = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
+      const octantAngles = [0, -Math.PI/4, -Math.PI/2, -3*Math.PI/4, Math.PI, 3*Math.PI/4, Math.PI/2, Math.PI/4];
+      const state = {
+        activeTab: 'play',
+        selectedMode: 'floor1',
+        aimOctant: 1,
+        aimAngle: -Math.PI / 4,
+        chronoActive: false,
+        chronoRatio: 0.0,
+        localCount: 2,
+        selectedVp: 0,
+        vpPerks: [
+          { dv: 2, ah: 1, st: 3 },
+          { dv: 0, ah: 2, st: 1 }
+        ],
+        coopSlots: [
+          { label: 'Player 1', kind: 'LOCAL #0', active: true, muted: false },
+          { label: 'Player 2', kind: 'LOCAL #1', active: true, muted: false },
+          { label: 'Kestrel_UE', kind: 'ONLINE FRIEND', active: true, muted: false },
+          { label: 'Open Slot', kind: 'INVITE / SPLIT', active: false, muted: true }
+        ],
+        seed: 0x5D8F2A11,
+        tradePhase: 'Idle',
+        ripples: [],
+        time: 0
+      };
+
+      // --- Tab Switching ---
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeTab = btn.dataset.tab;
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            const active = b.dataset.tab === state.activeTab;
+            b.className = active
+              ? 'tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--primary)] text-[var(--primary-foreground)]'
+              : 'tab-btn px-2.5 py-1 rounded font-medium cursor-pointer transition bg-[var(--card)] text-[var(--muted-foreground)] border border-[var(--card-border)]';
+          });
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+          document.getElementById('panel-' + state.activeTab).classList.remove('hidden');
+        });
+      });
+
+      // --- Mode Buttons & Launch ---
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.selectedMode = btn.dataset.mode;
+          document.querySelectorAll('.mode-btn').forEach(b => {
+            b.classList.toggle('border-[var(--primary)]', b === btn);
+            b.classList.toggle('border-[var(--card-border)]', b !== btn);
+          });
+          const names = {
+            floor1: 'Floor 1 · Co-Op',
+            continue: 'Resting Ground F3',
+            mirror: 'Mirror-Palace Maze',
+            chrono: 'Chrono-Gas Survival'
+          };
+          document.getElementById('launch-status').textContent = `${names[state.selectedMode]} · 0x${state.seed.toString(16).toUpperCase()}`;
+          if (state.selectedMode === 'chrono' && !state.chronoActive) toggleChrono();
+        });
+      });
+
+      document.getElementById('btn-launch').addEventListener('click', () => {
+        const el = document.getElementById('launch-status');
+        el.textContent = `Launching ${state.localCount}P Local + Online Session...`;
+        el.style.color = 'var(--success)';
+        setTimeout(() => { el.style.color = ''; }, 1800);
+      });
+
+      // --- 8-Compass Octant Buttons ---
+      function setOctant(oct) {
+        state.aimOctant = oct;
+        state.aimAngle = octantAngles[oct];
+        document.querySelectorAll('.oct-btn').forEach(b => {
+          const active = Number(b.dataset.oct) === oct;
+          b.className = active
+            ? 'oct-btn py-0.5 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer'
+            : 'oct-btn py-0.5 rounded border border-[var(--card-border)] hover:border-[var(--primary)] cursor-pointer';
+        });
+        updateSpeedReadout();
+      }
+
+      document.querySelectorAll('.oct-btn').forEach(btn => {
+        btn.addEventListener('click', () => setOctant(Number(btn.dataset.oct)));
+      });
+
+      function updateSpeedReadout() {
+        const s = state.chronoActive ? 0.50 : 0.0;
+        const vp = Math.round(450 * (1 - s));
+        const vz = Math.round(410 * (1 + s * 1.15));
+        const deg = [0, 45, 90, 135, 180, 225, 270, 315][state.aimOctant];
+        document.getElementById('octant-readout').textContent = `${octantNames[state.aimOctant]} (${deg}°) · ${vp} UU/s`;
+        document.getElementById('leech-readout').textContent = `V_p=${vp} | V_z=${vz}`;
+      }
+
+      function toggleChrono() {
+        state.chronoActive = !state.chronoActive;
+        document.getElementById('chrono-state').textContent = state.chronoActive ? 'LEECH' : 'OFF';
+        updateSpeedReadout();
+      }
+      document.getElementById('btn-chrono-sim').addEventListener('click', toggleChrono);
+
+      document.getElementById('btn-step-pulse').addEventListener('click', () => {
+        state.ripples.push({ r: 8, alpha: 1.0 });
+      });
+
+      // --- Canvas Stage (2.5D Flashlight + Volumetric Fog + Zombies + Phantasm Mirror) ---
+      const canvas = document.getElementById('stage-canvas');
+      const ctx = canvas.getContext('2d');
+      const player = { x: 145, y: 138 };
+      const exploder = { x: 355, y: 168 };
+      const thrower = { x: 385, y: 80, baseAngle: 0 };
+
+      canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleY;
+        const angle = Math.atan2(my - player.y, mx - player.x);
+        state.aimAngle = angle;
+        // Quantize to nearest 45-degree octant
+        let best = 0, bestDiff = 99;
+        octantAngles.forEach((a, idx) => {
+          let d = Math.abs(Math.atan2(Math.sin(angle - a), Math.cos(angle - a)));
+          if (d < bestDiff) { bestDiff = d; best = idx; }
+        });
+        if (best !== state.aimOctant) setOctant(best);
+        state.aimAngle = angle;
+      });
+
+      function themePalette() {
+        const isLight = document.documentElement.classList.contains('light');
+        const cs = getComputedStyle(document.documentElement);
+        const get = (k, fb) => cs.getPropertyValue(k).trim() || fb;
+        return {
+          isLight,
+          bg: isLight ? '#181a22' : '#090b10',
+          grid: isLight ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.045)',
+          primary: get('--primary', '#38bdf8'),
+          warning: get('--warning', '#f59e0b'),
+          error: get('--error', '#ef4444'),
+          success: get('--success', '#22c55e')
+        };
+      }
+
+      function drawStage() {
+        const p = themePalette();
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        // Dungeon floor fill
+        ctx.fillStyle = p.bg;
+        ctx.fillRect(0, 0, w, h);
+
+        // 64px / 100 UU dungeon tile grid
+        ctx.strokeStyle = p.grid;
+        ctx.lineWidth = 1;
+        for (let gx = 0; gx < w; gx += 32) {
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+        }
+        for (let gy = 0; gy < h; gy += 32) {
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+        }
+
+        // Mirror-Palace Walls (Solid vs Phantasm)
+        // Solid reflective wall (North-West corner)
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(215, 22, 110, 12);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.strokeRect(215, 22, 110, 12);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '11px monospace';
+        ctx.fillText('MIRROR SOLID (101)', 216, 17);
+
+        // Phantasm illusion wall (subtle shimmer)
+        const shimmer = 0.45 + 0.25 * Math.sin(state.time * 4.5);
+        ctx.fillStyle = `rgba(56, 189, 248, ${shimmer * 0.35})`;
+        ctx.fillRect(265, 108, 12, 92);
+        ctx.strokeStyle = `rgba(56, 189, 248, ${shimmer})`;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(265, 108, 12, 92);
+        ctx.setLineDash([]);
+
+        // Chrono-Gas Zone (if active)
+        if (state.chronoActive) {
+          const gr = ctx.createRadialGradient(230, 145, 8, 230, 145, 76);
+          gr.addColorStop(0, 'rgba(34, 197, 94, 0.36)');
+          gr.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
+          ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.arc(230, 145, 76, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = p.success;
+          ctx.fillText('CHRONO-LEECH S=0.50', 178, 212);
+        }
+
+        // Narrow-beam USpotLightComponent Flashlight Cone (pixel-snapped aesthetic)
+        const coneLen = 285;
+        const spread = 0.28;
+        const grad = ctx.createRadialGradient(player.x, player.y, 10, player.x, player.y, coneLen);
+        grad.addColorStop(0, 'rgba(255, 240, 195, 0.50)');
+        grad.addColorStop(0.6, 'rgba(255, 220, 140, 0.20)');
+        grad.addColorStop(1, 'rgba(255, 220, 140, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.arc(player.x, player.y, coneLen, state.aimAngle - spread, state.aimAngle + spread);
+        ctx.closePath();
+        ctx.fill();
+
+        // Dark Vision sphere subtle aura from player perk
+        const dvRadius = 35 + state.vpPerks[0].dv * 26;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+        ctx.beginPath(); ctx.arc(player.x, player.y, dvRadius, 0, Math.PI * 2); ctx.stroke();
+
+        // Acoustic Hearing Ripples
+        state.ripples.forEach(rp => {
+          ctx.strokeStyle = `rgba(56, 189, 248, ${rp.alpha})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(player.x, player.y, rp.r, 0, Math.PI * 2); ctx.stroke();
+        });
+        ctx.lineWidth = 1;
+
+        // Helper: check if entity is inside flashlight cone
+        const isLit = (ex, ey) => {
+          const dx = ex - player.x, dy = ey - player.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > coneLen) return false;
+          const diff = Math.abs(Math.atan2(Math.sin(Math.atan2(dy, dx) - state.aimAngle), Math.cos(Math.atan2(dy, dx) - state.aimAngle)));
+          return diff <= spread + 0.08;
+        };
+
+        // FastThrower orbit position
+        const spd = state.chronoActive ? 2.4 : 1.1;
+        const tx = thrower.x + Math.cos(state.time * spd) * 38;
+        const ty = thrower.y + Math.sin(state.time * spd * 1.4) * 24;
+
+        // Draw entities with fog occlusion
+        const drawEntity = (x, y, col, label, litAlpha) => {
+          const a = isLit(x, y) ? 1.0 : litAlpha;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = col;
+          ctx.fillRect(Math.round(x - 7), Math.round(y - 7), 14, 14); // semi-pixelated cutout look
+          ctx.strokeStyle = '#ffffff';
+          ctx.strokeRect(Math.round(x - 7), Math.round(y - 7), 14, 14);
+          ctx.font = '11px monospace';
+          ctx.fillText(label, x + 11, y + 4);
+          ctx.globalAlpha = 1.0;
+        };
+
+        // Exploder fuse pulse
+        const fusePulse = 0.5 + 0.5 * Math.sin(state.time * 8);
+        drawEntity(exploder.x, exploder.y, fusePulse > 0.65 ? p.error : p.warning, 'EXPLODER', 0.22);
+        drawEntity(tx, ty, p.success, state.chronoActive ? 'THROWER (+57% SPD)' : 'FAST THROWER', 0.25);
+
+        // Mirror Decoy Node (behind phantasm wall)
+        drawEntity(305, 140, p.primary, 'DECOY (106)', 0.18);
+
+        // Dungeoneer Player Sprite Proxy (8-compass)
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(player.x - 8, player.y - 8, 16, 16);
+        ctx.strokeStyle = p.warning;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(player.x - 8, player.y - 8, 16, 16);
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '11px monospace';
+        ctx.fillText(`HERO [${octantNames[state.aimOctant]}]`, player.x - 24, player.y - 14);
+      }
+
+      window.addEventListener('themechange', drawStage);
+
+      function tick() {
+        state.time += 0.016;
+        if (Math.random() < 0.012 && state.ripples.length < 3) {
+          state.ripples.push({ r: 10, alpha: 0.85 });
+        }
+        state.ripples = state.ripples.filter(rp => {
+          rp.r += 2.6;
+          rp.alpha -= 0.014;
+          return rp.alpha > 0.02;
+        });
+        if (state.activeTab === 'play') drawStage();
+        requestAnimationFrame(tick);
+      }
+      drawStage();
+      requestAnimationFrame(tick);
+
+      // --- Tab 2: Co-Op Slots & Split-Screen Preview ---
+      function renderCoop() {
+        const list = document.getElementById('coop-slots');
+        list.innerHTML = '';
+        state.coopSlots.forEach((slot, idx) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between gap-2 px-2.5 py-1.5 rounded bg-[var(--card)] border border-[var(--card-border)] text-xs';
+          row.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full ${slot.active ? 'bg-[var(--success)]' : 'bg-[var(--muted-foreground)]'}"></span>
+              <span class="font-medium">${slot.label}</span>
+              <span class="font-mono text-[var(--muted-foreground)]">${slot.kind}</span>
+            </div>
+            <div class="flex items-center gap-1.5 font-mono">
+              <button data-mute="${idx}" class="px-2 py-0.5 rounded border border-[var(--card-border)] cursor-pointer ${slot.muted ? 'text-[var(--error)]' : 'text-[var(--foreground)]'}">${slot.muted ? 'Muted' : 'Mic On'}</button>
+              <button data-tog="${idx}" class="px-2 py-0.5 rounded border border-[var(--card-border)] cursor-pointer">${slot.active ? 'Leave' : 'Join'}</button>
+            </div>`;
+          list.appendChild(row);
+        });
+        list.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => {
+          const s = state.coopSlots[b.dataset.mute]; s.muted = !s.muted; renderCoop();
+        });
+        list.querySelectorAll('[data-tog]').forEach(b => b.onclick = () => {
+          const s = state.coopSlots[b.dataset.tog]; s.active = !s.active; renderCoop();
+        });
+
+        const grid = document.getElementById('split-grid-preview');
+        const label = document.getElementById('split-layout-label');
+        const layouts = { 1: ['1P Fullscreen', 'grid-cols-1 grid-rows-1'], 2: ['2P Horizontal', 'grid-cols-1 grid-rows-2'], 3: ['3P Favor-Top', 'grid-cols-2 grid-rows-2'], 4: ['4P 2x2 Grid', 'grid-cols-2 grid-rows-2'] };
+        const [txt, cls] = layouts[state.localCount];
+        label.textContent = txt;
+        grid.className = `grid gap-1 p-1 rounded border border-[var(--card-border)] h-[150px] bg-[var(--background)] ${cls}`;
+        grid.innerHTML = '';
+        for (let i = 0; i < state.localCount; i++) {
+          const pane = document.createElement('div');
+          const span = (state.localCount === 3 && i === 0) ? 'col-span-2' : '';
+          pane.className = `${span} rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-center font-mono text-xs`;
+          pane.textContent = `ULocalPlayer #${i} · MID_${i}`;
+          grid.appendChild(pane);
+        }
+      }
+
+      document.querySelectorAll('.local-cnt-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          state.localCount = Number(b.dataset.local);
+          document.querySelectorAll('.local-cnt-btn').forEach(x => {
+            const act = Number(x.dataset.local) === state.localCount;
+            x.className = act
+              ? 'local-cnt-btn flex-1 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer'
+              : 'local-cnt-btn flex-1 py-1 rounded border border-[var(--card-border)] cursor-pointer';
+          });
+          renderCoop();
+        });
+      });
+
+      document.getElementById('btn-send-chat').addEventListener('click', () => {
+        const inp = document.getElementById('chat-input');
+        if (!inp.value.trim()) return;
+        document.getElementById('chat-log').textContent = `[Party] P1: ${inp.value.trim()}`;
+        inp.value = '';
+      });
+      renderCoop();
+
+      // --- Tab 3: Per-Viewport Sensory Perks ---
+      const rngDv = document.getElementById('rng-dv');
+      const rngAh = document.getElementById('rng-ah');
+      const rngSt = document.getElementById('rng-st');
+
+      function renderSensory() {
+        const p = state.vpPerks[state.selectedVp];
+        rngDv.value = p.dv; rngAh.value = p.ah; rngSt.value = p.st;
+        document.getElementById('val-dv').textContent = `Tier ${p.dv} · ${p.dv === 0 ? 0 : 250 + p.dv * 200} UU`;
+        document.getElementById('val-ah').textContent = `Tier ${p.ah} · ${(1 + p.ah * 0.4).toFixed(1)}x`;
+        document.getElementById('val-st').textContent = `Tier ${p.st} · ${['Off', 'Warm Spores', 'Scent Vectors', 'True Thermal'][p.st]}`;
+
+        const comp = document.getElementById('vp-compare');
+        comp.innerHTML = state.vpPerks.map((vp, idx) => `
+          <div class="p-2 rounded border ${idx === state.selectedVp ? 'border-[var(--primary)]' : 'border-[var(--card-border)]'} bg-[var(--background)]">
+            <div class="flex justify-between font-semibold mb-1">
+              <span>Viewport P${idx + 1} (MID_SensoryOverlay_${idx})</span>
+              <span class="text-[var(--success)]">ISOLATED</span>
+            </div>
+            <div class="text-[var(--muted-foreground)]">DarkVision=${vp.dv === 0 ? 0 : 250 + vp.dv * 200}UU · FogExt=${(1 - vp.dv * 0.2).toFixed(2)} · Stencil=${vp.ah > 0 ? 'ON' : 'OFF'}</div>
+          </div>
+        `).join('');
+      }
+
+      document.querySelectorAll('.vp-select-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          state.selectedVp = Number(b.dataset.vp);
+          document.querySelectorAll('.vp-select-btn').forEach(x => {
+            const act = Number(x.dataset.vp) === state.selectedVp;
+            x.className = act
+              ? 'vp-select-btn px-2 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer'
+              : 'vp-select-btn px-2 py-0.5 rounded border border-[var(--card-border)] text-[var(--muted-foreground)] cursor-pointer';
+          });
+          renderSensory();
+        });
+      });
+
+      [rngDv, rngAh, rngSt].forEach(r => r.addEventListener('input', () => {
+        state.vpPerks[state.selectedVp] = { dv: Number(rngDv.value), ah: Number(rngAh.value), st: Number(rngSt.value) };
+        renderSensory();
+      }));
+      renderSensory();
+
+      // --- Tab 4: Seed DAG, 2PC Trade, Gibberish ---
+      function renderDag() {
+        const hex = '0x' + state.seed.toString(16).toUpperCase().padStart(8, '0');
+        document.getElementById('dag-seed').textContent = hex;
+        const s = state.seed;
+        const nodes = [
+          ['0: Entry', 'SPAWN'],
+          ['1: Combat', `${2 + (s % 3)} Waves`],
+          ['2: Mirror Maze', `${3 + ((s >> 3) % 4)} Phantasms`],
+          ['3: Rest / Vendor', (s & 1) ? 'Lorekeeper' : 'Merchant'],
+          ['4: Deep Fog', `${1 + ((s >> 5) % 3)} Throwers`],
+          ['5: Loot Vault', 'RELIC TIER']
+        ];
+        document.getElementById('dag-nodes').innerHTML = nodes.map(([n, d]) => `
+          <div class="p-1.5 rounded border border-[var(--card-border)] bg-[var(--background)]">
+            <div class="font-semibold truncate">${n}</div>
+            <div class="text-[var(--muted-foreground)] truncate">${d}</div>
+          </div>
+        `).join('');
+      }
+      document.getElementById('btn-reroll-seed').addEventListener('click', () => {
+        state.seed = (Math.floor(Math.random() * 0x7FFFFFFF) + 0x10000000) >>> 0;
+        renderDag();
+      });
+      renderDag();
+
+      const setTrade = (phase, log, color) => {
+        state.tradePhase = phase;
+        const badge = document.getElementById('trade-phase');
+        badge.textContent = phase;
+        badge.style.color = color || '';
+        document.getElementById('trade-log').textContent = log;
+      };
+      document.getElementById('btn-trade-lock').onclick = () => setTrade('OfferLocked', 'Locked P1 180g & Vendor GUID 9F3A...', 'var(--warning)');
+      document.getElementById('btn-trade-commit').onclick = () => {
+        if (state.tradePhase !== 'OfferLocked') return setTrade('RolledBack', 'Error: Must Lock Offer (Phase 1) before Commit!', 'var(--error)');
+        setTrade('Committed', 'Atomic swap complete -> Unlocked -> Client Ack sent.', 'var(--success)');
+      };
+      document.getElementById('btn-trade-drop').onclick = () => setTrade('RolledBack', 'Packet drop / Inv full -> Clean rollback, 0 dupes.', 'var(--error)');
+
+      function updatePhonemes() {
+        const txt = document.getElementById('gibberish-phrase').value || '...';
+        const tokens = [];
+        let mod = '0st';
+        for (let i = 0; i < Math.min(txt.length, 5); i++) {
+          const c = txt.charCodeAt(i);
+          tokens.push(`syl_${String(c % 24).padStart(2, '0')}`);
+        }
+        if (txt.endsWith('?')) mod = '? +3st';
+        else if (txt.endsWith('.')) mod = '. -2st';
+        document.getElementById('phoneme-out').textContent = `Grains: ${tokens.join(' · ')} ... (${mod})`;
+      }
+      document.getElementById('gibberish-phrase').addEventListener('input', updatePhonemes);
+      document.getElementById('btn-speak').addEventListener('click', updatePhonemes);
+      updatePhonemes();
+    })();
+  </script>
+</body>
+</html>
