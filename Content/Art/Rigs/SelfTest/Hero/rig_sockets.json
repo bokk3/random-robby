@@ -1,0 +1,63 @@
+{
+  "AssetName": "Rig_Hero",
+  "TexelDensity": 64.0,
+  "UnrealUnitsPerMeter": 100.0,
+  "UnrealUnitsPerPixel": 1.5625,
+  "FrameDimensions": {
+    "Width": 64,
+    "Height": 64,
+    "WorldWidthUU": 100.0,
+    "WorldHeightUU": 100.0
+  },
+  "Grid": {
+    "Columns": 4,
+    "Rows": 4,
+    "Directions": 4
+  },
+  "Sockets": {
+    "Torso": {
+      "Pivot": [
+        0.5,
+        0.5
+      ],
+      "DepthOffsetY": 0.0,
+      "RelativeBoundsUU": [
+        50.0,
+        60.0
+      ]
+    },
+    "Head": {
+      "Pivot": [
+        0.5,
+        0.8
+      ],
+      "DepthOffsetY": 0.5,
+      "RelativeBoundsUU": [
+        35.0,
+        35.0
+      ]
+    },
+    "Limbs": {
+      "Pivot": [
+        0.5,
+        0.22
+      ],
+      "DepthOffsetY": -0.5,
+      "RelativeBoundsUU": [
+        45.0,
+        45.0
+      ]
+    },
+    "WeaponFlashlight": {
+      "Pivot": [
+        0.72,
+        0.45
+      ],
+      "DepthOffsetY": 1.0,
+      "RelativeBoundsUU": [
+        25.0,
+        25.0
+      ]
+    }
+  }
+}

@@ -1,0 +1,174 @@
+#pragma once
+
+/**
+ * PixelLit25D.ush
+ * 
+ * Core HLSL shader library for 2.5D Semi-Pixelated shading in Unreal Engine 5.8.
+ * Supports:
+ * - Nearest-neighbor texel-center UV snapping for crisp retro aesthetics
+ * - Bayer 4x4 matrix ordered dithering for alpha cutouts and distance fading
+ * - 64 px / 100 UU texel density enforcement
+ * - Tangent-space normal map unpacking with dynamic 3D lighting response
+ * - Packed ORM (Occlusion, Roughness, Metallic) evaluation
+ * - Dark Vision rim lighting and desaturated ambient glow
+ * - Acute Hearing acoustic ripple wave rings
+ */
+
+#ifndef PIXEL_LIT_25D_USH
+#define PIXEL_LIT_25D_USH
+
+static const float DUNGEONEER_TEXELS_PER_METER = 64.0f;
+static const float DUNGEONEER_UU_PER_METER = 100.0f;
+static const float DUNGEONEER_WORLD_UNITS_PER_TEXEL = 100.0f / 64.0f; // 1.5625 UU / texel
+
+/**
+ * Snaps UV coordinates to the center of the nearest texel to prevent
+ * sub-pixel swimming and edge sampling artifacts during camera motion.
+ */
+float2 SnapUVToTexelCenter(float2 InUV, float2 TextureDimensions)
+{
+    return (floor(InUV * TextureDimensions) + 0.5f) / TextureDimensions;
+}
+
+/**
+ * Computes the 4x4 Bayer matrix ordered dither threshold for screen-space dithering.
+ * Normalized output in [0.0, 1.0).
+ */
+float ComputeBayer4x4DitherThreshold(float2 ScreenPos)
+{
+    int2 Pos = int2(fmod(ScreenPos.xy, 4.0f));
+    if (Pos.x < 0) Pos.x += 4;
+    if (Pos.y < 0) Pos.y += 4;
+
+    static const float BayerMatrix4x4[16] =
+    {
+         0.0f / 16.0f,  8.0f / 16.0f,  2.0f / 16.0f, 10.0f / 16.0f,
+        12.0f / 16.0f,  4.0f / 16.0f, 14.0f / 16.0f,  6.0f / 16.0f,
+         3.0f / 16.0f, 11.0f / 16.0f,  1.0f / 16.0f,  9.0f / 16.0f,
+        15.0f / 16.0f,  7.0f / 16.0f, 13.0f / 16.0f,  5.0f / 16.0f
+    };
+
+    return BayerMatrix4x4[Pos.y * 4 + Pos.x];
+}
+
+/**
+ * Full output structure for 2.5D pixel-lit evaluation.
+ */
+struct FPixelLit25DOutput
+{
+    float3 BaseColor;
+    float3 TangentNormal;
+    float3 WorldNormal;
+    float  Roughness;
+    float  Metallic;
+    float  AmbientOcclusion;
+    float3 EmissiveColor;
+    float  OpacityMask;
+};
+
+/**
+ * Evaluates 2.5D pixel lighting, sensory overlays, and texel snapping.
+ * 
+ * @param RawDiffuse         Sampled Diffuse texture (RGB = BaseColor, A = Opacity)
+ * @param RawNormalSample    Sampled Normal texture (RGB tangent normal in [0,1])
+ * @param RawORMSample       Sampled ORM texture (R = AO, G = Roughness, B = Metallic)
+ * @param InUV               Raw mesh UV coordinates
+ * @param TextureDimensions  Texture atlas resolution (e.g. float2(256.0f, 256.0f))
+ * @param WorldPos           World-space pixel position
+ * @param CameraPos          World-space camera position
+ * @param WorldNormal        Vertex world-space normal
+ * @param ScreenPos          Screen-space pixel position for dithering
+ * @param DarkVisionRadius   Dark vision perk radius from MPC / viewport MID
+ * @param PlayerWorldOrigin  Player world location for dark vision rim falloff
+ * @param HearingPulseOrigin Acoustic pulse origin (from zombie footstep / shriek)
+ * @param HearingPulseRadius Current expanding radius of hearing wave
+ * @param AcuteHearingIntensity Intensity multiplier of acoustic ripples
+ * @param RippleWidth        Spatial thickness of the acoustic ripple ring (in UU)
+ * @param EmissivePulse      Custom primitive data emissive flash (e.g. on hit / fuse tick)
+ * @param Out                Resulting PBR material channels
+ */
+void EvaluatePixelLit25D(
+    float4 RawDiffuse,
+    float3 RawNormalSample,
+    float3 RawORMSample,
+    float2 InUV,
+    float2 TextureDimensions,
+    float3 WorldPos,
+    float3 CameraPos,
+    float3 WorldNormal,
+    float2 ScreenPos,
+    float  DarkVisionRadius,
+    float3 PlayerWorldOrigin,
+    float3 HearingPulseOrigin,
+    float  HearingPulseRadius,
+    float  AcuteHearingIntensity,
+    float  RippleWidth,
+    float  EmissivePulse,
+    out FPixelLit25DOutput Out)
+{
+    // 1. Unpack Diffuse Base Color & Alpha
+    Out.BaseColor = RawDiffuse.rgb;
+    
+    // 2. Unpack Tangent-Space Normal: convert from [0, 1] to [-1, 1]
+    float3 TangentNormal = RawNormalSample * 2.0f - 1.0f;
+    TangentNormal.z = sqrt(saturate(1.0f - dot(TangentNormal.xy, TangentNormal.xy)));
+    Out.TangentNormal = normalize(TangentNormal);
+    Out.WorldNormal = WorldNormal;
+
+    // 3. Unpack ORM: R = Ambient Occlusion, G = Roughness, B = Metallic
+    Out.AmbientOcclusion = saturate(RawORMSample.r);
+    Out.Roughness = saturate(RawORMSample.g);
+    Out.Metallic = saturate(RawORMSample.b);
+
+    // 4. Alpha Dither Cutout using 4x4 Bayer Matrix
+    float DitherThreshold = ComputeBayer4x4DitherThreshold(ScreenPos);
+    Out.OpacityMask = (RawDiffuse.a >= DitherThreshold) ? 1.0f : 0.0f;
+
+    // 5. Evaluate Sensory Overlays
+    float3 SensoryEmissive = float3(0.0f, 0.0f, 0.0f);
+
+    // 5a. Dark Vision Rim Lighting:
+    // Expands a subtle desaturated ethereal rim around geometry near the player in pitch blackness
+    if (DarkVisionRadius > 1.0f)
+    {
+        float DistToPlayer = length(WorldPos - PlayerWorldOrigin);
+        if (DistToPlayer < DarkVisionRadius)
+        {
+            float RadialAtten = saturate(1.0f - (DistToPlayer / DarkVisionRadius));
+            float3 ViewDir = normalize(CameraPos - WorldPos);
+            float NdotV = saturate(dot(WorldNormal, ViewDir));
+            float RimFactor = pow(1.0f - NdotV, 2.5f) * RadialAtten;
+            
+            // Cold violet-blue ethereal rim
+            float3 DarkVisionColor = float3(0.18f, 0.38f, 0.72f);
+            SensoryEmissive += DarkVisionColor * RimFactor * 1.8f;
+        }
+    }
+
+    // 5b. Acute Hearing Acoustic Ripple Wave Ring:
+    // High-contrast neon pulse ring expanding from noise origins
+    if (AcuteHearingIntensity > 0.01f && HearingPulseRadius > 0.0f)
+    {
+        float DistFromPulse = length(WorldPos.xy - HearingPulseOrigin.xy);
+        float DistDelta = abs(DistFromPulse - HearingPulseRadius);
+        float EffectiveRippleWidth = max(RippleWidth, 10.0f);
+
+        if (DistDelta < EffectiveRippleWidth)
+        {
+            float RippleFactor = smoothstep(EffectiveRippleWidth, 0.0f, DistDelta);
+            // High-contrast cyan acoustic ping
+            float3 AcousticPulseColor = float3(0.05f, 0.85f, 0.98f);
+            SensoryEmissive += AcousticPulseColor * RippleFactor * AcuteHearingIntensity * 3.5f;
+        }
+    }
+
+    // 5c. Custom Primitive Data Emissive Flash (e.g. zombie fuse ticks, damage flash)
+    if (EmissivePulse > 0.001f)
+    {
+        SensoryEmissive += Out.BaseColor * EmissivePulse * 2.0f;
+    }
+
+    Out.EmissiveColor = SensoryEmissive;
+}
+
+#endif // PIXEL_LIT_25D_USH
