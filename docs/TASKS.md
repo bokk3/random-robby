@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.8.1` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.0` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -18,6 +18,8 @@
 | `v0.7.0` | Social Party, 2PC Trading & UE 5.8 Verification | Done | `UDungeoneerSocialSubsystem`, `UTradeManagerComponent`, `UnrealEditor-DarkDungeoneer.dll` built, 3 headless UE 5.8.2 specs passed |
 | `v0.7.1` | Menu Mockup, SemVer Changelog & Devlog | Done | `docs/MENU_MOCKUP.md`, `docs/TASKS.md`, `docs/DEVLOG.md`, `CHANGELOG.md`, `VERSION` |
 | `v0.8.0` | Main Menu UI, 2.5D Diorama, Prediction & Seed Replication | Done | `ADungeoneerGameState`, `FSavedMove_Dungeoneer`, `UMirrorCaptureBudgetSubsystem`, `AZombieBase::IsNetRelevantFor`, `TASK-801`–`TASK-804`, 5 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.8.1` | Standalone Executable & Programmatic UMG Bootstrap | Done | `DarkDungeoneer.exe`, `RebuildWidget()` UMG fallback trees, `Launch-DarkDungeoneer.bat` |
+| `v0.9.0` | Split-Screen HUD, 2PC Trade Modal, `.uasset` Bootstrap & 2.5D Hybrid Anim/Slicer | Done | `UDungeoneerPlayerHUDWidget`, `UDungeoneerTradeModalWidget`, `UDungeoneerAssetBootstrapSubsystem`, `slice_normal_rig.py` (`_E.png` + `AtlasMetadata.json`), `U25DAnimOrchestratorComponent`, 7 UE 5.8.2 specs (`EXIT CODE: 0`) |
 
 ---
 
@@ -49,20 +51,25 @@
 
 ---
 
-## Upcoming Subdivided Tasks
+## Completed Subdivided Tasks (`v0.9.0`)
 
-### Milestone `v0.9.0` — In-Game Split-Screen HUD, 2PC Trade UI & Editor Assets
+### Milestone `v0.9.0` — In-Game Split-Screen HUD, 2PC Trade UI, `.uasset` Bootstrap & 2.5D Hybrid Animation (`TASK-901`–`TASK-903`)
 
-- [ ] **`TASK-901` — Per-Viewport Player HUD (`UDungeoneerPlayerHUDWidget`)**
-  - **Scope**: Bind per-`ULocalPlayer` health, flashlight battery, 8-compass octant indicator, and active Chrono-Leech slow gauge (`S` in `[0.0, MaxSlowRatio]`).
+- [x] **`TASK-901` — Per-Viewport Player HUD (`UDungeoneerPlayerHUDWidget`)**
+  - **Files**: `Source/DarkDungeoneer/Public/UI/DungeoneerPlayerHUDWidget.h`, `Private/UI/DungeoneerPlayerHUDWidget.cpp`, `Private/Core/DungeoneerCharacter.cpp`
+  - **Scope**: Bind per-`ULocalPlayer` health, flashlight battery, live local 8-compass move/aim octant indicators, sensory tiers, and active Chrono-Leech slow gauge (`S` in `[0.0, MaxSlowRatio]`).
 
-- [ ] **`TASK-902` — Resting Ground Vendor & 2PC Trade Modal (`UDungeoneerTradeModalWidget`)**
-  - **Scope**: Visual UI driving `UTradeManagerComponent::Server_LockPlayerTradeOffer`, `Server_ConfirmPlayerTradeCommit`, and `Server_ExecuteVendorPurchase`, paired with `UGibberishSpeechComponent` chatter subtitle feed (`TradeTwoPhaseCommitTest` already verified in `DungeoneerVerificationSpecs.cpp`).
+- [x] **`TASK-902` — Resting Ground Vendor & 2PC Trade Modal (`UDungeoneerTradeModalWidget`)**
+  - **Files**: `Source/DarkDungeoneer/Public/UI/DungeoneerTradeModalWidget.h`, `Private/UI/DungeoneerTradeModalWidget.cpp`, `Public/Audio/GibberishSpeechComponent.h`
+  - **Scope**: Programmatic modal driving `UTradeManagerComponent::Server_LockPlayerTradeOffer`, `Server_ConfirmPlayerTradeCommit`, `Server_CancelTrade`, and `Server_ExecuteVendorPurchase`, paired with `UGibberishSpeechComponent` chatter subtitle feed and `OnTradeAckReceived` ack updates.
 
-- [ ] **`TASK-903` — UE 5.8 Content Asset Creation & Material/MetaSound Wiring**
-  - **Scope**: Import `Content/Art/Rigs/*` textures (`_D`, `_N`, `_ORM`) and `Content/Audio/Voices/*` `.wav` banks into `.uasset` packages; construct `M_25D_PixelLit`, `MPC_SensoryState`, `MID_SensoryOverlay`, and `MS_GibberishSynth` graph nodes in Unreal Editor, plus data-only UMG Blueprint shells for `TASK-801`–`TASK-902`.
+- [x] **`TASK-903` — Runtime Content Bootstrap, `.uasset` Serialization & 2.5D Hybrid Slicer/Animator**
+  - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Public/Rendering/25DAnimOrchestratorComponent.h`, `Private/Rendering/25DAnimOrchestratorComponent.cpp`, `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`
+  - **Scope**: Upgrade 4x4 magenta (`#FF00FF`) slicer to emit zero-halo `_D.png`, distance-bevel + 3x3 Sobel `_N.png`, high-luminance emissive `_E.png`, and 16-cell `AtlasMetadata.json`; drive distance-locked walk cycles, 120Hz springs, `OnStepContact` audio/sensory events, and Custom Primitive Data `[0..4]` in `U25DAnimOrchestratorComponent`; import all 18 rig PNGs + 50 WAV stems and serialize idempotent `MPC_SensoryState.uasset`, `DA_25DMaterialConfig.uasset`, and `DA_MovementConfig.uasset`.
 
 ---
+
+## Upcoming Subdivided Tasks
 
 ### Milestone `v1.0.0` — Playable Cooperative Vertical Slice
 

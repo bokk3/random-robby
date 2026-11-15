@@ -64,3 +64,20 @@ With those fixes, `DarkDungeoneerEditor (Win64 Development)` compiled cleanly in
 ### Verification (`v0.8.0`)
 - Added `DarkDungeoneer.Social.TradeTwoPhaseCommitRollbackAndCommit` verifying insufficient-gold rollback (unlocking both parties' items with zero duplication) alongside atomic swap commit, plus `DarkDungeoneer.UI.MenuNavigationAndFloorSeedDeterminism` covering `FSavedMove_Dungeoneer` byte quantization, menu navigation wrap-around, LCG seed determinism, portal capture budgeting, and diorama spotlight interpolation.
 - Rebuilt `DarkDungeoneerEditor (Win64 Development)` on UE `5.8.2` (`BuildSettingsVersion.V7`), passed `scripts/verify_architecture_invariants.py` (`73` files verified), and passed all 5 headless automation specs in `UnrealEditor-Cmd.exe` (`EXIT CODE: 0`).
+
+---
+
+## Devlog #05 (`v0.9.0`) — Per-Viewport HUD, 2PC Trade Modal, `.uasset` Bootstrap & 2.5D Hybrid Animation Pipeline
+
+### In-Game HUD, Vendor 2PC Modal & Idempotent Asset Bootstrap (`TASK-901` – `TASK-903`)
+- Added `UDungeoneerPlayerHUDWidget` (`Source/DarkDungeoneer/{Public,Private}/UI/DungeoneerPlayerHUDWidget.*`) attached once per-`ULocalPlayer` viewport (`AddToPlayerScreen(5)`) in `ADungeoneerCharacter::BeginPlay`. Reading local movement/aim octants directly on locally controlled pawns keeps octant feedback crisp at zero network latency while preserving replicated octant readouts on simulated proxies.
+- Added `UDungeoneerTradeModalWidget` (`DungeoneerTradeModalWidget.*`) binding `AVendorActor`, `UGibberishSpeechComponent`, `UTradeManagerComponent`, and `UDungeoneerInventoryComponent`. Selecting a seeded catalog relic triggers procedural merchant gibberish (`SpeakProceduralGibberish`) and purchasing commits through `Server_ExecuteVendorPurchase` + `OnTradeAckReceived`.
+- Added `UDungeoneerAssetBootstrapSubsystem` (`UGameInstanceSubsystem`) to import all `18` 2.5D rig PNGs (`TF_Nearest`, `TEXTUREGROUP_Pixels2D`), load `50` WAV voice stems/phoneme grains, register all sensory scalar/vector parameters on `MPC_SensoryState`, and serialize `MPC_SensoryState.uasset`, `DA_25DMaterialConfig.uasset`, and `DA_MovementConfig.uasset` idempotently (loading existing packages cleanly before save fallback).
+
+### 2.5D Hybrid Sprite Sheet Slicer & Runtime Orchestrator (`slice_normal_rig.py` & `U25DAnimOrchestratorComponent`)
+- Upgraded `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py` with vectorized `#FF00FF` hard-edge keying + zero-halo neighbor cleanup (`_D.png`), pure-NumPy Chamfer Euclidean distance-transform dome bevel + 3x3 Sobel luminance gradient normal maps (`_N.png`), high-luminance emissive extraction (`_E.png` for `#FFCC00` lantern gold, `#FF5500` magma belly, and `#00FFFF` cyan flasks), and 16-cell `AtlasMetadata.json` UV sub-rectangles + bottom-center foot pivots. Regenerated all 6 rig sets and synced SHA-256 hashes in `Content/AssetManifest.json`.
+- Implemented `U25DAnimOrchestratorComponent` (`Source/DarkDungeoneer/{Public,Private}/Rendering/25DAnimOrchestratorComponent.*`) driving distance-locked 4-frame walk cycles (`AccumulatedDistance / StrideLength`), deterministic `OnStepContact` floor `UPhysicalMaterial` (`PhysicsCore`) + `UDungeoneerSensoryWorldSubsystem::BroadcastNoiseEvent` triggers on frames `0` and `2`, 120Hz procedural sub-frame springs (stride hop, velocity lean, belly-swell), hidden volumetric shadow capsule setup, and zero-MID Custom Primitive Data slots `[0..4]`.
+
+### Verification (`v0.9.0`)
+- Added `DarkDungeoneer.UI.HUDAndTradeModalAndAssetBootstrap` and `DarkDungeoneer.Rendering.25DAnimOrchestratorAndAtlasMetadata` to `DungeoneerVerificationSpecs.cpp`.
+- Passed `scripts/verify_architecture_invariants.py` (`81` files verified), rebuilt both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings, and passed all `7` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).

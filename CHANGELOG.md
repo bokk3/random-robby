@@ -7,8 +7,31 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- **v0.9.0 (Planned)**: In-game per-viewport Split-Screen HUD, 2PC Resting Ground trade modal, and UE material/MetaSound editor wiring.
 - **v1.0.0 (Planned)**: Full multi-floor vertical slice (`Entry -> Combat -> Mirror-Palace -> Resting Ground -> Deep Fog -> Loot Vault`).
+
+---
+
+## [0.9.0] - 2026-11-15
+
+### Added
+- **2.5D Hybrid Sprite Sheet Slicer & Emissive Extractor (`slice_normal_rig.py`)**:
+  - Upgraded `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py` to strip `#FF00FF` magenta backgrounds cleanly to `(0, 0, 0, 0)` RGBA with vectorized zero-halo neighbor cleanup (`_D.png`).
+  - Replaced plain Sobel luminance normals with a pure-NumPy Chamfer Euclidean distance-transform dome bevel combined with a 3x3 Sobel luminance gradient (`_N.png` RGB).
+  - Added high-luminance saturated emissive extraction (`_E.png` RGB) isolating `#FFCC00` Player lantern glow, `#FF5500` Exploder magma belly, and `#00FFFF` Fast Thrower alchemical flasks.
+  - Emitted `AtlasMetadata.json` containing normalized `(U0, V0, U1, V1)` sub-rectangles and bottom-center foot pivots for all 16 cells, regenerated all 6 rig packages under `Content/Art/Rigs/`, and updated `Content/AssetManifest.json` SHA-256 checksums.
+- **Zero-Allocation 2.5D Runtime Animator (`U25DAnimOrchestratorComponent`)**:
+  - Added distance-driven walk phase (`AccumulatedDistance / StrideLength`) preventing foot-sliding across Slo-Mo Chrono Gas speed transitions.
+  - Fires deterministic `OnStepContact` events on transitions to contact frames `0` and `2` with floor `UPhysicalMaterial` (`PhysicsCore`) resolution and `UDungeoneerSensoryWorldSubsystem::BroadcastNoiseEvent` acoustic ripples.
+  - Added 120Hz sub-stepped procedural springs for vertical stride hop, directional velocity lean, and pre-explosion belly-swell scaling.
+  - Drives per-instance Custom Primitive Data (`CustomData[0]` UV cell index `0..15`, `CustomData[1]` Emissive Fuse Pulse, `CustomData[2..4]` Alchemical Flask Element RGB tint) directly on the cutout plane without creating per-actor MIDs, plus hidden volumetric shadow proxy capsule setup.
+- **Split-Screen Player HUD, 2PC Trade Modal & Idempotent `.uasset` Bootstrap (`TASK-901` – `TASK-903`)**:
+  - Added `UDungeoneerPlayerHUDWidget` attached once per-`ULocalPlayer` viewport (`ZOrder 5`) in `ADungeoneerCharacter::BeginPlay` displaying health, battery, live local compass move/aim octants, Chrono-Leech `S` gauge, and sensory perk tiers.
+  - Added `UDungeoneerTradeModalWidget` binding `AVendorActor`, `UGibberishSpeechComponent`, `UTradeManagerComponent`, and `UDungeoneerInventoryComponent` with `OnTradeAckReceived` status feedback and catalog-selection gibberish chatter.
+  - Added `UDungeoneerAssetBootstrapSubsystem` to import all 18 rig textures (`TF_Nearest`, `TEXTUREGROUP_Pixels2D`) and 50 WAV voice/phoneme stems, synthesize `MPC_SensoryState`, and serialize idempotent `.uasset` packages (`Content/Materials/MPC_SensoryState.uasset`, `Content/Materials/DA_25DMaterialConfig.uasset`, `Content/Core/DA_MovementConfig.uasset`).
+
+### Verified
+- Added `DarkDungeoneer.UI.HUDAndTradeModalAndAssetBootstrap` and `DarkDungeoneer.Rendering.25DAnimOrchestratorAndAtlasMetadata` to `DungeoneerVerificationSpecs.cpp`.
+- Passed `scripts/verify_architecture_invariants.py` (`81` files verified), compiled both `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development`, and passed all `7` headless UE `5.8.2` automation specs (`EXIT CODE: 0`).
 
 ---
 
