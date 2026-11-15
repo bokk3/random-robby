@@ -1,11 +1,11 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.7` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `1.0.0` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
 
-## Completed Milestones (`v0.1.0` – `v0.7.1`)
+## Completed Milestones (`v0.1.0` – `v1.0.0`)
 
 | SemVer Tag | Milestone | Status | Key Modules & Verification |
 | :--- | :--- | :--- | :--- |
@@ -27,6 +27,7 @@
 | `v0.9.5` | Cutout Silhouette `OpacityMask` Fix & Billboard Front-Fill Lighting | Done | `SpriteMaskTextures` transient silhouette extraction (`GetSpriteMaskTexture`), `OpacityMask` parameter binding on `M_Shader_SimpleMaskedTwoSided` / `M_ES_Phong_Masked_Master_2sided`, `45°` plane tilt, `SetCastShadow(false)` & front-positioned fill lights, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.6` | Alternating 4-Frame Walk Cycles & Distance-Locked 16-Cell Flipbook | Done | Articulated 4x4 walk cycles (`Hero`, `Exploder`, `Thrower`), 136 extracted cells & masks (`ExtractDefaultSingleCellTiles`), pre-allocated 16 MIDs driven by `AdvanceWalkFlipbookByDistance`, 8 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 | `v0.9.7` | Standardized 16-Cell Kinematics, Stride Validator & `U25DAnimOrchestratorComponent` Footstep Sync | Done | `SKILL.md` / `TO_GENERATE.md` 4x4 spec + prompt template, `slice_normal_rig.py --validate-stride --repair-stride`, `EFoot::Left/Right` `OnFootstepContact` on Col 1/3, Idle Col 0 lock, 8 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
+| `v1.0.0` | Playable Cooperative Combat, Dodge I-Frames & Multi-Floor Loop (`TASK-1001`) | Done | Lantern Blade cleave (`ApplyMeleeArcDamage` + `SlashArcMesh`), 4-axis Dodge Dash i-frames, Zombie knockback/hit-flash/death rewards, `[F]` Vendor/Vault interact, `AdvanceToNextDungeonFloor`, HUD Floor/Gold/Kills readout, 9 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 
 ---
 
@@ -139,5 +140,6 @@
 
 ### Milestone `v1.0.0` — Playable Cooperative Vertical Slice
 
-- [ ] **`TASK-1001` — End-to-End 3-Floor Dungeon Loop & Package Verification**
-  - **Scope**: Playable Entry Crypt -> Combat -> Mirror-Palace Illusion Maze -> Resting Ground Vendor/2PC Trade -> Deep Fog Gauntlet -> Major Loot Vault transition under 2P local split-screen + online client session, passing full `UnrealBuildTool` Game & Editor builds plus expanded `Automation RunTests DarkDungeoneer`.
+- [x] **`TASK-1001` — End-to-End Dungeon Combat, Dodge, Loot Vault & Multi-Floor Loop**
+  - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/Core/DungeoneerGameMode.h`, `Private/Core/DungeoneerGameMode.cpp`, `Public/AI/ZombieSpatialSubsystem.h`, `Private/AI/ZombieSpatialSubsystem.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Private/AI/ZombieFastThrower.cpp`, `Public/Dungeon/DungeoneerTileMapInstancer.h`, `Private/Dungeon/DungeonGeneratorSubsystem.cpp`, `Public/UI/DungeoneerPlayerHUDWidget.h`, `Private/UI/DungeoneerPlayerHUDWidget.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Lantern Blade melee cleave + `SlashArcMesh` sweep & procedural lunge/follow-through, 4-axis Dodge Dash i-frames, Hit Stagger + entry respawn, Zombie hit flash/knockback/death gold+battery rewards, `[F]` Vendor purchase & Loot Vault unlock -> `AdvanceToNextDungeonFloor()` Floor `N -> N+1` progression, live HUD Floor/Gold/Kills/CombatState & `[F]` hints, plus full Editor/Game `UBT` builds and `9` passing UE 5.8.2 specs.

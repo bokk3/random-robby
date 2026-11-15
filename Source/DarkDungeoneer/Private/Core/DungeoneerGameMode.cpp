@@ -8,6 +8,7 @@
 #include "UI/DungeoneerMainMenuWidget.h"
 #include "UI/DungeoneerCoopLobbyWidget.h"
 #include "UI/DungeoneerMenuFooterWidget.h"
+#include "UI/DungeoneerPlayerHUDWidget.h"
 #include "UI/MenuDioramaStageActor.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
@@ -86,6 +87,7 @@ void ADungeoneerGameMode::StartPlay()
 
 	if (HasAuthority())
 	{
+		CurrentFloorIndex = 1;
 		if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
 		{
 			DungeoneerState->AuthoritySetFloorSeed(1, InitialFloorSeed, 0);
@@ -118,6 +120,7 @@ void ADungeoneerGameMode::StartPlay()
 			EntryRoomCenter = Graph.Nodes[0].WorldCenter;
 		}
 	}
+	EntrySpawnLocation = EntryRoomCenter;
 
 	if (UGameInstance* GI = World->GetGameInstance())
 	{
@@ -224,6 +227,7 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 		if (Graph.Nodes.Num() > 0)
 		{
 			TargetRoomCenter = Graph.Nodes[0].WorldCenter;
+			EntrySpawnLocation = Graph.Nodes[0].WorldCenter;
 			for (const FDungeonNode& Node : Graph.Nodes)
 			{
 				if (Action == EDungeoneerMenuAction::MirrorTrial && Node.RoomType == EDungeonRoomType::MirrorPalaceMaze)
@@ -263,8 +267,100 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 						BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
 					}
 					PC->SetViewTargetWithBlend(Character, 0.35f);
+
+					if (!IsRunningCommandlet() && World->IsGameWorld())
+					{
+						UDungeoneerPlayerHUDWidget* PlayerHUD = nullptr;
+						for (UDungeoneerPlayerHUDWidget* ExistingHUD : ActivePlayerHUDWidgets)
+						{
+							if (ExistingHUD && ExistingHUD->GetOwningLocalPlayer() == LP)
+							{
+								PlayerHUD = ExistingHUD;
+								break;
+							}
+						}
+						if (!PlayerHUD)
+						{
+							PlayerHUD = CreateWidget<UDungeoneerPlayerHUDWidget>(PC, UDungeoneerPlayerHUDWidget::StaticClass());
+							if (PlayerHUD)
+							{
+								PlayerHUD->AddToPlayerScreen(5);
+								ActivePlayerHUDWidgets.Add(PlayerHUD);
+							}
+						}
+						if (PlayerHUD)
+						{
+							PlayerHUD->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+							PlayerHUD->RefreshHUDFromCharacter(Character);
+						}
+					}
 				}
 			}
 		}
 	}
+}
+
+int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasAuthority())
+	{
+		return CurrentFloorIndex;
+	}
+
+	++CurrentFloorIndex;
+	const int64 NextSeed = static_cast<int64>(InitialFloorSeed) + static_cast<int64>(CurrentFloorIndex) * 7919LL;
+
+	if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
+	{
+		DungeoneerState->AuthoritySetFloorSeed(CurrentFloorIndex, NextSeed, 0);
+	}
+	else if (UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+	{
+		DungeonSys->GenerateFloorGraph(CurrentFloorIndex, static_cast<int32>(NextSeed));
+	}
+
+	if (!ActiveTileMapInstancer)
+	{
+		ActiveTileMapInstancer = World->SpawnActor<ADungeoneerTileMapInstancer>(
+			ADungeoneerTileMapInstancer::StaticClass(),
+			FVector::ZeroVector,
+			FRotator::ZeroRotator);
+	}
+	if (ActiveTileMapInstancer)
+	{
+		ActiveTileMapInstancer->BuildFromActiveGenerator();
+	}
+
+	FVector NextEntryCenter = FVector::ZeroVector;
+	if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+	{
+		const FDungeonFloorGraph& Graph = DungeonSys->GetActiveFloorGraph();
+		if (Graph.Nodes.Num() > 0)
+		{
+			NextEntryCenter = Graph.Nodes[0].WorldCenter;
+		}
+	}
+	EntrySpawnLocation = NextEntryCenter;
+
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		for (ULocalPlayer* LP : GI->GetLocalPlayers())
+		{
+			if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
+			{
+				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
+				{
+					Character->SetActorLocation(NextEntryCenter + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+					Character->RestoreAtRestingGround(20.0f, 35.0f);
+					if (UMirrorLightBounceComponent* BounceComp = Character->GetMirrorBounceComponent())
+					{
+						BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
+					}
+				}
+			}
+		}
+	}
+
+	return CurrentFloorIndex;
 }

@@ -8,6 +8,7 @@ void UDungeonGeneratorSubsystem::Initialize(FSubsystemCollectionBase& Collection
 
 FDungeonFloorGraph UDungeonGeneratorSubsystem::GenerateFloorGraph(int32 FloorIndex, int32 ServerSeed)
 {
+	RestingGroundBounds.Reset();
 	FDungeonFloorGraph Graph;
 	Graph.FloorIndex = FloorIndex;
 	Graph.MasterSeed = ServerSeed ^ (FloorIndex * 7919);

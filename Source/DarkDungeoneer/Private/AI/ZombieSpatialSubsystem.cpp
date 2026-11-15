@@ -306,3 +306,44 @@ void UZombieSpatialSubsystem::ActivatePooledScorchDecal(const FVector& WorldLoca
 		Decal->SetActorHiddenInGame(false);
 	}
 }
+
+int32 UZombieSpatialSubsystem::ApplyMeleeArcDamage(
+	const FVector& Origin,
+	const FVector& ForwardDirXY,
+	const float RangeUU,
+	const float MinCosHalfAngle,
+	const float DamageAmount,
+	AActor* InstigatorActor,
+	const float KnockbackImpulseUU) noexcept
+{
+	const FVector SafeFwd = ForwardDirXY.GetSafeNormal2D();
+	const double RangeSq = static_cast<double>(RangeUU) * static_cast<double>(RangeUU);
+	int32 HitsLanded = 0;
+
+	for (int32 i = 0; i < NumTrackedZombies; ++i)
+	{
+		AZombieBase* Zombie = TrackedZombies[i].Get();
+		if (!Zombie || !Zombie->IsZombieAlive() || Zombie == InstigatorActor)
+		{
+			continue;
+		}
+
+		const FVector Delta = Zombie->GetActorLocation() - Origin;
+		const double DistSq2D = Delta.SizeSquared2D();
+		if (DistSq2D > RangeSq || FMath::Abs(Delta.Z) > 220.0)
+		{
+			continue;
+		}
+
+		const FVector DirXY = (DistSq2D > 1.0) ? Delta.GetSafeNormal2D() : SafeFwd;
+		const float Dot = static_cast<float>(FVector::DotProduct(SafeFwd, DirXY));
+		if (Dot >= MinCosHalfAngle || DistSq2D <= (72.0 * 72.0))
+		{
+			Zombie->TriggerHitFeedback(DirXY, KnockbackImpulseUU);
+			Zombie->ApplyZombieDamage(DamageAmount, InstigatorActor);
+			++HitsLanded;
+		}
+	}
+
+	return HitsLanded;
+}

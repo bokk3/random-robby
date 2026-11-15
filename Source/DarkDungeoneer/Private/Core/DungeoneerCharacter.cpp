@@ -1,14 +1,20 @@
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
+#include "Core/DungeoneerGameMode.h"
+#include "Core/DungeoneerGameState.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerMovementConfig.h"
 #include "Rendering/SensoryPerkComponent.h"
 #include "Rendering/25DDirectionalRigComponent.h"
+#include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Audio/DungeoneerTimedAudioComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
+#include "Dungeon/DungeonEncounterActors.h"
+#include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
+#include "UI/MenuDioramaStageActor.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "Components/PointLightComponent.h"
@@ -86,6 +92,14 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	HeroVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HeroVisualMesh->SetCastShadow(false);
 
+	SlashArcMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SlashArcMesh"));
+	SlashArcMesh->SetupAttachment(RootComponent);
+	SlashArcMesh->SetRelativeLocation(FVector(88.0f, 0.0f, 14.0f));
+	SlashArcMesh->SetRelativeScale3D(FVector(1.45, 0.90, 1.0));
+	SlashArcMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SlashArcMesh->SetCastShadow(false);
+	SlashArcMesh->SetVisibility(false);
+
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
@@ -95,6 +109,30 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 
 void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 {
+	if (SlashArcMesh)
+	{
+		if (!SlashArcMesh->GetStaticMesh())
+		{
+			if (UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")))
+			{
+				SlashArcMesh->SetStaticMesh(PlaneMesh);
+			}
+		}
+		if (!SlashArcMesh->GetMaterial(0))
+		{
+			if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+			{
+				if (UMaterialInstanceDynamic* SlashMID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
+				{
+					SlashMID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(1.0f, 0.72f, 0.22f));
+					SlashMID->SetScalarParameterValue(FName(TEXT("Roughness")), 0.15f);
+					SlashArcMesh->SetMaterial(0, SlashMID);
+				}
+			}
+		}
+		SlashArcMesh->SetVisibility(CombatActionState == EDungeoneerCombatActionState::LanternSlash);
+	}
+
 	if (!HeroVisualMesh)
 	{
 		return;
@@ -107,8 +145,10 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 			HeroVisualMesh->SetStaticMesh(PlaneMesh);
 		}
 	}
-	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
-	HeroVisualMesh->SetRelativeScale3D(FVector(1.65, 1.65, 1.65));
+	BaseVisualRelativeLocation = FVector(0.0, 0.0, 8.0);
+	BaseVisualRelativeScale = FVector(1.65, 1.65, 1.65);
+	HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation);
+	HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale);
 	HeroVisualMesh->SetCastShadow(false);
 
 	if (!bTexturedVisualsApplied)
@@ -119,7 +159,8 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 			{
 				if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
 				{
-					HeroVisualMesh->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
+					BaseVisualRelativeRotation = Bootstrap->GetCameraFacingSpritePlaneRotation();
+					HeroVisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
 
 					DirectionalHeroMIDs.Reset();
 					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
@@ -153,7 +194,8 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 		}
 
 		// Bare test-world fallback without a GameInstance: orient upright plane facing the -60 deg camera
-		HeroVisualMesh->SetRelativeRotation(FRotator(60.0f, 180.0f, 0.0f));
+		BaseVisualRelativeRotation = FRotator(60.0f, 180.0f, 0.0f);
+		HeroVisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
 	}
 
 	if (!HeroVisualMesh->GetMaterial(0))
@@ -238,7 +280,7 @@ void ADungeoneerCharacter::BeginPlay()
 
 	BindLocalInputContext();
 
-	if (!IsRunningCommandlet() && GetWorld() && GetWorld()->IsGameWorld())
+	if (!IsRunningCommandlet() && GetWorld() && GetWorld()->IsGameWorld() && !GetWorld()->GetAuthGameMode<ADungeoneerGameMode>())
 	{
 		if (ULocalPlayer* LP = GetOwningLocalPlayer())
 		{
@@ -284,6 +326,7 @@ void ADungeoneerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADungeoneerCharacter, CurrentHealth);
 	DOREPLIFETIME(ADungeoneerCharacter, FlashlightBattery);
+	DOREPLIFETIME(ADungeoneerCharacter, KillsCount);
 	DOREPLIFETIME_CONDITION(ADungeoneerCharacter, ReplicatedMoveOctant, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(ADungeoneerCharacter, ReplicatedAimOctant, COND_SkipOwner);
 }
@@ -331,6 +374,21 @@ void ADungeoneerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		{
 			EnhancedInput->BindAction(AimAction, ETriggerEvent::Triggered, this, &ADungeoneerCharacter::HandleAimInput);
 		}
+
+		if (AttackAction)
+		{
+			EnhancedInput->BindAction(AttackAction, ETriggerEvent::Started, this, &ADungeoneerCharacter::HandleAttackInput);
+		}
+
+		if (DodgeAction)
+		{
+			EnhancedInput->BindAction(DodgeAction, ETriggerEvent::Started, this, &ADungeoneerCharacter::HandleDodgeInput);
+		}
+
+		if (InteractAction)
+		{
+			EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ADungeoneerCharacter::HandleInteractInput);
+		}
 	}
 }
 
@@ -365,12 +423,527 @@ void ADungeoneerCharacter::HandleAimInput(const FInputActionValue& Value)
 	}
 }
 
+void ADungeoneerCharacter::HandleAttackInput(const FInputActionValue& Value)
+{
+	TriggerPrimaryAttack();
+}
+
+void ADungeoneerCharacter::HandleDodgeInput(const FInputActionValue& Value)
+{
+	TriggerDodgeDash();
+}
+
+void ADungeoneerCharacter::HandleInteractInput(const FInputActionValue& Value)
+{
+	TriggerInteract();
+}
+
+bool ADungeoneerCharacter::TriggerPrimaryAttack()
+{
+	if (DownedRespawnRemaining > 0.0f ||
+		HitStaggerRemaining > 0.0f ||
+		AttackCooldownRemaining > 0.0f ||
+		CombatActionState == EDungeoneerCombatActionState::LanternSlash)
+	{
+		return false;
+	}
+
+	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+	ActiveAttackOctant = ((IsLocallyControlled() || !GetController()) && MoveComp)
+		? MoveComp->GetAimOctant()
+		: ReplicatedAimOctant;
+
+	CombatActionState = EDungeoneerCombatActionState::LanternSlash;
+	AttackSwingElapsed = 0.0f;
+	AttackCooldownRemaining = PrimaryAttackCooldown;
+	bAttackDamageApplied = false;
+	LastAttackHitsCount = 0;
+
+	if (HasAuthority())
+	{
+		ExecutePrimaryAttackAuthority();
+	}
+	else
+	{
+		Server_ExecutePrimaryAttack();
+	}
+
+	return true;
+}
+
+bool ADungeoneerCharacter::TriggerDodgeDash()
+{
+	if (DownedRespawnRemaining > 0.0f ||
+		HitStaggerRemaining > 0.0f ||
+		DodgeCooldownRemaining > 0.0f ||
+		DodgeActiveRemaining > 0.0f)
+	{
+		return false;
+	}
+
+	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+	const ECompassOctant DashOctant = (MoveComp && MoveComp->HasActiveMoveInput())
+		? MoveComp->GetMoveOctant()
+		: ((IsLocallyControlled() && MoveComp) ? MoveComp->GetAimOctant() : ReplicatedAimOctant);
+
+	DashDirectionXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(DashOctant).GetSafeNormal2D();
+	if (DashDirectionXY.IsNearlyZero())
+	{
+		DashDirectionXY = FVector(1.0, 0.0, 0.0);
+	}
+
+	CombatActionState = EDungeoneerCombatActionState::DodgeDash;
+	DodgeActiveRemaining = 0.22f;
+	DodgeCooldownRemaining = DodgeCooldown;
+
+	if (HasAuthority())
+	{
+		ExecuteDodgeDashAuthority();
+	}
+	else
+	{
+		Server_ExecuteDodgeDash();
+	}
+
+	return true;
+}
+
+bool ADungeoneerCharacter::TriggerInteract()
+{
+	if (DownedRespawnRemaining > 0.0f)
+	{
+		return false;
+	}
+
+	if (HasAuthority())
+	{
+		ExecuteInteractAuthority();
+	}
+	else
+	{
+		Server_ExecuteInteract();
+	}
+	return true;
+}
+
+void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBattery) noexcept
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	++KillsCount;
+	if (InventoryComponent && BonusGold > 0)
+	{
+		InventoryComponent->AuthorityAdjustGold(BonusGold);
+	}
+	if (BonusBattery > 0.0f)
+	{
+		FlashlightBattery = FMath::Clamp(FlashlightBattery + BonusBattery, 0.0f, 100.0f);
+	}
+}
+
+void ADungeoneerCharacter::ExecutePrimaryAttackAuthority()
+{
+	UWorld* World = GetWorld();
+	if (!World || bAttackDamageApplied)
+	{
+		return;
+	}
+
+	bAttackDamageApplied = true;
+	const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
+	const FVector Origin = GetActorLocation();
+
+	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+	{
+		// Wide 130-degree frontal cleave cone (cos(65 deg) ~= 0.4226)
+		LastAttackHitsCount = SpatialSys->ApplyMeleeArcDamage(
+			Origin,
+			ForwardXY,
+			PrimaryAttackRangeUU,
+			0.42f,
+			PrimaryAttackDamage,
+			this,
+			380.0f);
+	}
+
+	if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+	{
+		if (ADungeoneerTileMapInstancer* Instancer = GM->GetActiveTileMapInstancer())
+		{
+			Instancer->EvaluateEntityStepOnBreakables(Origin + ForwardXY * 95.0, 1.35f, 120.0f);
+		}
+	}
+
+	if (UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+	{
+		SensorySub->BroadcastNoiseEvent(Origin, LastAttackHitsCount > 0 ? 0.90f : 0.55f, 650.0f, false);
+	}
+
+	OnCombatAttackPerformed.Broadcast(ActiveAttackOctant, LastAttackHitsCount);
+}
+
+void ADungeoneerCharacter::ExecuteDodgeDashAuthority()
+{
+	if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+	{
+		MoveComp->Velocity = FVector(
+			DashDirectionXY.X * static_cast<double>(DodgeDashSpeedUU),
+			DashDirectionXY.Y * static_cast<double>(DodgeDashSpeedUU),
+			MoveComp->Velocity.Z);
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+		{
+			SensorySub->BroadcastNoiseEvent(GetActorLocation(), 0.45f, 450.0f, false);
+		}
+	}
+}
+
+void ADungeoneerCharacter::ExecuteInteractAuthority()
+{
+	UWorld* World = GetWorld();
+	ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+	ADungeoneerTileMapInstancer* Instancer = GM ? GM->GetActiveTileMapInstancer() : nullptr;
+	if (!World || !GM || !Instancer)
+	{
+		return;
+	}
+
+	const FVector MyLoc = GetActorLocation();
+	constexpr double MaxInteractDistSq = 380.0 * 380.0;
+	AMajorLootVaultActor* NearestVault = nullptr;
+	double BestVaultDistSq = MaxInteractDistSq;
+	AVendorActor* NearestVendor = nullptr;
+	double BestVendorDistSq = MaxInteractDistSq;
+
+	const int32 EncounterCount = Instancer->GetSpawnedEncounterCount();
+	for (int32 i = 0; i < EncounterCount; ++i)
+	{
+		AActor* Encounter = Instancer->GetSpawnedEncounterAt(i);
+		if (!Encounter)
+		{
+			continue;
+		}
+		const double DistSq2D = FVector::DistSquared2D(MyLoc, Encounter->GetActorLocation());
+		if (DistSq2D > MaxInteractDistSq)
+		{
+			continue;
+		}
+
+		if (AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
+		{
+			if (DistSq2D < BestVaultDistSq)
+			{
+				BestVaultDistSq = DistSq2D;
+				NearestVault = Vault;
+			}
+		}
+		else if (AVendorActor* Vendor = Cast<AVendorActor>(Encounter))
+		{
+			if (DistSq2D < BestVendorDistSq)
+			{
+				BestVendorDistSq = DistSq2D;
+				NearestVendor = Vendor;
+			}
+		}
+	}
+
+	if (NearestVault)
+	{
+		if (!NearestVault->IsVaultUnlocked())
+		{
+			int32 FloorSeed = 424242 + GM->GetCurrentFloorIndex() * 97;
+			if (const ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
+			{
+				FloorSeed = static_cast<int32>(GS->GetReplicatedFloorSeed().MasterSeed) + GM->GetCurrentFloorIndex();
+			}
+			NearestVault->UnlockVaultWithSeed(FloorSeed);
+			if (InventoryComponent)
+			{
+				InventoryComponent->AuthorityAdjustGold(120);
+				const TArray<FVendorCatalogItem>& Loot = NearestVault->GetVaultLootTable();
+				if (Loot.Num() > 0)
+				{
+					InventoryComponent->AuthorityAddItem(Loot[0].ItemGuid, Loot[0].ItemId, 1);
+				}
+			}
+			RestoreAtRestingGround(25.0f, 30.0f);
+			RefreshNearbyInteractCandidate();
+		}
+		else
+		{
+			GM->AdvanceToNextDungeonFloor();
+			NearbyInteractType = EDungeoneerNearbyInteract::None;
+		}
+		return;
+	}
+
+	if (NearestVendor && InventoryComponent)
+	{
+		const TArray<FVendorCatalogItem>& Catalog = NearestVendor->GetVendorCatalog();
+		for (const FVendorCatalogItem& Entry : Catalog)
+		{
+			if (Entry.StockCount > 0 && InventoryComponent->GetGoldBalance() >= Entry.GoldPrice)
+			{
+				if (NearestVendor->ConsumeCatalogStock(Entry.ItemGuid))
+				{
+					InventoryComponent->AuthorityAdjustGold(-Entry.GoldPrice);
+					InventoryComponent->AuthorityAddItem(Entry.ItemGuid, Entry.ItemId, 1);
+
+					if (SensoryPerkComponent)
+					{
+						if (Entry.ItemId == FName(TEXT("Item_Lens_DarkVision")))
+						{
+							SensoryPerkComponent->UpgradePerk(EDungeoneerSensoryPerk::DarkVision);
+						}
+						else if (Entry.ItemId == FName(TEXT("Item_Resonator_AcuteHearing")))
+						{
+							SensoryPerkComponent->UpgradePerk(EDungeoneerSensoryPerk::AcuteHearing);
+						}
+						else if (Entry.ItemId == FName(TEXT("Item_Vial_ScentTracer")))
+						{
+							SensoryPerkComponent->UpgradePerk(EDungeoneerSensoryPerk::ScentThermal);
+						}
+					}
+					RestoreAtRestingGround(25.0f, 25.0f);
+					break;
+				}
+			}
+		}
+	}
+}
+
+void ADungeoneerCharacter::Server_ExecutePrimaryAttack_Implementation()
+{
+	if (CombatActionState != EDungeoneerCombatActionState::LanternSlash)
+	{
+		const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+		ActiveAttackOctant = MoveComp ? MoveComp->GetAimOctant() : ReplicatedAimOctant;
+		CombatActionState = EDungeoneerCombatActionState::LanternSlash;
+		AttackSwingElapsed = 0.0f;
+		AttackCooldownRemaining = PrimaryAttackCooldown;
+		bAttackDamageApplied = false;
+	}
+	ExecutePrimaryAttackAuthority();
+}
+
+void ADungeoneerCharacter::Server_ExecuteDodgeDash_Implementation()
+{
+	DodgeActiveRemaining = 0.22f;
+	DodgeCooldownRemaining = DodgeCooldown;
+	CombatActionState = EDungeoneerCombatActionState::DodgeDash;
+	ExecuteDodgeDashAuthority();
+}
+
+void ADungeoneerCharacter::Server_ExecuteInteract_Implementation()
+{
+	ExecuteInteractAuthority();
+}
+
+void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noexcept
+{
+	AttackCooldownRemaining = FMath::Max(0.0f, AttackCooldownRemaining - DeltaSeconds);
+	DodgeCooldownRemaining = FMath::Max(0.0f, DodgeCooldownRemaining - DeltaSeconds);
+	HitStaggerRemaining = FMath::Max(0.0f, HitStaggerRemaining - DeltaSeconds);
+
+	if (DownedRespawnRemaining > 0.0f)
+	{
+		DownedRespawnRemaining = FMath::Max(0.0f, DownedRespawnRemaining - DeltaSeconds);
+		CombatActionState = EDungeoneerCombatActionState::Downed;
+		if (DownedRespawnRemaining <= 0.0f && HasAuthority())
+		{
+			CurrentHealth = MaxHealth * 0.65f;
+			FlashlightBattery = FMath::Max(FlashlightBattery, 50.0f);
+			CombatActionState = EDungeoneerCombatActionState::None;
+			if (const UWorld* World = GetWorld())
+			{
+				if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+				{
+					SetActorLocation(GM->GetEntrySpawnLocation() + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+				}
+			}
+		}
+	}
+
+	if (CombatActionState == EDungeoneerCombatActionState::LanternSlash)
+	{
+		constexpr float SlashDuration = 0.22f;
+		AttackSwingElapsed += DeltaSeconds;
+		const float Alpha = FMath::Clamp(AttackSwingElapsed / SlashDuration, 0.0f, 1.0f);
+		const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
+		const float AttackYaw = DungeoneerMath::GCompassYawDegrees[static_cast<uint8>(ActiveAttackOctant) & 7];
+
+		ActiveWalkFrameColumn = (Alpha < 0.42f) ? 1 : 3;
+
+		if (HeroVisualMesh)
+		{
+			const float LungeDist = FMath::Sin(Alpha * PI) * 24.0f;
+			const FVector Offset(ForwardXY.X * LungeDist, ForwardXY.Y * LungeDist, FMath::Sin(Alpha * PI) * 10.0f);
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + Offset);
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.06, 0.94, 1.08));
+		}
+
+		if (SlashArcMesh)
+		{
+			const float SweepYaw = AttackYaw + FMath::Lerp(-55.0f, 55.0f, Alpha);
+			const FVector ArcOffset = ForwardXY * (84.0f + 16.0f * Alpha);
+			SlashArcMesh->SetRelativeLocation(FVector(ArcOffset.X, ArcOffset.Y, 14.0));
+			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, SweepYaw, 0.0f));
+			const float ArcScale = FMath::Sin(Alpha * PI) * 1.35f + 0.35f;
+			SlashArcMesh->SetRelativeScale3D(FVector(1.45 * ArcScale, 0.92 * ArcScale, 1.0));
+			SlashArcMesh->SetVisibility(true);
+		}
+
+		if (FlashlightComponent)
+		{
+			FlashlightComponent->SetIntensity(26000.0f + 12000.0f * (1.0f - Alpha));
+		}
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(4800.0f + 5600.0f * (1.0f - Alpha));
+		}
+
+		if (AttackSwingElapsed >= SlashDuration)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return;
+	}
+
+	if (SlashArcMesh)
+	{
+		SlashArcMesh->SetVisibility(false);
+	}
+	if (FlashlightComponent)
+	{
+		FlashlightComponent->SetIntensity(26000.0f);
+	}
+	if (HeroLanternFillLight)
+	{
+		HeroLanternFillLight->SetIntensity(4800.0f);
+	}
+
+	if (CombatActionState == EDungeoneerCombatActionState::DodgeDash)
+	{
+		DodgeActiveRemaining = FMath::Max(0.0f, DodgeActiveRemaining - DeltaSeconds);
+		ActiveWalkFrameColumn = (DodgeActiveRemaining > 0.11f) ? 1 : 3;
+
+		if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+		{
+			MoveComp->Velocity = FVector(
+				DashDirectionXY.X * static_cast<double>(DodgeDashSpeedUU),
+				DashDirectionXY.Y * static_cast<double>(DodgeDashSpeedUU),
+				MoveComp->Velocity.Z);
+		}
+
+		if (HeroVisualMesh)
+		{
+			const float HopZ = (DodgeActiveRemaining > 0.0f) ? 14.0f : 0.0f;
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(0.0, 0.0, HopZ));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.12, 0.86, 0.92));
+		}
+
+		if (DodgeActiveRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return;
+	}
+
+	if (CombatActionState == EDungeoneerCombatActionState::HitStagger)
+	{
+		if (HeroVisualMesh)
+		{
+			const float JitterX = FMath::Sin(HitStaggerRemaining * 90.0f) * 6.0f;
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(JitterX, 0.0, 0.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(0.92, 1.08, 0.90));
+		}
+		if (HitStaggerRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return;
+	}
+
+	if (CombatActionState == EDungeoneerCombatActionState::Downed)
+	{
+		if (HeroVisualMesh)
+		{
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(0.0, 0.0, -6.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.10, 1.10, 0.35));
+		}
+		return;
+	}
+
+	if (HeroVisualMesh)
+	{
+		HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation);
+		HeroVisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
+		HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale);
+	}
+}
+
+void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
+{
+	NearbyInteractType = EDungeoneerNearbyInteract::None;
+	const UWorld* World = GetWorld();
+	const ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+	const ADungeoneerTileMapInstancer* Instancer = GM ? GM->GetActiveTileMapInstancer() : nullptr;
+	if (!Instancer)
+	{
+		return;
+	}
+
+	const FVector MyLoc = GetActorLocation();
+	constexpr double MaxInteractDistSq = 380.0 * 380.0;
+	const int32 EncounterCount = Instancer->GetSpawnedEncounterCount();
+	double BestDistSq = MaxInteractDistSq;
+
+	for (int32 i = 0; i < EncounterCount; ++i)
+	{
+		const AActor* Encounter = Instancer->GetSpawnedEncounterAt(i);
+		if (!Encounter)
+		{
+			continue;
+		}
+		const double DistSq2D = FVector::DistSquared2D(MyLoc, Encounter->GetActorLocation());
+		if (DistSq2D > BestDistSq)
+		{
+			continue;
+		}
+
+		if (const AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
+		{
+			BestDistSq = DistSq2D;
+			NearbyInteractType = Vault->IsVaultUnlocked()
+				? EDungeoneerNearbyInteract::DescendNextFloor
+				: EDungeoneerNearbyInteract::UnlockVault;
+		}
+		else if (Encounter->IsA<AVendorActor>())
+		{
+			BestDistSq = DistSq2D;
+			NearbyInteractType = EDungeoneerNearbyInteract::VendorTrade;
+		}
+	}
+}
+
 void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept
 {
 	APlayerController* PC = GetController<APlayerController>();
 	UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
 	if (!PC || !MoveComp)
 	{
+		return;
+	}
+
+	if (DownedRespawnRemaining > 0.0f)
+	{
+		MoveComp->SetMoveInputVector(FVector2D::ZeroVector);
 		return;
 	}
 
@@ -428,6 +1001,33 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 	{
 		MoveComp->SetAimInputVector(MoveVec);
 	}
+
+	const ADungeoneerGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+	const bool bMainMenuOpen = GM && GM->GetActiveDioramaStage() && !GM->GetActiveDioramaStage()->IsHidden();
+
+	const bool bAttackKeyDown = !bMainMenuOpen &&
+		(PC->IsInputKeyDown(EKeys::LeftMouseButton) || PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::J));
+	if (bAttackKeyDown && !bPrevAttackKeyDown)
+	{
+		TriggerPrimaryAttack();
+	}
+	bPrevAttackKeyDown = bAttackKeyDown;
+
+	const bool bDodgeKeyDown = !bMainMenuOpen &&
+		(PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift) || PC->IsInputKeyDown(EKeys::K) || PC->IsInputKeyDown(EKeys::RightMouseButton));
+	if (bDodgeKeyDown && !bPrevDodgeKeyDown)
+	{
+		TriggerDodgeDash();
+	}
+	bPrevDodgeKeyDown = bDodgeKeyDown;
+
+	const bool bInteractKeyDown = !bMainMenuOpen &&
+		(PC->IsInputKeyDown(EKeys::F) || PC->IsInputKeyDown(EKeys::E));
+	if (bInteractKeyDown && !bPrevInteractKeyDown)
+	{
+		TriggerInteract();
+	}
+	bPrevInteractKeyDown = bInteractKeyDown;
 }
 
 void ADungeoneerCharacter::Tick(float DeltaSeconds)
@@ -442,7 +1042,7 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 	SyncFlashlightTransform(DeltaSeconds);
 
 	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
-	const ECompassOctant ActiveFacingOctant = (IsLocallyControlled() && MoveComp)
+	const ECompassOctant ActiveFacingOctant = ((IsLocallyControlled() || !GetController()) && MoveComp)
 		? MoveComp->GetAimOctant()
 		: ReplicatedAimOctant;
 
@@ -462,6 +1062,15 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 	}
 	AdvanceWalkFlipbookByDistance(DeltaMoveDistUU, bHasMoveInput);
 
+	UpdateCombatAndProceduralPose(DeltaSeconds);
+
+	InteractScanAccumulator += DeltaSeconds;
+	if (InteractScanAccumulator >= 0.10f)
+	{
+		InteractScanAccumulator = 0.0f;
+		RefreshNearbyInteractCandidate();
+	}
+
 	UpdateHeroDirectionalVisual(ActiveFacingOctant, ActiveWalkFrameColumn);
 
 	if (DirectionalRigComponent)
@@ -470,7 +1079,7 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 		DirectionalRigComponent->SetFrameIndex(ActiveWalkFrameColumn);
 		if (MoveComp)
 		{
-			DirectionalRigComponent->SetAnimationPlaying(bHasMoveInput);
+			DirectionalRigComponent->SetAnimationPlaying(bHasMoveInput || CombatActionState != EDungeoneerCombatActionState::None);
 		}
 	}
 
@@ -501,7 +1110,7 @@ void ADungeoneerCharacter::SyncFlashlightTransform(float DeltaSeconds) noexcept
 	}
 
 	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
-	const ECompassOctant TargetOctant = IsLocallyControlled() && MoveComp
+	const ECompassOctant TargetOctant = ((IsLocallyControlled() || !GetController()) && MoveComp)
 		? MoveComp->GetAimOctant()
 		: ReplicatedAimOctant;
 
@@ -522,12 +1131,33 @@ void ADungeoneerCharacter::Server_UpdateOctants_Implementation(ECompassOctant Ne
 
 void ADungeoneerCharacter::ApplyDungeoneerDamage(float DamageAmount, AActor* DamageCauser)
 {
-	if (!HasAuthority() || DamageAmount <= 0.0f)
+	if (!HasAuthority() || DamageAmount <= 0.0f || IsInvulnerable())
 	{
 		return;
 	}
 
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - DamageAmount);
+	if (CurrentHealth <= 0.0f)
+	{
+		CombatActionState = EDungeoneerCombatActionState::Downed;
+		DownedRespawnRemaining = 1.6f;
+		return;
+	}
+
+	if (CombatActionState == EDungeoneerCombatActionState::None)
+	{
+		CombatActionState = EDungeoneerCombatActionState::HitStagger;
+	}
+	HitStaggerRemaining = 0.16f;
+
+	if (DamageCauser)
+	{
+		const FVector PushDirXY = (GetActorLocation() - DamageCauser->GetActorLocation()).GetSafeNormal2D();
+		if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement(); MoveComp && !PushDirXY.IsNearlyZero())
+		{
+			MoveComp->Velocity += FVector(PushDirXY.X * 180.0, PushDirXY.Y * 180.0, 0.0);
+		}
+	}
 }
 
 void ADungeoneerCharacter::RestoreAtRestingGround(float HealthDelta, float BatteryDelta)

@@ -22,6 +22,25 @@ class UDungeoneerInventoryComponent;
 class UMirrorLightBounceComponent;
 class UMaterialInstanceDynamic;
 
+UENUM(BlueprintType)
+enum class EDungeoneerCombatActionState : uint8
+{
+	None         UMETA(DisplayName = "Ready"),
+	LanternSlash UMETA(DisplayName = "Lantern Blade Slash"),
+	DodgeDash    UMETA(DisplayName = "Compass Dodge Dash"),
+	HitStagger   UMETA(DisplayName = "Hit Stagger"),
+	Downed       UMETA(DisplayName = "Downed")
+};
+
+UENUM(BlueprintType)
+enum class EDungeoneerNearbyInteract : uint8
+{
+	None             UMETA(DisplayName = "None"),
+	VendorTrade      UMETA(DisplayName = "Vendor Purchase"),
+	UnlockVault      UMETA(DisplayName = "Unlock Loot Vault"),
+	DescendNextFloor UMETA(DisplayName = "Descend Next Floor")
+};
+
 /**
  * Primary playable 2.5D Dark Dungeoneer character.
  * - Uses UDungeoneerMovementComponent for 4-axis (8-compass) quantized movement.
@@ -107,18 +126,71 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Rendering")
 	int32 GetActiveWalkFrameColumn() const noexcept { return ActiveWalkFrameColumn; }
 
+	/** Triggers a 4-axis/8-compass Lantern Blade melee cleave + ember burst along AimOctant. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool TriggerPrimaryAttack();
+
+	/** Triggers an evasive 4-axis/8-compass Dodge Dash with brief invulnerability frames. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool TriggerDodgeDash();
+
+	/** Interacts with nearby AVendorActor or AMajorLootVaultActor / floor portal within range. */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Loop")
+	bool TriggerInteract();
+
+	/** Records a zombie kill and grants gold + battery siphon from slain targets. */
+	void RegisterEnemySlain(int32 BonusGold, float BonusBattery) noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	EDungeoneerCombatActionState GetCombatActionState() const noexcept { return CombatActionState; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsInvulnerable() const noexcept { return DodgeActiveRemaining > 0.0f || DownedRespawnRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	int32 GetKillsCount() const noexcept { return KillsCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	int32 GetLastAttackHitsCount() const noexcept { return LastAttackHitsCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	UStaticMeshComponent* GetSlashArcMesh() const noexcept { return SlashArcMesh.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|Loop")
+	EDungeoneerNearbyInteract GetNearbyInteractType() const noexcept { return NearbyInteractType; }
+
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCombatAttackPerformedSignature, ECompassOctant /*AttackOctant*/, int32 /*HitsLanded*/);
+	FOnCombatAttackPerformedSignature OnCombatAttackPerformed;
+
 protected:
 	void HandleMoveInput(const FInputActionValue& Value);
 	void HandleMoveCompleted(const FInputActionValue& Value);
 	void HandleAimInput(const FInputActionValue& Value);
+	void HandleAttackInput(const FInputActionValue& Value);
+	void HandleDodgeInput(const FInputActionValue& Value);
+	void HandleInteractInput(const FInputActionValue& Value);
 	void BindLocalInputContext();
 	void EnsureDefaultVisualsInitialized();
 	void UpdateHeroDirectionalVisual(ECompassOctant FacingOctant, int32 FrameColumn = -1) noexcept;
+	void UpdateCombatAndProceduralPose(float DeltaSeconds) noexcept;
+	void RefreshNearbyInteractCandidate() noexcept;
 	void PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept;
 	void SyncFlashlightTransform(float DeltaSeconds) noexcept;
+	void ExecutePrimaryAttackAuthority();
+	void ExecuteDodgeDashAuthority();
+	void ExecuteInteractAuthority();
 
 	UFUNCTION(Server, Unreliable)
 	void Server_UpdateOctants(ECompassOctant NewMoveOctant, ECompassOctant NewAimOctant);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExecutePrimaryAttack();
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExecuteDodgeDash();
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExecuteInteract();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -134,6 +206,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rendering")
 	TObjectPtr<UStaticMeshComponent> HeroVisualMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Visual")
+	TObjectPtr<UStaticMeshComponent> SlashArcMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sensory")
 	TObjectPtr<USensoryPerkComponent> SensoryPerkComponent;
@@ -159,6 +234,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> AimAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> AttackAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> DodgeAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> InteractAction;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Vitals", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
 
@@ -168,11 +252,29 @@ protected:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Vitals")
 	float FlashlightBattery = 100.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "10.0"))
+	float PrimaryAttackDamage = 55.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "50.0"))
+	float PrimaryAttackRangeUU = 240.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float PrimaryAttackCooldown = 0.36f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float DodgeCooldown = 0.70f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "100.0"))
+	float DodgeDashSpeedUU = 760.0f;
+
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Locomotion")
 	ECompassOctant ReplicatedMoveOctant = ECompassOctant::E;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Locomotion")
 	ECompassOctant ReplicatedAimOctant = ECompassOctant::E;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Combat")
+	int32 KillsCount = 0;
 
 	/** Pre-allocated 16 directional walk-cycle sprite materials (4 rows x 4 columns) for zero Tick allocation. */
 	UPROPERTY(Transient)
@@ -184,13 +286,32 @@ protected:
 private:
 	FVector2D LastMouseSample = FVector2D::ZeroVector;
 	FVector PreviousWalkLocation = FVector::ZeroVector;
+	FVector BaseVisualRelativeLocation = FVector(0.0, 0.0, 8.0);
+	FRotator BaseVisualRelativeRotation = FRotator(45.0, 180.0, 0.0);
+	FVector BaseVisualRelativeScale = FVector(1.65, 1.65, 1.65);
+	FVector DashDirectionXY = FVector(1.0, 0.0, 0.0);
+	ECompassOctant ActiveAttackOctant = ECompassOctant::E;
+	EDungeoneerCombatActionState CombatActionState = EDungeoneerCombatActionState::None;
+	EDungeoneerNearbyInteract NearbyInteractType = EDungeoneerNearbyInteract::None;
 	float CurrentFlashlightYawDeg = 0.0f;
 	float OctantSyncAccumulator = 0.0f;
 	float TimeSinceMouseMoved = 10.0f;
 	float WalkDistanceAccumulatorUU = 0.0f;
+	float AttackSwingElapsed = 0.0f;
+	float AttackCooldownRemaining = 0.0f;
+	float DodgeActiveRemaining = 0.0f;
+	float DodgeCooldownRemaining = 0.0f;
+	float HitStaggerRemaining = 0.0f;
+	float DownedRespawnRemaining = 0.0f;
+	float InteractScanAccumulator = 0.0f;
 	int32 ActiveDirectionalRow = -1;
 	int32 ActiveWalkFrameColumn = 0;
 	int32 ActiveDirectionalCellIndex = -1;
+	int32 LastAttackHitsCount = 0;
+	bool bAttackDamageApplied = false;
+	bool bPrevAttackKeyDown = false;
+	bool bPrevDodgeKeyDown = false;
+	bool bPrevInteractKeyDown = false;
 	bool bHasMouseSample = false;
 	bool bHasPreviousWalkLocation = false;
 	bool bTexturedVisualsApplied = false;

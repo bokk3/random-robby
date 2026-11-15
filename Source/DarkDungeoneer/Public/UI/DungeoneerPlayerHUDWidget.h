@@ -58,6 +58,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|HUD")
 	FString GetFormattedChronoSlowText() const;
 
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	FString GetFormattedCombatAndLoopText() const;
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	FString GetFormattedInteractHintText() const;
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	int32 GetCachedFloorIndex() const noexcept { return CachedFloorIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	int32 GetCachedGoldBalance() const noexcept { return CachedGoldBalance; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	int32 GetCachedKillsCount() const noexcept { return CachedKillsCount; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	FString GetCachedCombatStateLabel() const { return CachedCombatStateLabel; }
+
 protected:
 	void UpdateTextBlocks() noexcept;
 
@@ -76,6 +94,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Txt_SensoryPerksReadout;
 
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_CombatAndLoopReadout;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_InteractHint;
+
 private:
 	float CachedCurrentHealth = 100.0f;
 	float CachedMaxHealth = 100.0f;
@@ -87,4 +111,9 @@ private:
 	int32 DarkVisionTier = 0;
 	int32 AcuteHearingTier = 0;
 	int32 ScentThermalTier = 0;
+	int32 CachedFloorIndex = 1;
+	int32 CachedGoldBalance = 250;
+	int32 CachedKillsCount = 0;
+	FString CachedCombatStateLabel = TEXT("READY");
+	FString CachedInteractHint;
 };

@@ -1,7 +1,10 @@
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerGameMode.h"
+#include "Core/DungeoneerGameState.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Rendering/SensoryPerkComponent.h"
+#include "Social/DungeoneerInventoryComponent.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
@@ -31,7 +34,7 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 		{
 			FrameSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 			FrameSlot->SetPosition(FVector2D(24.0, 24.0));
-			FrameSlot->SetSize(FVector2D(360.0, 148.0));
+			FrameSlot->SetSize(FVector2D(400.0, 196.0));
 		}
 
 		UVerticalBox* HUDStack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PlayerHUDStack"));
@@ -56,6 +59,14 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 		Txt_SensoryPerksReadout = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_SensoryPerksReadout"));
 		Txt_SensoryPerksReadout->SetColorAndOpacity(FSlateColor(FLinearColor(0.62f, 0.78f, 0.98f, 1.0f)));
 		HUDStack->AddChildToVerticalBox(Txt_SensoryPerksReadout);
+
+		Txt_CombatAndLoopReadout = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_CombatAndLoopReadout"));
+		Txt_CombatAndLoopReadout->SetColorAndOpacity(FSlateColor(FLinearColor(0.98f, 0.86f, 0.48f, 1.0f)));
+		HUDStack->AddChildToVerticalBox(Txt_CombatAndLoopReadout);
+
+		Txt_InteractHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_InteractHint"));
+		Txt_InteractHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.98f, 0.65f, 1.0f)));
+		HUDStack->AddChildToVerticalBox(Txt_InteractHint);
 	}
 
 	return Super::RebuildWidget();
@@ -130,6 +141,42 @@ void UDungeoneerPlayerHUDWidget::RefreshHUDFromCharacter(const ADungeoneerCharac
 		ScentThermalTier = Perks->GetPerkLevel(EDungeoneerSensoryPerk::ScentThermal);
 	}
 
+	CachedKillsCount = Character->GetKillsCount();
+	if (const UDungeoneerInventoryComponent* Inv = Character->GetInventoryComponent())
+	{
+		CachedGoldBalance = Inv->GetGoldBalance();
+	}
+
+	CachedFloorIndex = 1;
+	if (const UWorld* World = Character->GetWorld())
+	{
+		if (const ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
+		{
+			CachedFloorIndex = FMath::Max(1, GS->GetReplicatedFloorSeed().FloorIndex);
+		}
+		else if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			CachedFloorIndex = FMath::Max(1, GM->GetCurrentFloorIndex());
+		}
+	}
+
+	switch (Character->GetCombatActionState())
+	{
+	case EDungeoneerCombatActionState::LanternSlash: CachedCombatStateLabel = TEXT("SLASH!"); break;
+	case EDungeoneerCombatActionState::DodgeDash:    CachedCombatStateLabel = TEXT("DODGE!"); break;
+	case EDungeoneerCombatActionState::HitStagger:   CachedCombatStateLabel = TEXT("STAGGER"); break;
+	case EDungeoneerCombatActionState::Downed:       CachedCombatStateLabel = TEXT("DOWNED"); break;
+	default:                                         CachedCombatStateLabel = TEXT("READY"); break;
+	}
+
+	switch (Character->GetNearbyInteractType())
+	{
+	case EDungeoneerNearbyInteract::VendorTrade:      CachedInteractHint = TEXT("[F] BUY SUPPLY FROM VENDOR"); break;
+	case EDungeoneerNearbyInteract::UnlockVault:      CachedInteractHint = TEXT("[F] UNLOCK TERMINAL LOOT VAULT"); break;
+	case EDungeoneerNearbyInteract::DescendNextFloor: CachedInteractHint = TEXT("[F] DESCEND TO NEXT FLOOR"); break;
+	default:                                          CachedInteractHint = TEXT("LMB/SPACE: SLASH | SHIFT: DODGE | WASD: MOVE"); break;
+	}
+
 	UpdateTextBlocks();
 }
 
@@ -156,6 +203,20 @@ FString UDungeoneerPlayerHUDWidget::GetFormattedChronoSlowText() const
 		FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * 100.0f);
 }
 
+FString UDungeoneerPlayerHUDWidget::GetFormattedCombatAndLoopText() const
+{
+	return FString::Printf(TEXT("FLOOR %d | GOLD %d | KILLS %d | [%s]"),
+		CachedFloorIndex,
+		CachedGoldBalance,
+		CachedKillsCount,
+		*CachedCombatStateLabel);
+}
+
+FString UDungeoneerPlayerHUDWidget::GetFormattedInteractHintText() const
+{
+	return CachedInteractHint;
+}
+
 void UDungeoneerPlayerHUDWidget::UpdateTextBlocks() noexcept
 {
 	if (Txt_HealthReadout)
@@ -178,5 +239,13 @@ void UDungeoneerPlayerHUDWidget::UpdateTextBlocks() noexcept
 	{
 		Txt_SensoryPerksReadout->SetText(FText::FromString(FString::Printf(TEXT("SENSES [DV:%d AH:%d ST:%d]"),
 			DarkVisionTier, AcuteHearingTier, ScentThermalTier)));
+	}
+	if (Txt_CombatAndLoopReadout)
+	{
+		Txt_CombatAndLoopReadout->SetText(FText::FromString(GetFormattedCombatAndLoopText()));
+	}
+	if (Txt_InteractHint)
+	{
+		Txt_InteractHint->SetText(FText::FromString(CachedInteractHint));
 	}
 }

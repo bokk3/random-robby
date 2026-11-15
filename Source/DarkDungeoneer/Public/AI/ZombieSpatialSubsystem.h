@@ -68,6 +68,23 @@ public:
 		return (Index >= 0 && Index < NumTrackedPlayers) ? TrackedPlayers[Index].Get() : nullptr;
 	}
 
+	/** Zero-allocation read-only accessors over registered zombies for melee/AOE hit resolution. */
+	int32 GetTrackedZombieCount() const noexcept { return NumTrackedZombies; }
+	AZombieBase* GetTrackedZombieAt(int32 Index) const noexcept
+	{
+		return (Index >= 0 && Index < NumTrackedZombies) ? TrackedZombies[Index].Get() : nullptr;
+	}
+
+	/** Zero-allocation melee cone damage & knockback across tracked zombies. Returns number of hits landed. */
+	int32 ApplyMeleeArcDamage(
+		const FVector& Origin,
+		const FVector& ForwardDirXY,
+		float RangeUU,
+		float MinCosHalfAngle,
+		float DamageAmount,
+		AActor* InstigatorActor,
+		float KnockbackImpulseUU = 340.0f) noexcept;
+
 	/** Rebuilds the fixed 2D spatial hash grid in O(N) with zero heap allocations. */
 	void RefreshSpatialGrid() noexcept;
 

@@ -4,6 +4,7 @@
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerGameState.h"
 #include "AI/ZombieFastThrower.h"
+#include "AI/ZombieExploder.h"
 #include "AI/ZombieBase.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
@@ -771,6 +772,105 @@ bool FDungeoneerTileMapInstancerAndMirrorBounceTest::RunTest(const FString& Para
 		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png")));
 	TestTrue(TEXT("PROP_Mirror_Palace_Maze_4x4_ORM.png exists on disk"),
 		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_ORM.png")));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerCombatDodgeVaultFloorTest,
+	"DarkDungeoneer.Gameplay.CombatDodgeVaultAndFloorLoop",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerCombatDodgeVaultFloorTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created combat & floor loop test world"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	FActorSpawnParameters HeroParams;
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator, HeroParams);
+	TestNotNull(TEXT("Spawned Hero for combat test"), Hero);
+	Hero->DispatchBeginPlay();
+	UDungeoneerMovementComponent* HeroMove = Hero->GetDungeoneerMovement();
+	TestNotNull(TEXT("Hero has UDungeoneerMovementComponent"), HeroMove);
+	HeroMove->SetAimInputVector(FVector2D(1.0, 0.0)); // Facing North (+X)
+
+	// 1. Spawn ZombieFastThrower (95 HP) directly in melee cone along +X, plus an out-of-cone flanker behind (-X)
+	AZombieFastThrower* FrontZombie = TestWorld->SpawnActor<AZombieFastThrower>(FVector(150.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* RearZombie = TestWorld->SpawnActor<AZombieExploder>(FVector(-180.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned FrontZombie"), FrontZombie);
+	TestNotNull(TEXT("Spawned RearZombie"), RearZombie);
+	FrontZombie->DispatchBeginPlay();
+	RearZombie->DispatchBeginPlay();
+	TestTrue(TEXT("FrontZombie initially alive"), FrontZombie->IsZombieAlive());
+
+	const int32 GoldBefore = Hero->GetInventoryComponent()->GetGoldBalance();
+	const bool bFirstSwing = Hero->TriggerPrimaryAttack();
+	TestTrue(TEXT("Lantern Blade primary attack triggered cleanly"), bFirstSwing);
+	TestEqual(TEXT("Lantern Blade hit exactly FrontZombie in forward cone"), Hero->GetLastAttackHitsCount(), 1);
+	TestTrue(TEXT("FrontZombie took cleave damage"), FrontZombie->GetCurrentHealth() < FrontZombie->GetMaxHealth());
+	TestEqual(TEXT("RearZombie outside cone remained unharmed"), RearZombie->GetCurrentHealth(), RearZombie->GetMaxHealth());
+
+	// Advance cooldown/swing time so Hero can execute finishing cleave
+	for (int32 Step = 0; Step < 25; ++Step)
+	{
+		Hero->Tick(0.02f);
+	}
+	TestEqual(TEXT("Attack state returned to None after swing"),
+		static_cast<uint8>(Hero->GetCombatActionState()),
+		static_cast<uint8>(EDungeoneerCombatActionState::None));
+
+	const bool bSecondSwing = Hero->TriggerPrimaryAttack();
+	TestTrue(TEXT("Second Lantern Blade strike triggered after cooldown"), bSecondSwing);
+	TestFalse(TEXT("FrontZombie slain on second cleave"), FrontZombie->IsZombieAlive());
+	TestEqual(TEXT("Hero recorded 1 zombie kill"), Hero->GetKillsCount(), 1);
+	TestTrue(TEXT("Hero gained Gold reward on zombie kill"), Hero->GetInventoryComponent()->GetGoldBalance() > GoldBefore);
+
+	// Advance swing state cleanly before dodge test
+	for (int32 Step = 0; Step < 25; ++Step)
+	{
+		Hero->Tick(0.02f);
+	}
+
+	// 2. Dodge Dash grants i-frames blocking incoming damage
+	const float HpBeforeDodge = Hero->GetCurrentHealth();
+	const bool bDodged = Hero->TriggerDodgeDash();
+	TestTrue(TEXT("Dodge Dash triggered cleanly"), bDodged);
+	TestTrue(TEXT("Hero gained brief Dodge i-frames"), Hero->IsInvulnerable());
+	Hero->ApplyDungeoneerDamage(35.0f, RearZombie);
+	TestEqual(TEXT("Damage ignored during Dodge i-frames"), Hero->GetCurrentHealth(), HpBeforeDodge);
+
+	for (int32 Step = 0; Step < 40; ++Step)
+	{
+		Hero->Tick(0.02f);
+	}
+	TestFalse(TEXT("Dodge i-frames expired cleanly"), Hero->IsInvulnerable());
+
+	// 3. HUD captures Floor, Gold, Kills, and Combat state cleanly
+	UDungeoneerPlayerHUDWidget* HUD = NewObject<UDungeoneerPlayerHUDWidget>(TestWorld);
+	HUD->RefreshHUDFromCharacter(Hero);
+	TestEqual(TEXT("HUD tracked 1 kill"), HUD->GetCachedKillsCount(), 1);
+	TestTrue(TEXT("HUD tracked updated gold balance"), HUD->GetCachedGoldBalance() > GoldBefore);
+	TestTrue(TEXT("HUD formatted combat readout includes FLOOR & KILLS"),
+		HUD->GetFormattedCombatAndLoopText().Contains(TEXT("FLOOR 1")) &&
+		HUD->GetFormattedCombatAndLoopText().Contains(TEXT("KILLS 1")));
+
+	// 4. GameMode multi-floor loop + Vault encounter unlock & Floor descent
+	ADungeoneerGameMode* GM = TestWorld->SpawnActor<ADungeoneerGameMode>();
+	TestNotNull(TEXT("Spawned ADungeoneerGameMode"), GM);
+	TestEqual(TEXT("GameMode starts on Floor 1"), GM->GetCurrentFloorIndex(), 1);
+	const int32 NextFloor = GM->AdvanceToNextDungeonFloor();
+	TestEqual(TEXT("AdvanceToNextDungeonFloor incremented to Floor 2"), NextFloor, 2);
+
+	const UDungeonGeneratorSubsystem* Gen = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	TestNotNull(TEXT("DungeonGeneratorSubsystem active"), Gen);
+	TestEqual(TEXT("Generator updated ActiveFloorGraph to Floor 2"), Gen->GetActiveFloorGraph().FloorIndex, 2);
 
 	TestWorld->DestroyWorld(false);
 	return true;

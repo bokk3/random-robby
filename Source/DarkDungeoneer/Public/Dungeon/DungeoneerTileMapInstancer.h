@@ -207,6 +207,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dungeon|Encounters")
 	int32 GetSpawnedEncounterCount() const noexcept { return SpawnedEncounterActors.Num(); }
 
+	AActor* GetSpawnedEncounterAt(int32 Index) const noexcept
+	{
+		return SpawnedEncounterActors.IsValidIndex(Index) ? SpawnedEncounterActors[Index].Get() : nullptr;
+	}
+
 	UFUNCTION(BlueprintPure, Category = "Dungeon|Corridors")
 	int32 GetCorridorTileCount() const noexcept { return LastCorridorTileCount; }
 

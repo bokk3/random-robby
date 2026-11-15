@@ -44,6 +44,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Zombie")
 	bool IsZombieAlive() const noexcept { return CurrentHealth > 0.0f; }
 
+	UFUNCTION(BlueprintPure, Category = "Zombie")
+	float GetCurrentHealth() const noexcept { return CurrentHealth; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie")
+	float GetMaxHealth() const noexcept { return MaxHealth; }
+
 	/** True zombies cast physical shadows and emit footsteps; mirror decoys do not. */
 	UFUNCTION(BlueprintPure, Category = "Zombie")
 	bool IsRealPhysicalZombie() const noexcept { return !bIsMirrorDecoy; }
@@ -57,6 +63,7 @@ public:
 	void AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept;
 
 	void ApplyZombieDamage(float DamageAmount, AActor* DamageInstigator);
+	void TriggerHitFeedback(const FVector& KnockbackDirXY, float KnockbackSpeedUU = 340.0f) noexcept;
 
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnZombieStepTriggered, const FDungeoneerStepEvent&);
 	FOnZombieStepTriggered OnZombieStepTriggered;
@@ -90,6 +97,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "10.0"))
 	float StepCycleDistanceUU = 110.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0"))
+	int32 GoldKillReward = 25;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0.0"))
+	float BatteryKillReward = 8.0f;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "State")
 	float CurrentHealth = 120.0f;
 
@@ -104,11 +117,15 @@ protected:
 
 private:
 	FVector PreviousLocation = FVector::ZeroVector;
+	TWeakObjectPtr<AActor> LastDamageInstigator;
 	float StepDistanceAccumulator = 0.0f;
 	float WalkCycleDistanceUU = 0.0f;
+	float HitFlashRemaining = 0.0f;
+	float DeathHideCountdown = -1.0f;
 	int32 StepSequenceCounter = 0;
 	int32 ActiveDirectionalRow = -1;
 	int32 ActiveWalkFrameColumn = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	bool bTexturedVisualsApplied = false;
+	bool bKillRewardsGranted = false;
 };

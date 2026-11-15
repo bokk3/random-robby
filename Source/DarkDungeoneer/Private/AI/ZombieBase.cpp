@@ -5,6 +5,7 @@
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Social/DungeoneerInventoryComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/GameInstance.h"
@@ -212,6 +213,21 @@ void AZombieBase::Tick(float DeltaSeconds)
 	{
 		AdvanceDeterministicStepAccumulator(DeltaSeconds);
 
+		if (HitFlashRemaining > 0.0f)
+		{
+			HitFlashRemaining = FMath::Max(0.0f, HitFlashRemaining - DeltaSeconds);
+			const float Alpha = HitFlashRemaining / 0.16f;
+			const FVector BaseScale = GetArchetypeVisualScale();
+			if (ZombieVisualMesh)
+			{
+				ZombieVisualMesh->SetRelativeScale3D(BaseScale * (1.0f + 0.22f * Alpha));
+			}
+			if (ZombieEmissiveLight)
+			{
+				ZombieEmissiveLight->SetIntensity(3600.0f + 7200.0f * Alpha);
+			}
+		}
+
 		if (HasAuthority())
 		{
 			bool bVisibleToAnyPlayer = false;
@@ -236,6 +252,14 @@ void AZombieBase::Tick(float DeltaSeconds)
 			SetNetUpdateFrequency(bVisibleToAnyPlayer ? 15.0f : 2.0f);
 		}
 	}
+	else if (DeathHideCountdown > 0.0f)
+	{
+		DeathHideCountdown = FMath::Max(0.0f, DeathHideCountdown - DeltaSeconds);
+		if (DeathHideCountdown <= 0.0f)
+		{
+			SetActorHiddenInGame(true);
+		}
+	}
 
 	UpdateZombieDirectionalVisual(CurrentHeadingOctant, ActiveWalkFrameColumn);
 }
@@ -246,6 +270,24 @@ void AZombieBase::MoveAlongOctant(ECompassOctant Octant, float Scale) noexcept
 	UpdateZombieDirectionalVisual(Octant, ActiveWalkFrameColumn);
 	const FVector UnitDir = DungeoneerMath::OctantToDirection3D(Octant);
 	AddMovementInput(UnitDir, Scale);
+}
+
+void AZombieBase::TriggerHitFeedback(const FVector& KnockbackDirXY, const float KnockbackSpeedUU) noexcept
+{
+	if (!IsZombieAlive())
+	{
+		return;
+	}
+
+	HitFlashRemaining = 0.16f;
+	const FVector SafeDir = KnockbackDirXY.GetSafeNormal2D();
+	if (!SafeDir.IsNearlyZero() && KnockbackSpeedUU > 0.0f)
+	{
+		if (UCharacterMovementComponent* CharMove = GetCharacterMovement())
+		{
+			CharMove->Velocity += SafeDir * KnockbackSpeedUU;
+		}
+	}
 }
 
 void AZombieBase::AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept
@@ -296,6 +338,11 @@ void AZombieBase::ApplyZombieDamage(float DamageAmount, AActor* DamageInstigator
 		return;
 	}
 
+	if (DamageInstigator)
+	{
+		LastDamageInstigator = DamageInstigator;
+	}
+
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - DamageAmount);
 	if (CurrentHealth <= 0.0f)
 	{
@@ -307,6 +354,27 @@ void AZombieBase::OnZombieDied()
 {
 	SetActorEnableCollision(false);
 	GetCharacterMovement()->StopMovementImmediately();
+	DeathHideCountdown = 0.65f;
+
+	if (ZombieVisualMesh)
+	{
+		// Collapse billboard onto the flagstone floor cleanly
+		ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, -48.0));
+		ZombieVisualMesh->SetRelativeRotation(FRotator(85.0f, 0.0f, 0.0f));
+	}
+	if (ZombieEmissiveLight)
+	{
+		ZombieEmissiveLight->SetIntensity(0.0f);
+	}
+
+	if (!bKillRewardsGranted)
+	{
+		bKillRewardsGranted = true;
+		if (ADungeoneerCharacter* Slayer = Cast<ADungeoneerCharacter>(LastDamageInstigator.Get()))
+		{
+			Slayer->RegisterEnemySlain(GoldKillReward, BatteryKillReward);
+		}
+	}
 }
 
 bool AZombieBase::IsDetectedByViewer(const AActor* ViewerActor, const FVector& ViewerOrigin) const noexcept

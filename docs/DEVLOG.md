@@ -204,3 +204,20 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
 - **Automated QA & Repair (`slice_normal_rig.py`)**: Implemented `--validate-stride` and `--repair-stride` comparing the lower-third foreground leg region (`IoU`, `MSE`, and combined pixel variance) between `Col 1` and `Col 3`. Rows below `15%` variance emit `[WARN]` and, with `--repair-stride`, synthesize `[Col 0, Col 1, Col 2, Col 3]` cleanly via lower-body depth shear and mirrored leg-split warping while keeping asymmetrical upper-body gear intact. Re-sliced sheets verified `22.4%–84.5%` lower-body variance across all rows.
 - **C++20 Runtime (`U25DAnimOrchestratorComponent`, `ADungeoneerCharacter`, `AZombieBase`)**: Bound `Velocity.IsNearlyZero()` to lock UV selection to `Column 0`, computed walk columns via `FMath::FloorToInt((AccumulatedDistance / StrideLengthUU) * 4.0f) & 3`, and added `OnFootstepContact(EFoot::Left / EFoot::Right)` + `F25DStepContactEvent::Foot` firing on **Column 1** (`Left`) and **Column 3** (`Right`) alongside `UDungeoneerSensoryWorldSubsystem::BroadcastNoiseEvent` for fog ripples.
 - **Verification**: `slice_normal_rig.py --self-test` passed all Rig/Stride-Repair/Dungeon checks, `verify_architecture_invariants.py` exited `0`, `DarkDungeoneerEditor` (`8` actions) + `DarkDungeoneer.exe` (`7` actions) compiled cleanly, and all `8` UE `5.8.2` automation tests passed (`UE_TEST_EXIT=0`).
+
+---
+
+## Devlog #13 — Playable Melee Combat, Dodge I-Frames & Multi-Floor Dungeon Loop (`v1.0.0`)
+
+### Closing the Gap Between Walkable Prototype & Complete Loop
+- Once directional 4x4 walk cycles were working cleanly in `v0.9.7`, playtesting highlighted the missing core loop: players could walk and aim flashlights, but couldn't cleave enemies, dodge incoming hazards, interact with Vendors/Vaults, or descend to subsequent floors.
+- **Lantern Blade Cleave & Zero-Alloc Arc Queries (`UZombieSpatialSubsystem`, `ADungeoneerCharacter`)**:
+  - Added `UZombieSpatialSubsystem::ApplyMeleeArcDamage` iterating the fixed `TrackedZombies` array in-place (zero heap allocations, zero `GetAllActorsOfClass`), applying directional cone filtering (`Dot >= 0.42`, ~130° frontal cleave), breaking nearby floor props, broadcasting Acute Hearing noise ripples, and driving pre-allocated `SlashArcMesh` swing visuals + warm lantern flash + `Col 1 -> Col 3` strike follow-through.
+  - Added `AZombieBase::TriggerHitFeedback` (knockback velocity, white hit-flash, scale punch) and death collapse (`0.65s` hide timer) awarding Gold (`+25g`/`+35g`) and `+8%` flashlight battery siphon to the slaying player.
+- **4-Axis Dodge Dash, Hit Stagger & Downed Respawn**:
+  - Bound `LeftShift`/`K`/`RMB` (`DodgeAction`) to dash along the active movement or aim octant (`760 UU/s`, `0.22s` i-frames verified to ignore incoming damage in `ApplyDungeoneerDamage`), paired with `HitStagger` knockback and automatic floor-entry recovery on `CurrentHealth <= 0`.
+- **Interactive Vendors, Loot Vaults, HUD Telemetry & Floor Descent (`ADungeoneerGameMode`, `UDungeoneerPlayerHUDWidget`)**:
+  - Fixed `ADungeoneerTileMapInstancer` + `UDungeonGeneratorSubsystem::GenerateFloorGraph` (`RestingGroundBounds.Reset()`) to cleanly tear down and rebuild Floor `N -> N+1` without leaked encounter actors or stale sanctuary bounds.
+  - Connected `[F]`/`[E]` interaction to unlock seeded `AMajorLootVaultActor` vaults, purchase gear/sensory upgrades at `AVendorActor` stalls, and descend unlocked Vaults via `ADungeoneerGameMode::AdvanceToNextDungeonFloor()`.
+  - Added live `FLOOR | GOLD | KILLS | [STATE]` + contextual `[F]` interaction prompts onto `UDungeoneerPlayerHUDWidget`, attached cleanly per `ULocalPlayer` when entering the dungeon.
+- **Verification**: `verify_architecture_invariants.py` passed (`85` files), `DarkDungeoneerEditor` & `DarkDungeoneer.exe` built cleanly, and all `9` headless UE `5.8.2` tests (including `DarkDungeoneer.Gameplay.CombatDodgeVaultAndFloorLoop`) passed with `UE_TEST_EXIT=0`.

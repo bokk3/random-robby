@@ -9,6 +9,7 @@ AZombieFastThrower::AZombieFastThrower()
 {
 	BaseWalkSpeed = 410.0f;
 	MaxHealth = 95.0f;
+	GoldKillReward = 35;
 	PerceptionHearingRange = 1800.0f;
 	CurrentThrowCooldown = BaseThrowCooldown;
 }

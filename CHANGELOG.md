@@ -7,7 +7,30 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- **v1.0.0 (Planned)**: Full multi-floor vertical slice (`Entry -> Combat -> Mirror-Palace -> Resting Ground -> Deep Fog -> Loot Vault`).
+- Future post-1.0 content expansions (additional procedural biomes, boss encounters, and online dedicated server hardening).
+
+---
+
+## [1.0.0] - 2026-11-15
+
+### Added
+- **Player Combat, Evasion & Procedural 2.5D Animations (`ADungeoneerCharacter`)**:
+  - Added **Lantern Blade Cleave** (`TriggerPrimaryAttack` on `LeftMouseButton`, `SpaceBar`, `J`, or Enhanced Input `AttackAction`) sweeping a 130° melee cone (`UZombieSpatialSubsystem::ApplyMeleeArcDamage`) along `AimOctant`, shattering nearby breakables (`EvaluateEntityStepOnBreakables`), emitting an Acute Hearing acoustic ripple (`BroadcastNoiseEvent`), driving pre-allocated `SlashArcMesh` arc visuals + warm lantern flash + torso lunge/follow-through animation (`Col 1 -> Col 3`), and locking damage/pose against downed/staggered states.
+  - Added **4-Axis Dodge Dash** (`TriggerDodgeDash` on `LeftShift`, `RightShift`, `K`, `RightMouseButton`, or `DodgeAction`) with `0.22s` invulnerability frames (`IsInvulnerable()`), clean horizontal dash impulse along the active movement/aim octant, and procedural squash/hop stride frames.
+  - Added **Contextual Interaction & Dungeon Progression Loop** (`TriggerInteract` on `F`, `E`, or `InteractAction`): unlocks `AMajorLootVaultActor` vaults with seeded rewards (`+120` gold, high-tier relic item, `+25 HP` / `+30% Battery`), purchases seeded supplies & upgrades sensory perks at `AVendorActor` stalls (`Item_Lens_DarkVision`, `Item_Resonator_AcuteHearing`, `Item_Vial_ScentTracer`), and descends unlocked Vaults into the next deterministic procedural floor (`ADungeoneerGameMode::AdvanceToNextDungeonFloor()`).
+  - Added player **Hit Stagger** knockback/shake and **Downed Respawn** flow (auto-revives with `65%` HP / `>= 50%` Battery back at the floor's `EntrySpawnLocation` without hard-locking runs).
+- **Enemy Hit Feedback, Knockback & Slay Rewards (`UZombieSpatialSubsystem`, `AZombieBase`, `AZombieFastThrower`)**:
+  - Added `UZombieSpatialSubsystem::ApplyMeleeArcDamage` (`GetTrackedZombieCount`, `GetTrackedZombieAt`) with zero `Tick` allocations or `GetAllActorsOfClass` calls.
+  - Added `AZombieBase::TriggerHitFeedback` (knockback impulse, bright white hit flash, scale punch) and death collapse (`DeathHideCountdown = 0.65s`), granting gold (`+25g` Exploder / `+35g` Fast Thrower) and `+8%` flashlight battery siphon to the slaying hero (`RegisterEnemySlain`).
+- **Live Split-Screen Combat HUD & Floor Loop (`UDungeoneerPlayerHUDWidget`, `ADungeoneerGameMode`)**:
+  - Extended `UDungeoneerPlayerHUDWidget` with `Txt_CombatAndLoopReadout` (`FLOOR N | GOLD X | KILLS Y | [READY/SLASH!/DODGE!/STAGGER/DOWNED]`) and contextual `Txt_InteractHint` (`[F] UNLOCK TERMINAL LOOT VAULT`, `[F] DESCEND TO NEXT FLOOR`, `[F] BUY SUPPLY FROM VENDOR`).
+  - Wired `ADungeoneerGameMode::EnterLiveDungeonFromMenu` to attach per-`ULocalPlayer` `ActivePlayerHUDWidgets` cleanly when entering the dungeon and added `ADungeoneerGameMode::AdvanceToNextDungeonFloor()` (`Floor N -> N+1`, deterministic seed progression, `RestingGroundBounds.Reset()`, encounter cleanup & respawn).
+
+### Verified
+- Expanded `Source/DarkDungeoneer/Private/Tests/DungeoneerVerificationSpecs.cpp` with `DarkDungeoneer.Gameplay.CombatDodgeVaultAndFloorLoop` verifying directional melee cone cleave, out-of-cone immunity, kill gold/battery rewards, dodge i-frames blocking incoming damage, HUD Floor/Gold/Kills telemetry, and `AdvanceToNextDungeonFloor()` Floor `1 -> 2` rebuilding.
+- `python scripts/verify_architecture_invariants.py` passed (`85` files verified, zero `Tick` allocations, zero banned symbols, math invariants & `AssetManifest.json` SHA-256 valid).
+- `DarkDungeoneerEditor` (`Win64 Development`) and `DarkDungeoneer` (`Win64 Development`, `DarkDungeoneer.exe`) compiled cleanly via `UnrealBuildTool`.
+- All `9` headless UE `5.8.2` automation tests passed (`UE_TEST_EXIT=0`, `TEST COMPLETE. EXIT CODE: 0`).
 
 ---
 
