@@ -4,21 +4,29 @@
   "TexelDensityStandard": "64 px / 100 UU",
   "Assets": {
     "Rig_Hero": {
-      "Timestamp": "2026-11-15T05:01:42.142779+00:00",
-      "Provenance": "ProceduralSynthesis-hero-v1",
+      "Timestamp": "2026-11-15T07:45:43.197077+00:00",
+      "Provenance": "ProceduralSynthesis-hero-v2",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/Hero/Rig_Hero_D.png": {
-          "SHA256": "f74ffb087b47ebd7a3413d5e676f38834eb9579fb30dd21087661fcfd07269a8",
-          "Bytes": 2939
+          "SHA256": "6be167b8845d3b027afa8f9bf07ab9fb1eb56758394d084e44088ffc1da5a29b",
+          "Bytes": 2515
         },
         "Art/Rigs/Hero/Rig_Hero_N.png": {
-          "SHA256": "486bee6417991a555f940526280b34cdd3f30944597f9f8d382aa95331671106",
-          "Bytes": 6693
+          "SHA256": "b5a1435a0328bdcf78c380501ce96956d375b1130d5c7f9ec8938ce550fdff26",
+          "Bytes": 10116
+        },
+        "Art/Rigs/Hero/Rig_Hero_E.png": {
+          "SHA256": "dc6d3242f6143e177e58d0d0c41cd353e5e70c59d026e2061299a20d0dbc1df0",
+          "Bytes": 436
         },
         "Art/Rigs/Hero/Rig_Hero_ORM.png": {
-          "SHA256": "bcf6225fa04450b48a9da26620c492f76aee1239a7fcf66898346ddab1d476f1",
-          "Bytes": 2771
+          "SHA256": "407521ce532b7aff9c551885b9ac284d8b36fffe12350dad56fbc735e5f4d135",
+          "Bytes": 2443
+        },
+        "Art/Rigs/Hero/AtlasMetadata.json": {
+          "SHA256": "d492112adf4a55646d71c9b10852eab2b00d2dcee9b4cb9f1a0fecec5a7ffcde",
+          "Bytes": 8252
         },
         "Art/Rigs/Hero/rig_sockets.json": {
           "SHA256": "28686bbe6cac98875999996f2366ec309baeb4f637d22c7fc6985b414f76872a",
@@ -27,21 +35,29 @@
       }
     },
     "Rig_Exploder": {
-      "Timestamp": "2026-11-15T05:01:47.215628+00:00",
-      "Provenance": "ProceduralSynthesis-exploder-v1",
+      "Timestamp": "2026-11-15T07:45:43.870656+00:00",
+      "Provenance": "ProceduralSynthesis-exploder-v2",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/Exploder/Rig_Exploder_D.png": {
-          "SHA256": "044dec21fea7c3a26b569e7036068c8f759b2d85bd7a4d0d5cec6f3795a14856",
-          "Bytes": 3804
+          "SHA256": "f30aef83290d5979c4e485eaf952aa91e72bc49af42567be200c28370ec8528e",
+          "Bytes": 3603
         },
         "Art/Rigs/Exploder/Rig_Exploder_N.png": {
-          "SHA256": "9e17c62d130cbf1542860519f25c20bf3aa82db10380ab19754cd020c4a8baf2",
-          "Bytes": 9897
+          "SHA256": "52d4e956c84eeb7b94d197df0c2b668022a43ed8806c83030e44d40af75bb086",
+          "Bytes": 14903
+        },
+        "Art/Rigs/Exploder/Rig_Exploder_E.png": {
+          "SHA256": "2ca3998b115a67521db7f14f620c7e8e575c0cc839c39240d6b675c06ea08d64",
+          "Bytes": 1492
         },
         "Art/Rigs/Exploder/Rig_Exploder_ORM.png": {
-          "SHA256": "1ea3e5f0b295aafbac793fac8b07fa18aaa4ebed34cb884317c1f4f37b6399ad",
-          "Bytes": 3528
+          "SHA256": "cfbd93377242ffc16faf8739085903886dd8296223098edecc29c147c67832da",
+          "Bytes": 3545
+        },
+        "Art/Rigs/Exploder/AtlasMetadata.json": {
+          "SHA256": "5bb75f635a81e3c1390e3541c27eb9b08922bcea5b56d5df8946d62f378e173e",
+          "Bytes": 8256
         },
         "Art/Rigs/Exploder/rig_sockets.json": {
           "SHA256": "6aa4e65349ee8585c5bec03285fe38d6f6c04df7148d746361d687be10237c7d",
@@ -50,21 +66,29 @@
       }
     },
     "Rig_Thrower": {
-      "Timestamp": "2026-11-15T05:01:47.892754+00:00",
-      "Provenance": "ProceduralSynthesis-thrower-v1",
+      "Timestamp": "2026-11-15T07:45:44.527365+00:00",
+      "Provenance": "ProceduralSynthesis-thrower-v2",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/Thrower/Rig_Thrower_D.png": {
-          "SHA256": "62f87dbb4da99aebf936e719f1bc109d203d17f8a03ed44f63e0cbe40238f46e",
-          "Bytes": 3287
+          "SHA256": "f9a639aa3b05a9f7e52b9c77157869b82adb5fc85686e62a2197ef2dae7795de",
+          "Bytes": 2674
         },
         "Art/Rigs/Thrower/Rig_Thrower_N.png": {
-          "SHA256": "0f45811c34d26e3ebe477ad63d2c95e5f0cd4968d6779bdcf8ba7488dae71291",
-          "Bytes": 7588
+          "SHA256": "51e7e217f98f6eee94f96ae0700a8b002b2400b1805d682c687a0a845e62d528",
+          "Bytes": 9859
+        },
+        "Art/Rigs/Thrower/Rig_Thrower_E.png": {
+          "SHA256": "cfe6712095e32b2ac1e92e19380d0f181cc00eb6bfc10bddf030db800079e9ee",
+          "Bytes": 884
         },
         "Art/Rigs/Thrower/Rig_Thrower_ORM.png": {
-          "SHA256": "e5ee4ceace26248bf99883305744987170a5be7c595fa28682e68e055b280d62",
-          "Bytes": 3275
+          "SHA256": "e1cb7006c19261f1464176d86997f08b63ef42c6517e67e049abe3d9b1203463",
+          "Bytes": 2874
+        },
+        "Art/Rigs/Thrower/AtlasMetadata.json": {
+          "SHA256": "9a2950c6de30057442ce9a04c5354ac3f7adba81e69cf2b53e188a5c8e93d2d9",
+          "Bytes": 8255
         },
         "Art/Rigs/Thrower/rig_sockets.json": {
           "SHA256": "9397dabceafee0cec5611ae4c0584d915dbc9e95c8f2c761322e4be478a9454a",
@@ -73,21 +97,29 @@
       }
     },
     "Rig_DungeoneerHero_Raw": {
-      "Timestamp": "2026-11-15T05:03:16.792100+00:00",
+      "Timestamp": "2026-11-15T07:45:47.411602+00:00",
       "Provenance": "CC0-External-Remixed",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/DungeoneerHero/Rig_DungeoneerHero_Raw_D.png": {
-          "SHA256": "6e38a888b7f5bc2b247b41bf7da6d848c3fa615d2cfc87952dab72ce754ac7bb",
-          "Bytes": 778836
+          "SHA256": "29a18c2de1b3e242f21b67722ace474735d45ba91d0c1a398ab16ec8ee5e9e32",
+          "Bytes": 188018
         },
         "Art/Rigs/DungeoneerHero/Rig_DungeoneerHero_Raw_N.png": {
-          "SHA256": "cbd0f63f83f0ad571585f7eca90adb8efbeb9fc2970bbc6d0a40a6483f8b44d7",
-          "Bytes": 557504
+          "SHA256": "84b64e3e53d1e54ad44f969a213cc0c9086fcf1e000c197c27eafbe45b884528",
+          "Bytes": 362193
+        },
+        "Art/Rigs/DungeoneerHero/Rig_DungeoneerHero_Raw_E.png": {
+          "SHA256": "554d6b215b2bceb980d7d67e0c9bccb1227c3b9ba7442156c386f13fd8787ecc",
+          "Bytes": 10225
         },
         "Art/Rigs/DungeoneerHero/Rig_DungeoneerHero_Raw_ORM.png": {
-          "SHA256": "c037edc65a1c620e5bce25ef4cbeaaa0fa60da4491a5afc0e2ce1d8ff2778506",
-          "Bytes": 161987
+          "SHA256": "5f89a13c70a852772dea0293b434780f7aef7f716906c8ac7bb627c19d5a6ccc",
+          "Bytes": 143811
+        },
+        "Art/Rigs/DungeoneerHero/AtlasMetadata.json": {
+          "SHA256": "b39ee637908b744b20a64b9374707522e79fcd0b4b5823d8f51a33e7ca77349e",
+          "Bytes": 8308
         },
         "Art/Rigs/DungeoneerHero/rig_sockets.json": {
           "SHA256": "a4548d0245245b9bd0222cdde6daf7cdde9ec56e19f006275809bbf49898d774",
@@ -96,21 +128,29 @@
       }
     },
     "Rig_ZombieExploder_Raw": {
-      "Timestamp": "2026-11-15T05:03:20.431757+00:00",
+      "Timestamp": "2026-11-15T07:45:50.475309+00:00",
       "Provenance": "CC0-External-Remixed",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/ZombieExploder/Rig_ZombieExploder_Raw_D.png": {
-          "SHA256": "a06d28e49aad3a68e345590acadcdc189b045d1c182df3a37cb0495354e39b74",
-          "Bytes": 872322
+          "SHA256": "8a994a6f958da82a1f8df8331284cc87c2dc83bafd3a932661a6673a69f0dc0d",
+          "Bytes": 397221
         },
         "Art/Rigs/ZombieExploder/Rig_ZombieExploder_Raw_N.png": {
-          "SHA256": "96431f6cff6a12acce8986e7535132e9cab29faebab11bb51b4803d6ab382680",
-          "Bytes": 884956
+          "SHA256": "2de64af7514aa585cc7a6bb9dd9f20e5b11feeba5da84123f23868abd325168a",
+          "Bytes": 565806
+        },
+        "Art/Rigs/ZombieExploder/Rig_ZombieExploder_Raw_E.png": {
+          "SHA256": "969a14c544e0fe49d4f29f2f4253555b69c78237276e1b6927b2dfd4bda0c1c1",
+          "Bytes": 78644
         },
         "Art/Rigs/ZombieExploder/Rig_ZombieExploder_Raw_ORM.png": {
-          "SHA256": "ddeed7714e89517d8cdf65dbb8d569c7f76887947d4e94fd1f3f927abc3f8fe2",
-          "Bytes": 259010
+          "SHA256": "387bf80f3d2e0372d804532730bb0fba5fae2b3a0b0e66eb3b7a6a81b43e7cb1",
+          "Bytes": 248199
+        },
+        "Art/Rigs/ZombieExploder/AtlasMetadata.json": {
+          "SHA256": "b8d7ef047c39631da20cad5c1bc739f512992cda5bad2995cd3b1d4fc7d390e0",
+          "Bytes": 8308
         },
         "Art/Rigs/ZombieExploder/rig_sockets.json": {
           "SHA256": "9f0c92e2720a4ba056de8f35892c9495a05a10b6f681fa7c988a72fe7e478a42",
@@ -119,21 +159,29 @@
       }
     },
     "Rig_ZombieFastThrower_Raw": {
-      "Timestamp": "2026-11-15T05:03:23.783394+00:00",
+      "Timestamp": "2026-11-15T07:45:54.023578+00:00",
       "Provenance": "CC0-External-Remixed",
       "ComplianceVerified": true,
       "Files": {
         "Art/Rigs/ZombieFastThrower/Rig_ZombieFastThrower_Raw_D.png": {
-          "SHA256": "ec1e286ee5a38a3e4dd0ae7ac7061c8a80c7fefa0f4ef2e03af1287d56e02977",
-          "Bytes": 921320
+          "SHA256": "f4ee08a355bf0c1dee0b3cf08140853447de66879cdbaa125faffd2cc67cdf92",
+          "Bytes": 317345
         },
         "Art/Rigs/ZombieFastThrower/Rig_ZombieFastThrower_Raw_N.png": {
-          "SHA256": "26221cecca5682b4b5167649098933522039737756fb8563b42f8810abf56ee9",
-          "Bytes": 780096
+          "SHA256": "18b89ddee0aafc671f7398e577b76778ab9bb3d401c25ab7677e634b42c0cf18",
+          "Bytes": 490561
+        },
+        "Art/Rigs/ZombieFastThrower/Rig_ZombieFastThrower_Raw_E.png": {
+          "SHA256": "f3c839cce7974855e4b08d4e5e2c185dda270c80f5a781c19969d2d9d2b42485",
+          "Bytes": 30103
         },
         "Art/Rigs/ZombieFastThrower/Rig_ZombieFastThrower_Raw_ORM.png": {
-          "SHA256": "ccda6ba5a30515e003c732b9dea379933da13841e64f756b6a010cebb3420fd3",
-          "Bytes": 251137
+          "SHA256": "db8759e0e2a5240cc6db7aa976ac5506ed608dc861d06c9ba8cb603d3d2b8e4c",
+          "Bytes": 222059
+        },
+        "Art/Rigs/ZombieFastThrower/AtlasMetadata.json": {
+          "SHA256": "83f0555ed804c28e96908472e79815f6cd94c71ec0864a9b4bab3b39c27fe94d",
+          "Bytes": 8310
         },
         "Art/Rigs/ZombieFastThrower/rig_sockets.json": {
           "SHA256": "04f558fdbb6470c4d313bd991d9bf15c091c4294169074715dd743006c990b99",
