@@ -5,7 +5,12 @@
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieBase.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
+#include "Dungeon/DungeoneerTileMapInstancer.h"
+#include "Dungeon/MirrorLightBounceComponent.h"
 #include "Dungeon/MirrorMazeActors.h"
+#include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Audio/GibberishSpeechComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
 #include "Social/TradeManagerComponent.h"
@@ -455,6 +460,168 @@ bool FDungeoneer25DAnimOrchestratorTest::RunTest(const FString& Parameters)
 		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Rigs/Hero/AtlasMetadata.json")));
 	TestTrue(TEXT("DungeoneerHero AtlasMetadata.json exists on disk"),
 		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Rigs/DungeoneerHero/AtlasMetadata.json")));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerTileMapInstancerAndMirrorBounceTest,
+	"DarkDungeoneer.Dungeon.TileMapInstancerCutawayAndMirrorBounce",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDungeoneerTileMapInstancerAndMirrorBounceTest::RunTest(const FString& Parameters)
+{
+	// 1. Law of Reflection unit check: R = I - 2 * (I . N) * N
+	{
+		const FVector I(1.0, -1.0, 0.0);
+		const FVector N(0.0, 1.0, 0.0);
+		const FVector R = UMirrorLightBounceComponent::ComputeReflectedVector(I, N);
+		const FVector Expected = FVector(1.0, 1.0, 0.0).GetSafeNormal();
+		TestTrue(TEXT("Specular reflection reflects South-East ray across North normal to North-East"),
+			R.Equals(Expected, 1e-4));
+	}
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Transient UWorld created for TileMapInstancer & MirrorBounce test"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	TestNotNull(TEXT("UDungeonGeneratorSubsystem present"), GenSub);
+	const FDungeonFloorGraph Graph = GenSub->GenerateFloorGraph(1, 4242);
+
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	TestNotNull(TEXT("ADungeoneerTileMapInstancer spawned"), Instancer);
+	Instancer->BuildDungeonFromFloorGraph(Graph);
+
+	UHierarchicalInstancedStaticMeshComponent* WallHISM = Instancer->GetWallHISM();
+	UHierarchicalInstancedStaticMeshComponent* MirrorHISM = Instancer->GetMirrorHISM();
+	UHierarchicalInstancedStaticMeshComponent* BreakableHISM = Instancer->GetBreakableHISM();
+	TestNotNull(TEXT("WallHISM initialized"), WallHISM);
+	TestNotNull(TEXT("MirrorHISM initialized"), MirrorHISM);
+	TestNotNull(TEXT("BreakableHISM initialized"), BreakableHISM);
+
+	TestTrue(TEXT("WallHISM preserves bCastHiddenShadow = true"), static_cast<bool>(WallHISM->bCastHiddenShadow));
+	TestTrue(TEXT("MirrorHISM carries MirrorReflective tag"), MirrorHISM->ComponentHasTag(TEXT("MirrorReflective")));
+	TestTrue(TEXT("HISM floor tiles & 4-axis walls populated"), Instancer->GetFloorHISM()->GetInstanceCount() >= 9 && WallHISM->GetInstanceCount() >= 8);
+
+	// 2. Per-viewport South-Wall Cutaway check
+	int32 SouthWallIdx = INDEX_NONE;
+	int32 NorthWallIdx = INDEX_NONE;
+	for (int32 i = 0; i < Instancer->GetWallEntries().Num(); ++i)
+	{
+		const FDungeoneerWallInstanceEntry& E = Instancer->GetWallEntries()[i];
+		if (SouthWallIdx == INDEX_NONE && E.WallAxis == EDungeoneerWallAxis::South)
+		{
+			SouthWallIdx = i;
+		}
+		else if (NorthWallIdx == INDEX_NONE && E.WallAxis == EDungeoneerWallAxis::North)
+		{
+			NorthWallIdx = i;
+		}
+	}
+	TestTrue(TEXT("Found orthogonal South and North wall instances"), SouthWallIdx != INDEX_NONE && NorthWallIdx != INDEX_NONE);
+
+	const FDungeoneerWallInstanceEntry& SouthWall = Instancer->GetWallEntries()[SouthWallIdx];
+	const FDungeoneerWallInstanceEntry& NorthWall = Instancer->GetWallEntries()[NorthWallIdx];
+	// Camera placed outside South wall looking through South wall toward player center
+	const FVector CameraLoc = SouthWall.WorldCenter + FVector(0.0, -350.0, 220.0);
+	const FVector PlayerLoc = SouthWall.WorldCenter + FVector(0.0, 350.0, -80.0);
+	const int32 CutawayCount = Instancer->EvaluateCameraToPlayerSegmentCutaway(CameraLoc, PlayerLoc);
+	TestTrue(TEXT("South wall cutaway activated between camera and player"), CutawayCount >= 1);
+
+	const int32 WallStride = WallHISM->NumCustomDataFloats;
+	TestTrue(TEXT("Occluded South wall wrote CustomData[0] == 1.0f"),
+		FMath::IsNearlyEqual(WallHISM->PerInstanceSMCustomData[SouthWall.HISMInstanceIndex * WallStride], 1.0f, 1e-4f));
+	TestTrue(TEXT("Non-occluded North wall remained CustomData[0] == 0.0f"),
+		FMath::IsNearlyEqual(WallHISM->PerInstanceSMCustomData[NorthWall.HISMInstanceIndex * WallStride], 0.0f, 1e-4f));
+	TestTrue(TEXT("bCastHiddenShadow stayed true during cutaway"), static_cast<bool>(WallHISM->bCastHiddenShadow));
+
+	// Move camera ray away so South wall reverts cleanly to full height
+	Instancer->EvaluateCameraToPlayerSegmentCutaway(FVector(50000.0, 50000.0, 600.0), FVector(50000.0, 50100.0, 100.0));
+	TestTrue(TEXT("Unoccluded South wall reverted CustomData[0] to 0.0f"),
+		FMath::IsNearlyEqual(WallHISM->PerInstanceSMCustomData[SouthWall.HISMInstanceIndex * WallStride], 0.0f, 1e-4f));
+
+	// 3. Mirror Light-Bounce + Illusion Seam Reveal check
+	const int32 SolidIdx = Instancer->RegisterMirrorInstance(
+		FVector(0.0, 400.0, 110.0),
+		FVector(0.0, -1.0, 0.0),
+		120.0f,
+		120.0f,
+		false,
+		0);
+	const int32 IllusionIdx = Instancer->RegisterMirrorInstance(
+		FVector(400.0, 0.0, 110.0),
+		FVector(-1.0, 0.0, 0.0),
+		120.0f,
+		120.0f,
+		true,
+		4);
+	TestTrue(TEXT("Solid & Illusory mirror fixtures registered"), SolidIdx != INDEX_NONE && IllusionIdx != INDEX_NONE);
+
+	AActor* BounceHost = TestWorld->SpawnActor<AActor>();
+	USceneComponent* BounceRoot = NewObject<USceneComponent>(BounceHost);
+	BounceHost->SetRootComponent(BounceRoot);
+	BounceRoot->RegisterComponent();
+	UMirrorLightBounceComponent* BounceComp = NewObject<UMirrorLightBounceComponent>(BounceHost);
+	BounceComp->RegisterComponent();
+	BounceComp->EnsureBounceLightInitialized();
+	BounceComp->SetTargetTileMapInstancer(Instancer);
+
+	// Ray starts at (-400, 0, 110), shoots along (+1, +1, 0) -> strikes solid mirror at (0, 400, 110) normal (0, -1, 0) -> reflects (+1, -1, 0) toward illusion mirror at (400, 0, 110)!
+	const FMirrorLightBounceResult BounceRes = BounceComp->EvaluateFlashlightBounce(
+		FVector(-400.0, 0.0, 110.0),
+		FVector(1.0, 1.0, 0.0).GetSafeNormal(),
+		12000.0f);
+
+	TestTrue(TEXT("Flashlight struck MirrorReflective plane and bounced"), BounceRes.bDidBounce);
+	TestTrue(TEXT("Reflected beam points along (+1, -1, 0) normalized"),
+		BounceRes.ReflectedDirection.Equals(FVector(1.0, -1.0, 0.0).GetSafeNormal(), 1e-3));
+	TestNotNull(TEXT("Pre-allocated secondary ReflectedSpotLight exists"), BounceComp->GetReflectedSpotLight());
+	TestTrue(TEXT("ReflectedSpotLight became visible on bounce"),
+		BounceComp->GetReflectedSpotLight()->GetVisibleFlag());
+	TestTrue(TEXT("Reflected corridor light revealed Phantasm illusion seam"), BounceRes.bRevealedIllusionSeam);
+
+	const FDungeoneerMirrorInstanceEntry& IllusionEntry = Instancer->GetMirrorEntries()[IllusionIdx];
+	const int32 MirrorStride = MirrorHISM->NumCustomDataFloats;
+	TestTrue(TEXT("Revealed Phantasm mirror wrote CustomData[0] == 1.0f"),
+		FMath::IsNearlyEqual(MirrorHISM->PerInstanceSMCustomData[IllusionEntry.HISMInstanceIndex * MirrorStride], 1.0f, 1e-4f));
+
+	// 4. Breakable Noise Emitter check -> Shattered UV swap + Acute Hearing NoiseEvent
+	const int32 BreakableIdx = Instancer->RegisterBreakableInstance(
+		FVector(900.0, 900.0, 45.0),
+		0,
+		2,
+		90.0f,
+		1.45f);
+	TestTrue(TEXT("Breakable barrel instance registered"), BreakableIdx != INDEX_NONE);
+
+	const int32 ShatteredCount = Instancer->EvaluateEntityStepOnBreakables(FVector(910.0, 905.0, 45.0), 1.45f, 90.0f);
+	TestEqual(TEXT("Stepping onto breakable shattered exactly 1 instance"), ShatteredCount, 1);
+
+	const FDungeoneerBreakableInstanceEntry& BrokenEntry = Instancer->GetBreakableEntries()[BreakableIdx];
+	const int32 BreakStride = BreakableHISM->NumCustomDataFloats;
+	TestTrue(TEXT("Breakable swapped CustomData[1] to shattered UV cell 2"),
+		FMath::IsNearlyEqual(BreakableHISM->PerInstanceSMCustomData[BrokenEntry.HISMInstanceIndex * BreakStride + 1], 2.0f, 1e-4f));
+
+	const UDungeoneerSensoryWorldSubsystem* SensorySub = TestWorld->GetSubsystem<UDungeoneerSensoryWorldSubsystem>();
+	TestNotNull(TEXT("SensoryWorldSubsystem active for Acute Hearing pulse"), SensorySub);
+	FDungeoneerNoiseEvent OutNoise;
+	const bool bHasNoise = SensorySub->QueryStrongestActivePulse(FVector(950.0, 900.0, 45.0), 1.0f, OutNoise);
+	TestTrue(TEXT("Breakable emitted Acute Hearing NoiseEvent into SensoryWorldSubsystem"), bHasNoise);
+	TestTrue(TEXT("Emitted NoiseEvent recorded origin at breakable barrel"),
+		OutNoise.WorldOrigin.Equals(FVector(900.0, 900.0, 45.0), 5.0));
+
+	// 5. Deliverable 1 Dungeon Pipeline files on disk
+	TestTrue(TEXT("ATLAS_Dungeon_Floors_4x4_H.png exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_H.png")));
+	TestTrue(TEXT("ATLAS_Dungeon_Floors_4x4_R.png exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png")));
+	TestTrue(TEXT("PROP_Mirror_Palace_Maze_4x4_ORM.png exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_ORM.png")));
 
 	TestWorld->DestroyWorld(false);
 	return true;

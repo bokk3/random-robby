@@ -105,6 +105,11 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Core/DungeoneerAssetBootstrapSubsystem.cpp",
     "Source/DarkDungeoneer/Public/Rendering/25DAnimOrchestratorComponent.h",
     "Source/DarkDungeoneer/Private/Rendering/25DAnimOrchestratorComponent.cpp",
+    # Task Group 9 (v0.9.1 Modular Dungeon Instancing, Cutaway Occlusion & Mirror Light-Bounce)
+    "Source/DarkDungeoneer/Public/Dungeon/DungeoneerTileMapInstancer.h",
+    "Source/DarkDungeoneer/Private/Dungeon/DungeoneerTileMapInstancer.cpp",
+    "Source/DarkDungeoneer/Public/Dungeon/MirrorLightBounceComponent.h",
+    "Source/DarkDungeoneer/Private/Dungeon/MirrorLightBounceComponent.cpp",
 ]
 
 
@@ -232,6 +237,16 @@ def check_assets_and_manifest() -> list[str]:
         wavs = list(v_dir.glob("syl_*.wav")) if v_dir.exists() else []
         if len(wavs) != 24:
             errors.append(f"Expected 24 phoneme grains in {v_dir}, found {len(wavs)}")
+
+    dungeon_root = ROOT / "Content/Art/Dungeon"
+    for suffix in (
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_H.png",
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png",
+        "PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_ORM.png",
+        "PROP_Breakables_And_Traps_4x4/AtlasMetadata.json",
+    ):
+        if not (dungeon_root / suffix).exists():
+            errors.append(f"MISSING dungeon output: Content/Art/Dungeon/{suffix}")
 
     return errors
 
