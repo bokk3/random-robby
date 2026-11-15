@@ -450,6 +450,114 @@
           "AssetType": "HeroVoiceStem"
         }
       }
+    },
+    "ATLAS_Dungeon_Floors_4x4": {
+      "Timestamp": "2026-11-15T08:08:00.795022+00:00",
+      "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_D.png": {
+          "SHA256": "5eb20289f8796820ff0bf08adcdcdcf713bf6c09fd806a47999d4297424c77bd",
+          "Bytes": 8741
+        },
+        "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_N.png": {
+          "SHA256": "608223945aace811a66961b2483eaf6e654b073a98d0e8c8e50f5211d509cff8",
+          "Bytes": 17774
+        },
+        "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_H.png": {
+          "SHA256": "86b40555a146eddad1a279300a4cbee23a5282f739dc723452275bd6b814ce38",
+          "Bytes": 5593
+        },
+        "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png": {
+          "SHA256": "e497e1418108db1352793e13e907f8761d6c9c484ec7d1e909125cc18dbc98ee",
+          "Bytes": 3858
+        },
+        "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/AtlasMetadata.json": {
+          "SHA256": "01c872a025b05780e19c0de1a890c8dcae8c61e1a9a43b11404dab397b3a9d69",
+          "Bytes": 8252
+        }
+      }
+    },
+    "PROP_Dungeon_Walls_And_Cutaways_4x4": {
+      "Timestamp": "2026-11-15T08:08:01.107449+00:00",
+      "Provenance": "ProceduralSynthesis-PROP_Dungeon_Walls_And_Cutaways_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_D.png": {
+          "SHA256": "27436bd9f9e1c8997a76703d0428d334cc0687ad2350f06176861109c4476310",
+          "Bytes": 4233
+        },
+        "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_N.png": {
+          "SHA256": "89ff65685dfc827080bd8e3495d701dd4c197ed722d3eba1f6088287732899ca",
+          "Bytes": 9026
+        },
+        "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_ORM.png": {
+          "SHA256": "9774dc515b78123fed90a199c4354d1326700f0c0653bde68343df48a29434a2",
+          "Bytes": 4480
+        },
+        "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_E.png": {
+          "SHA256": "f6354718150dc4d116da7ab2f38c3745ca8df875a75785af25a6b06d4bc5d3d9",
+          "Bytes": 948
+        },
+        "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/AtlasMetadata.json": {
+          "SHA256": "d8a0373967e604951380db078aad6266aa6ddabbca6a35ba6fd69e09e1ee0320",
+          "Bytes": 9502
+        }
+      }
+    },
+    "PROP_Mirror_Palace_Maze_4x4": {
+      "Timestamp": "2026-11-15T08:08:01.374927+00:00",
+      "Provenance": "ProceduralSynthesis-PROP_Mirror_Palace_Maze_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_D.png": {
+          "SHA256": "d988d059157eded98ee70f12eaa25e268f1ab16f1321df6551382d205b919580",
+          "Bytes": 4579
+        },
+        "Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_N.png": {
+          "SHA256": "d6daaa183c3d5e0b1c4fe9435bd2ed7ad66ea84d4629d0275a45ca645d7d5865",
+          "Bytes": 8025
+        },
+        "Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_ORM.png": {
+          "SHA256": "ac6c501c14d99f418a734038917d486cec618f5c4d1b717a7d0608a368b02781",
+          "Bytes": 4895
+        },
+        "Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_E.png": {
+          "SHA256": "6d5ab4d76ef7a8ad1165ccf34198a82fdb3f6830421f6b5b600a1e733791eeb0",
+          "Bytes": 1121
+        },
+        "Art/Dungeon/PROP_Mirror_Palace_Maze_4x4/AtlasMetadata.json": {
+          "SHA256": "7b74df551532c9a4157f39069b8541d70d57aa30d8253a178075500f3676cff9",
+          "Bytes": 9518
+        }
+      }
+    },
+    "PROP_Breakables_And_Traps_4x4": {
+      "Timestamp": "2026-11-15T08:08:01.659722+00:00",
+      "Provenance": "ProceduralSynthesis-PROP_Breakables_And_Traps_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/PROP_Breakables_And_Traps_4x4/PROP_Breakables_And_Traps_4x4_D.png": {
+          "SHA256": "b1e60dd75a9f2a44a2067eda9c0b3b1d012f293508294912032d77d4c52473ef",
+          "Bytes": 3648
+        },
+        "Art/Dungeon/PROP_Breakables_And_Traps_4x4/PROP_Breakables_And_Traps_4x4_N.png": {
+          "SHA256": "2591f99eb6abd745cebf2f090a0c6c0fa250dd03fc097fcc62cf7c0ecfefb3c1",
+          "Bytes": 10400
+        },
+        "Art/Dungeon/PROP_Breakables_And_Traps_4x4/PROP_Breakables_And_Traps_4x4_ORM.png": {
+          "SHA256": "930b23213a10a6a862b28a9fdbc017744c16f260e2635757199c59e9a0483ee7",
+          "Bytes": 4151
+        },
+        "Art/Dungeon/PROP_Breakables_And_Traps_4x4/PROP_Breakables_And_Traps_4x4_E.png": {
+          "SHA256": "7e79974665fa6e229349fe0657ea81d9d7ec66c0a67dcddd6f0d4a821b6f9ca7",
+          "Bytes": 1271
+        },
+        "Art/Dungeon/PROP_Breakables_And_Traps_4x4/AtlasMetadata.json": {
+          "SHA256": "31f94cd4eafb87a9f395124613e694c14e368520f0764e86af0df320d0f18182",
+          "Bytes": 9492
+        }
+      }
     }
   },
   "assets": [

@@ -1,0 +1,61 @@
+{
+  "ManifestVersion": "1.0",
+  "EngineTarget": "Unreal Engine 5.8",
+  "TexelDensityStandard": "64 px / 100 UU",
+  "Assets": {
+    "ATLAS_Dungeon_Floors_4x4": {
+      "Timestamp": "2026-11-15T08:23:17.984205+00:00",
+      "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_D.png": {
+          "SHA256": "5eb20289f8796820ff0bf08adcdcdcf713bf6c09fd806a47999d4297424c77bd",
+          "Bytes": 8741
+        },
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_N.png": {
+          "SHA256": "608223945aace811a66961b2483eaf6e654b073a98d0e8c8e50f5211d509cff8",
+          "Bytes": 17774
+        },
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_H.png": {
+          "SHA256": "86b40555a146eddad1a279300a4cbee23a5282f739dc723452275bd6b814ce38",
+          "Bytes": 5593
+        },
+        "ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png": {
+          "SHA256": "e497e1418108db1352793e13e907f8761d6c9c484ec7d1e909125cc18dbc98ee",
+          "Bytes": 3858
+        },
+        "ATLAS_Dungeon_Floors_4x4/AtlasMetadata.json": {
+          "SHA256": "01c872a025b05780e19c0de1a890c8dcae8c61e1a9a43b11404dab397b3a9d69",
+          "Bytes": 8252
+        }
+      }
+    },
+    "PROP_Mirror_Palace_Maze_4x4": {
+      "Timestamp": "2026-11-15T08:23:18.316668+00:00",
+      "Provenance": "ProceduralSynthesis-PROP_Mirror_Palace_Maze_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_D.png": {
+          "SHA256": "d988d059157eded98ee70f12eaa25e268f1ab16f1321df6551382d205b919580",
+          "Bytes": 4579
+        },
+        "PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_N.png": {
+          "SHA256": "d6daaa183c3d5e0b1c4fe9435bd2ed7ad66ea84d4629d0275a45ca645d7d5865",
+          "Bytes": 8025
+        },
+        "PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_ORM.png": {
+          "SHA256": "ac6c501c14d99f418a734038917d486cec618f5c4d1b717a7d0608a368b02781",
+          "Bytes": 4895
+        },
+        "PROP_Mirror_Palace_Maze_4x4/PROP_Mirror_Palace_Maze_4x4_E.png": {
+          "SHA256": "6d5ab4d76ef7a8ad1165ccf34198a82fdb3f6830421f6b5b600a1e733791eeb0",
+          "Bytes": 1121
+        },
+        "PROP_Mirror_Palace_Maze_4x4/AtlasMetadata.json": {
+          "SHA256": "7b74df551532c9a4157f39069b8541d70d57aa30d8253a178075500f3676cff9",
+          "Bytes": 9518
+        }
+      }
+    }
+  }
+}

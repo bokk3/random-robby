@@ -39,6 +39,8 @@ UU_PER_METER = 100.0
 UU_PER_PIXEL = UU_PER_METER / TEXELS_PER_METER  # 1.5625 UU / px
 
 CHROMA_KEY_MAGENTA = (255, 0, 255)
+PORTAL_KEY_GREEN = (0, 255, 0)
+PUDDLE_ROUGHNESS_BYTE = int(round(0.05 * 255.0))  # 13 = 0.05 specular water roughness
 
 DARK_GOTHIC_PALETTE = [
     # Shadows / Charcoals
@@ -220,6 +222,267 @@ def synthesize_archetype_sheet(archetype_name):
                 draw.point((hand_x - 1, hand_y - 1), fill=flask_hi)
 
     return img
+
+
+# -----------------------------------------------------------------------------
+# Dungeon Mode Helpers: Synthesizers, Heightmap (_H), Roughness (_R), Mirror ORM
+# -----------------------------------------------------------------------------
+def infer_dungeon_sheet_type(asset_name, requested_type="auto"):
+    """Resolves whether a dungeon sheet is seamless ATLAS_* or cutout PROP_*."""
+    if requested_type in ("atlas", "prop"):
+        return requested_type
+    upper_name = asset_name.upper()
+    if upper_name.startswith("ATLAS_"):
+        return "atlas"
+    return "prop"
+
+
+def synthesize_dungeon_sheet(sheet_key):
+    """
+    Procedurally synthesizes crisp 512x512 (128x128 per cell) 4x4 dungeon sheets
+    aligned with TO_GENERATE_DUNGEON.md standards:
+      - atlas_floors -> ATLAS_Dungeon_Floors_4x4 (borderless seamless tiles)
+      - prop_walls -> PROP_Dungeon_Walls_And_Cutaways_4x4 (#FF00FF keyed)
+      - prop_mirrors -> PROP_Mirror_Palace_Maze_4x4 (#FF00FF + #00FF00 glass panes)
+      - prop_breakables -> PROP_Breakables_And_Traps_4x4 (#FF00FF keyed)
+    """
+    if not HAS_PIL_NUMPY:
+        raise RuntimeError("Pillow and numpy are required for dungeon sheet synthesis.")
+
+    cell_size = 128
+    sheet_size = cell_size * 4
+
+    if sheet_key == "atlas_floors":
+        img = Image.new("RGBA", (sheet_size, sheet_size), (32, 34, 40, 255))
+        draw = ImageDraw.Draw(img)
+        for row in range(4):
+            for col in range(4):
+                ox = col * cell_size
+                oy = row * cell_size
+                # Base stone slab variations per cell
+                shade = 34 + ((col * 7 + row * 5) % 14)
+                draw.rectangle([ox, oy, ox + cell_size - 1, oy + cell_size - 1], fill=(shade, shade + 2, shade + 7, 255))
+
+                # Mortar stone sub-grid seams
+                for g in range(32, cell_size, 32):
+                    draw.line([(ox, oy + g), (ox + cell_size - 1, oy + g)], fill=(14, 15, 19, 255), width=2)
+                    stagger = 16 if ((g // 32) % 2 == 1) else 0
+                    vx = (ox + g + stagger) if (ox + g + stagger < ox + cell_size) else (ox + g - 16)
+                    draw.line([(vx, oy + g - 32), (vx, oy + g)], fill=(14, 15, 19, 255), width=2)
+
+                if row == 1:
+                    # Row 1 (Wet & Flooded Stone): shallow reflective puddles + drain grate
+                    px0, py0 = ox + 22 + col * 4, oy + 28
+                    px1, py1 = px0 + 68, py0 + 54
+                    draw.ellipse([px0, py0, px1, py1], fill=(10, 22, 34, 255))
+                    draw.ellipse([px0 + 6, py0 + 6, px1 - 12, py1 - 14], fill=(14, 34, 52, 255))
+                    # Iron drainage grate corner
+                    gx0, gy0 = ox + 86, oy + 16
+                    draw.rectangle([gx0, gy0, gx0 + 26, gy0 + 26], fill=(56, 62, 72, 255))
+                    for bar in range(4, 24, 5):
+                        draw.line([(gx0 + bar, gy0 + 2), (gx0 + bar, gy0 + 24)], fill=(12, 12, 16, 255), width=2)
+                elif row == 2:
+                    # Row 2 (8-Compass / Diagonal Octagonal Transitions): brass compass inlay
+                    cx, cy = ox + cell_size // 2, oy + cell_size // 2
+                    brass = (148, 122, 58, 255)
+                    draw.line([(ox + 8, cy), (ox + cell_size - 8, cy)], fill=brass, width=2)
+                    draw.line([(cx, oy + 8), (cx, oy + cell_size - 8)], fill=brass, width=2)
+                    draw.line([(ox + 16, oy + 16), (ox + cell_size - 16, oy + cell_size - 16)], fill=brass, width=2)
+                    draw.line([(ox + cell_size - 16, oy + 16), (ox + 16, oy + cell_size - 16)], fill=brass, width=2)
+                    draw.polygon([(cx, oy + 24), (ox + cell_size - 24, cy), (cx, oy + cell_size - 24), (ox + 24, cy)], outline=brass)
+                elif row == 3:
+                    # Row 3 (Hazard / Corrupted Floors): magma fissures, poison moss, glass shards
+                    if col in (0, 1):
+                        draw.line([(ox + 14, oy + 96), (ox + 58, oy + 46), (ox + 112, oy + 24)], fill=(255, 85, 0, 255), width=3)
+                        draw.line([(ox + 58, oy + 46), (ox + 88, oy + 104)], fill=(255, 195, 60, 255), width=2)
+                    elif col == 2:
+                        draw.ellipse([ox + 20, oy + 26, ox + 102, oy + 98], fill=(42, 92, 50, 255))
+                    else:
+                        draw.polygon([(ox + 28, oy + 32), (ox + 56, oy + 44), (ox + 38, oy + 68)], fill=(110, 235, 255, 255))
+                        draw.polygon([(ox + 70, oy + 62), (ox + 104, oy + 76), (ox + 82, oy + 98)], fill=(148, 162, 178, 255))
+        return img
+
+    img = Image.new("RGBA", (sheet_size, sheet_size), (255, 0, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    for row in range(4):
+        for col in range(4):
+            ox = col * cell_size
+            oy = row * cell_size
+            cx = ox + cell_size // 2
+            cy = oy + cell_size // 2
+
+            if sheet_key == "prop_walls":
+                stone_hi = (96, 108, 122, 255)
+                stone_mid = (52, 58, 68, 255)
+                stone_dark = (22, 24, 30, 255)
+                outline = (10, 10, 14, 255)
+                if row == 0:
+                    # Row 0: Tall North/Back wall segments
+                    draw.rectangle([ox + 8, oy + 12, ox + cell_size - 8, oy + cell_size - 6], fill=stone_mid, outline=outline, width=2)
+                    draw.rectangle([ox + 10, oy + 14, ox + cell_size - 10, oy + 36], fill=stone_hi)
+                    draw.line([(ox + 10, oy + 72), (ox + cell_size - 10, oy + 72)], fill=stone_dark, width=2)
+                    if col == 1:
+                        draw.ellipse([cx - 12, cy - 4, cx + 12, cy + 20], outline=(148, 162, 178, 255), width=3)
+                elif row == 1:
+                    # Row 1: South wall knee-high cutaway stubs
+                    draw.rectangle([ox + 8, oy + 76, ox + cell_size - 8, oy + cell_size - 6], fill=stone_mid, outline=outline, width=2)
+                    draw.rectangle([ox + 10, oy + 78, ox + cell_size - 10, oy + 94], fill=stone_hi)
+                elif row == 2:
+                    # Row 2: 45-degree diagonal wall wedges (NE/NW/SE/SW)
+                    if col == 0:
+                        poly = [(ox + 16, oy + cell_size - 10), (ox + cell_size - 10, oy + 16), (ox + cell_size - 10, oy + 52), (ox + 52, oy + cell_size - 10)]
+                    elif col == 1:
+                        poly = [(ox + 10, oy + 16), (ox + cell_size - 16, oy + cell_size - 10), (ox + cell_size - 52, oy + cell_size - 10), (ox + 10, oy + 52)]
+                    elif col == 2:
+                        poly = [(ox + 16, oy + 74), (ox + cell_size - 16, oy + 16), (ox + cell_size - 16, oy + 46), (ox + 46, oy + 104)]
+                    else:
+                        poly = [(ox + 16, oy + 16), (ox + cell_size - 16, oy + 74), (ox + cell_size - 46, oy + 104), (ox + 16, oy + 46)]
+                    draw.polygon(poly, fill=stone_mid, outline=outline)
+                else:
+                    # Row 3: Pillars & buttresses
+                    draw.rectangle([cx - 24, oy + 14, cx + 24, oy + cell_size - 8], fill=stone_mid, outline=outline, width=2)
+                    draw.rectangle([cx - 20, oy + 18, cx + 20, oy + 40], fill=stone_hi)
+                    if col == 3:
+                        draw.ellipse([cx - 6, oy + 48, cx + 6, oy + 62], fill=(255, 204, 0, 255))
+
+            elif sheet_key == "prop_mirrors":
+                brass = (158, 132, 62, 255)
+                iron = (32, 36, 44, 255)
+                green_portal = (0, 255, 0, 255)
+                if row == 0:
+                    # Row 0: True reflective mirrors with #00FF00 interior panes
+                    draw.rectangle([ox + 20, oy + 10, ox + cell_size - 20, oy + cell_size - 10], fill=iron, outline=brass, width=4)
+                    draw.rectangle([ox + 30, oy + 20, ox + cell_size - 30, oy + cell_size - 22], fill=green_portal)
+                elif row == 1:
+                    # Row 1: Illusory phantasm mirrors with subtle cyan rune seams + #00FF00 pane
+                    draw.rectangle([ox + 22, oy + 12, ox + cell_size - 22, oy + cell_size - 10], fill=(110, 235, 255, 255))
+                    draw.rectangle([ox + 26, oy + 16, ox + cell_size - 26, oy + cell_size - 16], fill=green_portal)
+                elif row == 2:
+                    # Row 2: Cracked / Shattered mirrors
+                    draw.rectangle([ox + 20, oy + 12, ox + cell_size - 20, oy + cell_size - 10], fill=iron, outline=brass, width=3)
+                    draw.polygon([(ox + 32, oy + 88), (cx, oy + 114), (ox + 92, oy + 96)], fill=(18, 24, 32, 255))
+                    draw.line([(ox + 30, oy + 24), (cx + 12, cy + 8), (ox + 90, oy + 86)], fill=(148, 162, 178, 255), width=2)
+                else:
+                    # Row 3: Rotatable 45-degree light-bounce prism pedestals
+                    draw.ellipse([cx - 26, oy + cell_size - 36, cx + 26, oy + cell_size - 8], fill=(60, 68, 80, 255))
+                    if col % 2 == 0:
+                        prism = [(cx - 28, cy + 16), (cx + 18, cy - 30), (cx + 30, cy - 18), (cx - 16, cy + 28)]
+                    else:
+                        prism = [(cx - 18, cy - 30), (cx + 28, cy + 16), (cx + 16, cy + 28), (cx - 30, cy - 18)]
+                    draw.polygon(prism, fill=green_portal, outline=brass)
+
+            elif sheet_key == "prop_breakables":
+                wood = (92, 66, 46, 255)
+                wood_dark = (52, 36, 24, 255)
+                iron = (64, 72, 84, 255)
+                if row == 0:
+                    # Col 0, 1: Intact barrel/urn; Col 2, 3: Shattered staves + shards
+                    if col in (0, 1):
+                        draw.ellipse([cx - 26, cy - 28, cx + 26, cy + 28], fill=wood, outline=wood_dark, width=3)
+                        draw.line([(cx - 24, cy - 10), (cx + 24, cy - 10)], fill=iron, width=4)
+                        draw.line([(cx - 24, cy + 12), (cx + 24, cy + 12)], fill=iron, width=4)
+                    else:
+                        draw.polygon([(cx - 30, cy + 18), (cx - 6, cy + 4), (cx - 2, cy + 22)], fill=wood_dark)
+                        draw.polygon([(cx + 6, cy + 8), (cx + 32, cy + 24), (cx + 14, cy + 28)], fill=wood)
+                        draw.rectangle([cx - 16, cy - 8, cx + 10, cy - 2], fill=iron)
+                elif row == 1:
+                    # Floor hazard vents
+                    draw.rectangle([cx - 28, cy - 24, cx + 28, cy + 24], fill=iron, outline=(18, 20, 24, 255), width=3)
+                    accent = [(40, 44, 52, 255), (255, 85, 0, 255), (62, 160, 75, 255), (0, 255, 255, 255)][col]
+                    draw.ellipse([cx - 14, cy - 12, cx + 14, cy + 12], fill=accent)
+                elif row == 2:
+                    # Hanging ceiling chains / foreground occluders
+                    for xoff in (-16, 0, 16):
+                        draw.line([(cx + xoff, oy + 6), (cx + xoff, oy + cell_size - 14)], fill=iron, width=4)
+                else:
+                    # Acoustic chime traps
+                    draw.ellipse([cx - 24, cy - 22, cx + 24, cy + 22], fill=(185, 180, 165, 255), outline=(45, 36, 30, 255), width=2)
+                    draw.ellipse([cx - 8, cy - 8, cx + 8, cy + 8], fill=(255, 204, 0, 255))
+
+    return img
+
+
+def detect_mirror_portal_mask(arr_rgba):
+    """
+    Identifies pure #00FF00 interior mirror panes in PROP_Mirror_Palace_Maze sheets
+    for extraction into the Red channel of _ORM.png as MirrorPortalMask.
+    """
+    r = arr_rgba[:, :, 0].astype(np.int32)
+    g = arr_rgba[:, :, 1].astype(np.int32)
+    b = arr_rgba[:, :, 2].astype(np.int32)
+    opaque = arr_rgba[:, :, 3] > 0
+    return opaque & (g >= 195) & (r <= 75) & (b <= 75) & ((g - r) >= 120) & ((g - b) >= 120)
+
+
+def generate_dungeon_heightmap_and_roughness(diffuse_image):
+    """
+    Generates seamless dungeon 8-bit POM heightmap (_H.png 'L') and wetness/puddle
+    roughness mask (_R.png 'L', puddles = 0.05 roughness -> byte 13).
+    """
+    arr = np.array(diffuse_image.convert("RGBA"))
+    r = arr[:, :, 0].astype(np.float32) / 255.0
+    g = arr[:, :, 1].astype(np.float32) / 255.0
+    b = arr[:, :, 2].astype(np.float32) / 255.0
+
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    height_u8 = np.clip(lum * 255.0, 0, 255).astype(np.uint8)
+
+    # Identify shallow puddles (cool blue-shifted specular water pixels)
+    is_puddle = (b > r + 0.03) & (b > g) & (lum < 0.35)
+    is_wet_stone = (lum < 0.22) & (~is_puddle)
+
+    roughness_u8 = np.full(lum.shape, 205, dtype=np.uint8)  # Default dry slate flagstone (~0.80)
+    roughness_u8[is_wet_stone] = 92
+    roughness_u8[is_puddle] = PUDDLE_ROUGHNESS_BYTE  # 0.05 -> 13
+
+    return Image.fromarray(height_u8, "L"), Image.fromarray(roughness_u8, "L")
+
+
+def generate_prop_orm_with_portal_mask(raw_rgba_image, clean_diffuse_image):
+    """
+    Packs PROP_* ORM texture where:
+      - Red   = MirrorPortalMask (255 on #00FF00 mirror panes, else ambient occlusion)
+      - Green = Roughness (13 on mirror glass, 195 on matte stone/wood)
+      - Blue  = Metallic (235 on mirror glass/metal, 25 on stone/wood)
+      - Alpha = Diffuse silhouette alpha
+    Replaces #00FF00 portal green in the returned diffuse copy with obsidian mirror slate.
+    """
+    raw_arr = np.array(raw_rgba_image.convert("RGBA"))
+    diff_arr = np.array(clean_diffuse_image.convert("RGBA"))
+    h, w = diff_arr.shape[:2]
+
+    alpha = diff_arr[:, :, 3]
+    opaque = alpha > 0
+    portal_mask = opaque & detect_mirror_portal_mask(raw_arr)
+
+    r = diff_arr[:, :, 0].astype(np.float32)
+    g = diff_arr[:, :, 1].astype(np.float32)
+    b = diff_arr[:, :, 2].astype(np.float32)
+    is_metal = opaque & (~portal_mask) & ((b >= r) & (b > 95) | ((r > g + 20) & (g > b + 20)))
+
+    # Standard AO stored in non-mirror regions; pure MirrorPortalMask = 255 where green pane
+    red_ch = np.where(portal_mask, 255, np.clip(90 + ((r + g + b) / 3.0) * 0.45, 0, 220)).astype(np.uint8)
+    rough_ch = np.full((h, w), 195, dtype=np.uint8)
+    rough_ch[is_metal] = 75
+    rough_ch[portal_mask] = PUDDLE_ROUGHNESS_BYTE
+
+    metal_ch = np.full((h, w), 25, dtype=np.uint8)
+    metal_ch[is_metal] = 225
+    metal_ch[portal_mask] = 240
+
+    orm_arr = np.zeros((h, w, 4), dtype=np.uint8)
+    orm_arr[:, :, 0] = red_ch
+    orm_arr[:, :, 1] = rough_ch
+    orm_arr[:, :, 2] = metal_ch
+    orm_arr[:, :, 3] = alpha
+    orm_arr[~opaque] = [0, 255, 0, 0]
+
+    # Replace raw #00FF00 on Diffuse with sleek dark mirror slate so panes never flash neon green
+    clean_diff_out = diff_arr.copy()
+    clean_diff_out[portal_mask] = [18, 24, 32, 255]
+
+    return Image.fromarray(clean_diff_out, "RGBA"), Image.fromarray(orm_arr, "RGBA"), portal_mask
 
 
 # -----------------------------------------------------------------------------
@@ -656,10 +919,142 @@ def update_asset_manifest(manifest_path, asset_name, generated_files, provenance
 # -----------------------------------------------------------------------------
 # Core Pipeline Execution
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Dungeon Mode Execution (`ATLAS_*` Seamless Tiles & `PROP_*` Mirror Portals)
+# -----------------------------------------------------------------------------
+DUNGEON_SYNTH_ASSET_NAMES = {
+    "atlas_floors": "ATLAS_Dungeon_Floors_4x4",
+    "prop_walls": "PROP_Dungeon_Walls_And_Cutaways_4x4",
+    "prop_mirrors": "PROP_Mirror_Palace_Maze_4x4",
+    "prop_breakables": "PROP_Breakables_And_Traps_4x4",
+}
+
+
+def process_dungeon_sheet(args, sheet_key=None):
+    """
+    Processes a single 4x4 dungeon sprite sheet under `--mode dungeon`:
+      - ATLAS_*: seamless borderless 4x4 tiles -> _D, _N, _H, _R (puddles=0.05), AtlasMetadata.json
+      - PROP_*: #FF00FF stripped to alpha 0 -> _D, _N, _ORM (R=MirrorPortalMask from #00FF00), _E, AtlasMetadata.json
+    """
+    if sheet_key:
+        asset_name = DUNGEON_SYNTH_ASSET_NAMES[sheet_key]
+        provenance_tag = f"ProceduralSynthesis-{asset_name}-v1"
+        print(f"[INFO] Synthesizing dungeon sheet: {asset_name}...")
+        raw_img = synthesize_dungeon_sheet(sheet_key)
+    elif args.input:
+        asset_name = os.path.splitext(os.path.basename(args.input))[0]
+        provenance_tag = "CC0-External-Remixed" if args.remix else "Imported-Dungeon-Asset"
+        print(f"[INFO] Loading dungeon input sheet: {args.input}...")
+        raw_img = Image.open(args.input).convert("RGBA")
+    else:
+        raise ValueError("Dungeon mode requires either --input <file> or --synthesize-dungeon <preset>")
+
+    sheet_type = infer_dungeon_sheet_type(asset_name, getattr(args, "dungeon_sheet_type", "auto"))
+    if args.output and getattr(args, "synthesize_dungeon", None) == "all":
+        output_dir = os.path.join(args.output, asset_name)
+    else:
+        output_dir = args.output or os.path.join("Content", "Art", "Dungeon", asset_name)
+    os.makedirs(output_dir, exist_ok=True)
+    generated_files = []
+
+    if sheet_type == "atlas":
+        diffuse_img = raw_img.convert("RGBA")
+        # Force full alpha across seamless tile arrays (no magenta keying)
+        diff_arr = np.array(diffuse_img)
+        diff_arr[:, :, 3] = 255
+        diffuse_img = Image.fromarray(diff_arr, "RGBA")
+
+        diffuse_path = os.path.join(output_dir, f"{asset_name}_D.png")
+        diffuse_img.save(diffuse_path, "PNG")
+        generated_files.append(diffuse_path)
+
+        normal_img = generate_tangent_normal_map(diffuse_img, normal_strength=3.2, bevel_radius=3.0)
+        normal_path = os.path.join(output_dir, f"{asset_name}_N.png")
+        normal_img.save(normal_path, "PNG")
+        generated_files.append(normal_path)
+
+        height_img, rough_img = generate_dungeon_heightmap_and_roughness(diffuse_img)
+        height_path = os.path.join(output_dir, f"{asset_name}_H.png")
+        height_img.save(height_path, "PNG")
+        generated_files.append(height_path)
+
+        rough_path = os.path.join(output_dir, f"{asset_name}_R.png")
+        rough_img.save(rough_path, "PNG")
+        generated_files.append(rough_path)
+
+        atlas_meta = build_atlas_metadata_json(
+            diffuse_image=diffuse_img,
+            asset_name=asset_name,
+            grid_cols=args.grid_cols,
+            grid_rows=args.grid_rows,
+        )
+        atlas_meta["DungeonSheetType"] = "ATLAS"
+        atlas_meta_path = os.path.join(output_dir, "AtlasMetadata.json")
+        with open(atlas_meta_path, "w", encoding="utf-8") as f:
+            json.dump(atlas_meta, f, indent=2)
+        generated_files.append(atlas_meta_path)
+    else:
+        # PROP_*: strip #FF00FF magenta background, extract #00FF00 mirror panes -> _ORM Red channel
+        clean_diff = chroma_key_and_cleanup(raw_img)
+        final_diff, orm_img, portal_mask = generate_prop_orm_with_portal_mask(raw_img, clean_diff)
+
+        diffuse_path = os.path.join(output_dir, f"{asset_name}_D.png")
+        final_diff.save(diffuse_path, "PNG")
+        generated_files.append(diffuse_path)
+
+        normal_img = generate_tangent_normal_map(final_diff, normal_strength=2.6, bevel_radius=8.0)
+        normal_path = os.path.join(output_dir, f"{asset_name}_N.png")
+        normal_img.save(normal_path, "PNG")
+        generated_files.append(normal_path)
+
+        orm_path = os.path.join(output_dir, f"{asset_name}_ORM.png")
+        orm_img.save(orm_path, "PNG")
+        generated_files.append(orm_path)
+
+        emissive_img = generate_emissive_mask(final_diff)
+        emissive_path = os.path.join(output_dir, f"{asset_name}_E.png")
+        emissive_img.save(emissive_path, "PNG")
+        generated_files.append(emissive_path)
+
+        atlas_meta = build_atlas_metadata_json(
+            diffuse_image=final_diff,
+            asset_name=asset_name,
+            grid_cols=args.grid_cols,
+            grid_rows=args.grid_rows,
+        )
+        atlas_meta["DungeonSheetType"] = "PROP"
+        cell_w = final_diff.width // max(args.grid_cols, 1)
+        cell_h = final_diff.height // max(args.grid_rows, 1)
+        for cell in atlas_meta["Cells"]:
+            pr = cell["PixelRect"]
+            cell_portal = portal_mask[pr["Y0"]:pr["Y1"], pr["X0"]:pr["X1"]]
+            portal_pixels = int(np.count_nonzero(cell_portal))
+            cell["HasMirrorPortalMask"] = portal_pixels > 0
+            cell["MirrorPortalPixelCount"] = portal_pixels
+
+        atlas_meta_path = os.path.join(output_dir, "AtlasMetadata.json")
+        with open(atlas_meta_path, "w", encoding="utf-8") as f:
+            json.dump(atlas_meta, f, indent=2)
+        generated_files.append(atlas_meta_path)
+
+    manifest_path = getattr(args, "manifest_path", None) or os.path.join("Content", "AssetManifest.json")
+    update_asset_manifest(manifest_path, asset_name, generated_files, provenance_tag)
+    return generated_files
+
+
 def process_pipeline(args):
     """Executes sprite keying, bevel/Sobel normal extraction, emissive masking, ORM, and metadata output."""
     if not HAS_PIL_NUMPY:
         raise RuntimeError("Pillow and numpy are required to execute slice_normal_rig.py.")
+
+    if getattr(args, "mode", "rig") == "dungeon":
+        synth_choice = getattr(args, "synthesize_dungeon", None)
+        if synth_choice == "all":
+            all_files = []
+            for key in ("atlas_floors", "prop_walls", "prop_mirrors", "prop_breakables"):
+                all_files.extend(process_dungeon_sheet(args, sheet_key=key))
+            return all_files
+        return process_dungeon_sheet(args, sheet_key=synth_choice)
 
     if args.synthesize_archetype:
         asset_name = f"Rig_{args.synthesize_archetype.capitalize()}"
@@ -797,16 +1192,73 @@ def run_self_test():
             meta = json.load(mf)
             assert len(meta["Cells"]) == 16, f"Expected 16 UV cells, got {len(meta['Cells'])}"
 
+    # Self-test --mode dungeon (ATLAS_* seamless floors + PROP_* mirror portal masks)
+    dungeon_test_dir = os.path.join("Content", "Art", "Dungeon", "SelfTest")
+    os.makedirs(dungeon_test_dir, exist_ok=True)
+    dungeon_manifest = os.path.join(dungeon_test_dir, "SelfTestDungeonManifest.json")
+
+    print("\n--- Testing Dungeon Mode: ATLAS_Dungeon_Floors_4x4 ---")
+    atlas_args = argparse.Namespace(
+        mode="dungeon",
+        dungeon_sheet_type="auto",
+        synthesize_dungeon="atlas_floors",
+        input=None,
+        directions=4,
+        generate_normals=True,
+        remix=False,
+        synthesize_archetype=None,
+        self_test=False,
+        output=os.path.join(dungeon_test_dir, "ATLAS_Dungeon_Floors_4x4"),
+        grid_cols=4,
+        grid_rows=4,
+        manifest_path=dungeon_manifest,
+    )
+    atlas_files = process_pipeline(atlas_args)
+    assert len(atlas_files) == 5, f"Expected 5 outputs (_D, _N, _H, _R, AtlasMetadata), got {len(atlas_files)}"
+    d_atlas = np.array(Image.open(atlas_files[0]).convert("RGBA"))
+    assert np.all(d_atlas[:, :, 3] == 255), "Seamless ATLAS_ floor must stay 100% opaque (alpha=255)"
+    h_atlas = np.array(Image.open(atlas_files[2]))
+    assert h_atlas.ndim == 2 and h_atlas.max() > h_atlas.min(), "Expected varying 8-bit _H heightmap"
+    r_atlas = np.array(Image.open(atlas_files[3]))
+    assert np.any(r_atlas == PUDDLE_ROUGHNESS_BYTE), "Expected 0.05 puddle roughness (byte 13) in _R.png"
+
+    print("\n--- Testing Dungeon Mode: PROP_Mirror_Palace_Maze_4x4 ---")
+    mirror_args = argparse.Namespace(
+        mode="dungeon",
+        dungeon_sheet_type="auto",
+        synthesize_dungeon="prop_mirrors",
+        input=None,
+        directions=4,
+        generate_normals=True,
+        remix=False,
+        synthesize_archetype=None,
+        self_test=False,
+        output=os.path.join(dungeon_test_dir, "PROP_Mirror_Palace_Maze_4x4"),
+        grid_cols=4,
+        grid_rows=4,
+        manifest_path=dungeon_manifest,
+    )
+    mirror_files = process_pipeline(mirror_args)
+    assert len(mirror_files) == 5, f"Expected 5 outputs (_D, _N, _ORM, _E, AtlasMetadata), got {len(mirror_files)}"
+    d_mirror = np.array(Image.open(mirror_files[0]).convert("RGBA"))
+    assert tuple(d_mirror[0, 0]) == (0, 0, 0, 0), f"PROP_ #FF00FF must strip to (0,0,0,0), got {d_mirror[0, 0]}"
+    orm_mirror = np.array(Image.open(mirror_files[2]).convert("RGBA"))
+    assert np.any(orm_mirror[:, :, 0] == 255), "Expected #00FF00 mirror panes packed as MirrorPortalMask=255 in _ORM.png Red"
+
     assert os.path.isfile(test_manifest), "SelfTestManifest.json was not created!"
+    assert os.path.isfile(dungeon_manifest), "SelfTestDungeonManifest.json was not created!"
     print("\n==================================================")
-    print("[PASS] slice_normal_rig.py self-test succeeded!")
+    print("[PASS] slice_normal_rig.py self-test succeeded (Rig + Dungeon modes)!")
     print("==================================================")
     return True
 
 
 def main():
     parser = argparse.ArgumentParser(description="2.5D Hybrid Sprite Sheet Cutter, Emissive Extractor & Normal Rig Pipeline")
-    parser.add_argument("--input", type=str, help="Path to input raw 4x4 magenta-keyed sprite sheet (PNG)")
+    parser.add_argument("--mode", type=str, choices=["rig", "dungeon"], default="rig", help="Pipeline mode: 'rig' (character/zombie) or 'dungeon' (ATLAS_ / PROP_)")
+    parser.add_argument("--dungeon-sheet-type", type=str, choices=["auto", "atlas", "prop"], default="auto", help="Dungeon sheet type override")
+    parser.add_argument("--synthesize-dungeon", type=str, choices=["atlas_floors", "prop_walls", "prop_mirrors", "prop_breakables", "all"], help="Synthesize dungeon atlas/prop sheets")
+    parser.add_argument("--input", type=str, help="Path to input raw 4x4 sprite sheet (PNG)")
     parser.add_argument("--directions", type=int, choices=[4, 8], default=4, help="Direction count (4 or 8)")
     parser.add_argument("--generate-normals", action="store_true", default=True, help="Synthesize tangent-space normal maps")
     parser.add_argument("--remix", action="store_true", default=False, help="Apply palette remix and edge beveling")
@@ -822,7 +1274,11 @@ def main():
         success = run_self_test()
         sys.exit(0 if success else 1)
 
-    if not args.input and not args.synthesize_archetype:
+    if args.mode == "dungeon":
+        if not args.input and not args.synthesize_dungeon:
+            parser.print_help()
+            sys.exit(1)
+    elif not args.input and not args.synthesize_archetype:
         parser.print_help()
         sys.exit(1)
 

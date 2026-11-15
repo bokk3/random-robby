@@ -1,0 +1,100 @@
+{
+  "ManifestVersion": "1.0",
+  "EngineTarget": "Unreal Engine 5.8",
+  "TexelDensityStandard": "64 px / 100 UU",
+  "Assets": {
+    "Rig_Hero": {
+      "Timestamp": "2026-11-15T08:23:17.537334+00:00",
+      "Provenance": "ProceduralSynthesis-hero-v2",
+      "ComplianceVerified": true,
+      "Files": {
+        "Hero/Rig_Hero_D.png": {
+          "SHA256": "73b0820ae0cc8bb483eaa2d40e76f8f64605e9ca9e7241dcaaf315b1fcf77f8c",
+          "Bytes": 2994
+        },
+        "Hero/Rig_Hero_N.png": {
+          "SHA256": "1748e781aab6283a61d5bfbb32d5c99590962f6c49842fe981f1ef683b52ef9f",
+          "Bytes": 10329
+        },
+        "Hero/Rig_Hero_E.png": {
+          "SHA256": "dc6d3242f6143e177e58d0d0c41cd353e5e70c59d026e2061299a20d0dbc1df0",
+          "Bytes": 436
+        },
+        "Hero/Rig_Hero_ORM.png": {
+          "SHA256": "2d3e2ae9e7d6788ed76671d9eb901f616a1498dbb8a6b333ba5031d1a954e0c5",
+          "Bytes": 2761
+        },
+        "Hero/AtlasMetadata.json": {
+          "SHA256": "d492112adf4a55646d71c9b10852eab2b00d2dcee9b4cb9f1a0fecec5a7ffcde",
+          "Bytes": 8252
+        },
+        "Hero/rig_sockets.json": {
+          "SHA256": "28686bbe6cac98875999996f2366ec309baeb4f637d22c7fc6985b414f76872a",
+          "Bytes": 1052
+        }
+      }
+    },
+    "Rig_Exploder": {
+      "Timestamp": "2026-11-15T08:23:17.676015+00:00",
+      "Provenance": "ProceduralSynthesis-exploder-v2",
+      "ComplianceVerified": true,
+      "Files": {
+        "Exploder/Rig_Exploder_D.png": {
+          "SHA256": "e16e74031b87477fcb6f138d7674d9b39335b18bf48b8589055755a973875675",
+          "Bytes": 3981
+        },
+        "Exploder/Rig_Exploder_N.png": {
+          "SHA256": "3cd05785bb955394d229cb53115306812d1f3377466e956b953937ac85d47dbc",
+          "Bytes": 14952
+        },
+        "Exploder/Rig_Exploder_E.png": {
+          "SHA256": "2ca3998b115a67521db7f14f620c7e8e575c0cc839c39240d6b675c06ea08d64",
+          "Bytes": 1492
+        },
+        "Exploder/Rig_Exploder_ORM.png": {
+          "SHA256": "d607bf05d83ed87b4c6d95443de1c1d96043d52aa9eccd86b4d8b5dabe497d43",
+          "Bytes": 3804
+        },
+        "Exploder/AtlasMetadata.json": {
+          "SHA256": "5bb75f635a81e3c1390e3541c27eb9b08922bcea5b56d5df8946d62f378e173e",
+          "Bytes": 8256
+        },
+        "Exploder/rig_sockets.json": {
+          "SHA256": "6aa4e65349ee8585c5bec03285fe38d6f6c04df7148d746361d687be10237c7d",
+          "Bytes": 1056
+        }
+      }
+    },
+    "Rig_Thrower": {
+      "Timestamp": "2026-11-15T08:23:17.806884+00:00",
+      "Provenance": "ProceduralSynthesis-thrower-v2",
+      "ComplianceVerified": true,
+      "Files": {
+        "Thrower/Rig_Thrower_D.png": {
+          "SHA256": "b82dccc49a6c6ba2c7b90f3d5a5a24b9ff2645e4e91212db132528ac6da5f52a",
+          "Bytes": 3069
+        },
+        "Thrower/Rig_Thrower_N.png": {
+          "SHA256": "9d6052b3898abce4510f911ecfdb9306e2a79c14ea42d8c7789d9ab380c648e5",
+          "Bytes": 9906
+        },
+        "Thrower/Rig_Thrower_E.png": {
+          "SHA256": "cfe6712095e32b2ac1e92e19380d0f181cc00eb6bfc10bddf030db800079e9ee",
+          "Bytes": 884
+        },
+        "Thrower/Rig_Thrower_ORM.png": {
+          "SHA256": "153c81e026fdf93b7c7e338e0456a4ab18d9717cd34fa841a0f25d78e9fa2767",
+          "Bytes": 3140
+        },
+        "Thrower/AtlasMetadata.json": {
+          "SHA256": "9a2950c6de30057442ce9a04c5354ac3f7adba81e69cf2b53e188a5c8e93d2d9",
+          "Bytes": 8255
+        },
+        "Thrower/rig_sockets.json": {
+          "SHA256": "9397dabceafee0cec5611ae4c0584d915dbc9e95c8f2c761322e4be478a9454a",
+          "Bytes": 1055
+        }
+      }
+    }
+  }
+}

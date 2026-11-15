@@ -1,0 +1,486 @@
+{
+  "AssetName": "ATLAS_Dungeon_Floors_4x4",
+  "SheetSize": [
+    512,
+    512
+  ],
+  "Grid": {
+    "Columns": 4,
+    "Rows": 4,
+    "TotalCells": 16
+  },
+  "TexelDensity": 64.0,
+  "UnrealUnitsPerMeter": 100.0,
+  "UnrealUnitsPerPixel": 1.5625,
+  "CellWorldSizeUU": [
+    200.0,
+    200.0
+  ],
+  "Cells": [
+    {
+      "CellIndex": 0,
+      "Row": 0,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 0,
+        "X1": 128,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.0,
+        "U1": 0.25,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.25
+      ],
+      "FootPivotPx": [
+        64.0,
+        128.0
+      ]
+    },
+    {
+      "CellIndex": 1,
+      "Row": 0,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 0,
+        "X1": 256,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.0,
+        "U1": 0.5,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.25
+      ],
+      "FootPivotPx": [
+        192.0,
+        128.0
+      ]
+    },
+    {
+      "CellIndex": 2,
+      "Row": 0,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 0,
+        "X1": 384,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.0,
+        "U1": 0.75,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.25
+      ],
+      "FootPivotPx": [
+        320.0,
+        128.0
+      ]
+    },
+    {
+      "CellIndex": 3,
+      "Row": 0,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 0,
+        "X1": 512,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.0,
+        "U1": 1.0,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.25
+      ],
+      "FootPivotPx": [
+        448.0,
+        128.0
+      ]
+    },
+    {
+      "CellIndex": 4,
+      "Row": 1,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 128,
+        "X1": 128,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.25,
+        "U1": 0.25,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.5
+      ],
+      "FootPivotPx": [
+        64.0,
+        256.0
+      ]
+    },
+    {
+      "CellIndex": 5,
+      "Row": 1,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 128,
+        "X1": 256,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.25,
+        "U1": 0.5,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.5
+      ],
+      "FootPivotPx": [
+        192.0,
+        256.0
+      ]
+    },
+    {
+      "CellIndex": 6,
+      "Row": 1,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 128,
+        "X1": 384,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.25,
+        "U1": 0.75,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.5
+      ],
+      "FootPivotPx": [
+        320.0,
+        256.0
+      ]
+    },
+    {
+      "CellIndex": 7,
+      "Row": 1,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 128,
+        "X1": 512,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.25,
+        "U1": 1.0,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.5
+      ],
+      "FootPivotPx": [
+        448.0,
+        256.0
+      ]
+    },
+    {
+      "CellIndex": 8,
+      "Row": 2,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 256,
+        "X1": 128,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.5,
+        "U1": 0.25,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.75
+      ],
+      "FootPivotPx": [
+        64.0,
+        384.0
+      ]
+    },
+    {
+      "CellIndex": 9,
+      "Row": 2,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 256,
+        "X1": 256,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.5,
+        "U1": 0.5,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.75
+      ],
+      "FootPivotPx": [
+        192.0,
+        384.0
+      ]
+    },
+    {
+      "CellIndex": 10,
+      "Row": 2,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 256,
+        "X1": 384,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.5,
+        "U1": 0.75,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.75
+      ],
+      "FootPivotPx": [
+        320.0,
+        384.0
+      ]
+    },
+    {
+      "CellIndex": 11,
+      "Row": 2,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 256,
+        "X1": 512,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.5,
+        "U1": 1.0,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.75
+      ],
+      "FootPivotPx": [
+        448.0,
+        384.0
+      ]
+    },
+    {
+      "CellIndex": 12,
+      "Row": 3,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 384,
+        "X1": 128,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.75,
+        "U1": 0.25,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.125,
+        1.0
+      ],
+      "FootPivotPx": [
+        64.0,
+        512.0
+      ]
+    },
+    {
+      "CellIndex": 13,
+      "Row": 3,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 384,
+        "X1": 256,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.75,
+        "U1": 0.5,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.375,
+        1.0
+      ],
+      "FootPivotPx": [
+        192.0,
+        512.0
+      ]
+    },
+    {
+      "CellIndex": 14,
+      "Row": 3,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 384,
+        "X1": 384,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.75,
+        "U1": 0.75,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.625,
+        1.0
+      ],
+      "FootPivotPx": [
+        320.0,
+        512.0
+      ]
+    },
+    {
+      "CellIndex": 15,
+      "Row": 3,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 384,
+        "X1": 512,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.75,
+        "U1": 1.0,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.875,
+        1.0
+      ],
+      "FootPivotPx": [
+        448.0,
+        512.0
+      ]
+    }
+  ],
+  "DungeonSheetType": "ATLAS"
+}
