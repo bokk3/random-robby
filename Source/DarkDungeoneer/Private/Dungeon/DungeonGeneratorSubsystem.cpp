@@ -6,70 +6,149 @@ void UDungeonGeneratorSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	RestingGroundBounds.Reset();
 }
 
+EDungeonBiomeType UDungeonGeneratorSubsystem::ResolveFloorDominantBiome(const int32 FloorIndex) noexcept
+{
+	const int32 CycleIdx = FMath::Max(0, FloorIndex - 1) % 3;
+	switch (CycleIdx)
+	{
+	case 0:  return EDungeonBiomeType::Crypt;
+	case 1:  return EDungeonBiomeType::SporeFens;
+	default: return EDungeonBiomeType::EmberForge;
+	}
+}
+
+EDungeonBiomeType UDungeonGeneratorSubsystem::ResolveNextFloorBiome(const int32 FloorIndex) noexcept
+{
+	return ResolveFloorDominantBiome(FloorIndex + 1);
+}
+
 FDungeonFloorGraph UDungeonGeneratorSubsystem::GenerateFloorGraph(int32 FloorIndex, int32 ServerSeed)
 {
 	RestingGroundBounds.Reset();
 	FDungeonFloorGraph Graph;
 	Graph.FloorIndex = FloorIndex;
 	Graph.MasterSeed = ServerSeed ^ (FloorIndex * 7919);
+	Graph.DominantBiome = ResolveFloorDominantBiome(FloorIndex);
+	Graph.NextFloorPreviewBiome = ResolveNextFloorBiome(FloorIndex);
 
 	FRandomStream Stream(Graph.MasterSeed);
 	constexpr float RoomPitchX = 2800.0f;
 	constexpr float RoomPitchY = 2600.0f;
 
-	auto MakeNode = [&Stream, RoomPitchX, RoomPitchY](int32 Id, int32 Depth, float LateralOffset, EDungeonRoomType Type) -> FDungeonNode
+	auto MakeNode = [&Stream, &Graph, RoomPitchX, RoomPitchY](
+		int32 Id,
+		int32 Depth,
+		float LateralOffset,
+		EDungeonRoomType Type,
+		EDungeonRoomShape Shape,
+		EDungeonBiomeType PrimaryBiome,
+		EDungeonBiomeType BleedBiome) -> FDungeonNode
 	{
 		FDungeonNode Node;
 		Node.NodeId = Id;
 		Node.DepthLayer = Depth;
 		Node.RoomType = Type;
+		Node.RoomShape = Shape;
+		Node.BiomeType = PrimaryBiome;
+		Node.BleedBiomeType = BleedBiome;
+		Node.bIsSecretRoom = (Shape == EDungeonRoomShape::SecretPhantasmPocket);
+		Node.bHasDescendingStairs = (Type == EDungeonRoomType::MajorLootVault);
 		Node.WorldCenter = FVector(static_cast<float>(Depth) * RoomPitchX, LateralOffset * RoomPitchY, 0.0f);
-		Node.RoomExtents = (Type == EDungeonRoomType::MirrorPalaceMaze)
-			? FVector(1600.0f, 1600.0f, 450.0f)
-			: FVector(1200.0f, 1200.0f, 400.0f);
+		if (Type == EDungeonRoomType::Entry)
+		{
+			Node.RoomExtents = FVector(1200.0f, 1200.0f, 400.0f);
+		}
+		else if (Type == EDungeonRoomType::MirrorPalaceMaze)
+		{
+			Node.RoomExtents = FVector(1280.0f, 1152.0f, 450.0f);
+		}
+		else if (Shape == EDungeonRoomShape::CrossAmbushVault)
+		{
+			Node.RoomExtents = FVector(1152.0f, 1024.0f, 400.0f);
+		}
+		else
+		{
+			Node.RoomExtents = FVector(1024.0f, 1024.0f, 400.0f);
+		}
 		Node.RoomSeed = Stream.RandHelper(INT32_MAX);
 		return Node;
 	};
 
-	// Layer 0: Entry
-	FDungeonNode EntryNode = MakeNode(0, 0, 0.0f, EDungeonRoomType::Entry);
+	const EDungeonBiomeType DomBiome = Graph.DominantBiome;
+	const EDungeonBiomeType NextBiome = Graph.NextFloorPreviewBiome;
 
-	// Layer 1: 2 Combat / Exploration Branches
-	FDungeonNode CombatA = MakeNode(1, 1, -0.6f, EDungeonRoomType::Combat);
-	FDungeonNode CombatB = MakeNode(2, 1,  0.6f, EDungeonRoomType::Combat);
+	// 10 core tactical rooms + 2 secret Phantasm pockets hidden behind illusory mirrors:
+	// Layer 0: Entry Chamber
+	FDungeonNode EntryNode = MakeNode(0, 0, 0.0f, EDungeonRoomType::Entry, EDungeonRoomShape::SquareChamber, DomBiome, DomBiome);
+
+	// Layer 1: Dual Combat Wings (Pillared Gallery South, Octagonal Rotunda North)
+	FDungeonNode CombatA = MakeNode(1, 1, -0.68f, EDungeonRoomType::Combat, EDungeonRoomShape::PillaredGallery, DomBiome, DomBiome);
+	FDungeonNode CombatB = MakeNode(2, 1,  0.68f, EDungeonRoomType::Combat, EDungeonRoomShape::OctagonalRotunda, DomBiome, DomBiome);
 	EntryNode.OutgoingNodeIds.Add(1);
 	EntryNode.OutgoingNodeIds.Add(2);
 
-	// Layer 2: Mirror-Palace Illusion Maze (convergence bottleneck)
-	FDungeonNode MirrorNode = MakeNode(3, 2, 0.0f, EDungeonRoomType::MirrorPalaceMaze);
+	// Layer 2: Central Ambush Convergence Hall
+	FDungeonNode ConvergenceHall = MakeNode(3, 2, 0.0f, EDungeonRoomType::Combat, EDungeonRoomShape::CrossAmbushVault, DomBiome, DomBiome);
 	CombatA.OutgoingNodeIds.Add(3);
 	CombatB.OutgoingNodeIds.Add(3);
 
-	// Layer 3: Mid-Floor Branch (Vendor OR Resting Ground)
-	const bool bVendorTop = Stream.RandRange(0, 1) == 0;
-	FDungeonNode MidA = MakeNode(4, 3, -0.65f, bVendorTop ? EDungeonRoomType::Vendor : EDungeonRoomType::RestingGround);
-	FDungeonNode MidB = MakeNode(5, 3,  0.65f, bVendorTop ? EDungeonRoomType::RestingGround : EDungeonRoomType::Vendor);
-	MirrorNode.OutgoingNodeIds.Add(4);
-	MirrorNode.OutgoingNodeIds.Add(5);
+	// Layer 3: Obsidian Mirror-Palace Puzzle Branch (South) & Sanctuary Resting Ground (North)
+	FDungeonNode MirrorNode = MakeNode(4, 3, -0.72f, EDungeonRoomType::MirrorPalaceMaze, EDungeonRoomShape::OctagonalRotunda, EDungeonBiomeType::MirrorPalace, DomBiome);
+	FDungeonNode SanctuaryNode = MakeNode(5, 3, 0.72f, EDungeonRoomType::RestingGround, EDungeonRoomShape::OctagonalRotunda, DomBiome, DomBiome);
+	ConvergenceHall.OutgoingNodeIds.Add(4);
+	ConvergenceHall.OutgoingNodeIds.Add(5);
 
-	// Layer 4: Deep Fog Gauntlet
-	FDungeonNode GauntletNode = MakeNode(6, 4, 0.0f, EDungeonRoomType::DeepFogGauntlet);
-	MidA.OutgoingNodeIds.Add(6);
-	MidB.OutgoingNodeIds.Add(6);
+	// Layer 4: Merchant Alcove + Mid-Floor Hazard Wing (begins Transition Bleed)
+	const bool bVendorLower = Stream.RandRange(0, 1) == 0;
+	FDungeonNode Layer4A = MakeNode(
+		6, 4, -0.58f,
+		bVendorLower ? EDungeonRoomType::Vendor : EDungeonRoomType::Combat,
+		bVendorLower ? EDungeonRoomShape::SquareChamber : EDungeonRoomShape::PillaredGallery,
+		DomBiome, NextBiome);
+	FDungeonNode Layer4B = MakeNode(
+		7, 4,  0.58f,
+		bVendorLower ? EDungeonRoomType::Combat : EDungeonRoomType::Vendor,
+		bVendorLower ? EDungeonRoomShape::PillaredGallery : EDungeonRoomShape::SquareChamber,
+		DomBiome, NextBiome);
+	MirrorNode.OutgoingNodeIds.Add(6);
+	MirrorNode.OutgoingNodeIds.Add(7);
+	SanctuaryNode.OutgoingNodeIds.Add(6);
+	SanctuaryNode.OutgoingNodeIds.Add(7);
 
-	// Layer 5: Terminal High-Tier Major Loot Vault
-	FDungeonNode VaultNode = MakeNode(7, 5, 0.0f, EDungeonRoomType::MajorLootVault);
-	GauntletNode.OutgoingNodeIds.Add(7);
+	// Layer 5 & 6: Final 2 Transition Bleed Nodes -> Deep Fog Gauntlet -> Terminal Major Loot Vault + Descending Stairs
+	FDungeonNode GauntletNode = MakeNode(8, 5, 0.0f, EDungeonRoomType::DeepFogGauntlet, EDungeonRoomShape::CrossAmbushVault, DomBiome, NextBiome);
+	Layer4A.OutgoingNodeIds.Add(8);
+	Layer4B.OutgoingNodeIds.Add(8);
 
-	Graph.Nodes.Reserve(8);
+	FDungeonNode VaultNode = MakeNode(9, 6, 0.0f, EDungeonRoomType::MajorLootVault, EDungeonRoomShape::OctagonalRotunda, DomBiome, NextBiome);
+	GauntletNode.OutgoingNodeIds.Add(9);
+
+	// Secret Phantasm Pockets (flush against MirrorNode South wall and CombatB North wall behind AMirrorWall_Phantasm)
+	FDungeonNode SecretMirrorPocket = MakeNode(10, 3, -1.36f, EDungeonRoomType::MajorLootVault, EDungeonRoomShape::SecretPhantasmPocket, EDungeonBiomeType::MirrorPalace, DomBiome);
+	SecretMirrorPocket.RoomExtents = FVector(512.0f, 512.0f, 400.0f);
+	SecretMirrorPocket.WorldCenter = MirrorNode.WorldCenter + FVector(0.0f, -(MirrorNode.RoomExtents.Y + 512.0f), 0.0f);
+	SecretMirrorPocket.ParentRoomNodeId = MirrorNode.NodeId;
+	SecretMirrorPocket.bHasDescendingStairs = false;
+
+	FDungeonNode SecretCryptPocket = MakeNode(11, 1, 1.36f, EDungeonRoomType::DeepFogGauntlet, EDungeonRoomShape::SecretPhantasmPocket, NextBiome, DomBiome);
+	SecretCryptPocket.RoomExtents = FVector(512.0f, 512.0f, 400.0f);
+	SecretCryptPocket.WorldCenter = CombatB.WorldCenter + FVector(0.0f, (CombatB.RoomExtents.Y + 512.0f), 0.0f);
+	SecretCryptPocket.ParentRoomNodeId = CombatB.NodeId;
+	SecretCryptPocket.bHasDescendingStairs = false;
+
+	Graph.Nodes.Reserve(12);
 	Graph.Nodes.Add(MoveTemp(EntryNode));
 	Graph.Nodes.Add(MoveTemp(CombatA));
 	Graph.Nodes.Add(MoveTemp(CombatB));
+	Graph.Nodes.Add(MoveTemp(ConvergenceHall));
 	Graph.Nodes.Add(MoveTemp(MirrorNode));
-	Graph.Nodes.Add(MoveTemp(MidA));
-	Graph.Nodes.Add(MoveTemp(MidB));
+	Graph.Nodes.Add(MoveTemp(SanctuaryNode));
+	Graph.Nodes.Add(MoveTemp(Layer4A));
+	Graph.Nodes.Add(MoveTemp(Layer4B));
 	Graph.Nodes.Add(MoveTemp(GauntletNode));
 	Graph.Nodes.Add(MoveTemp(VaultNode));
+	Graph.Nodes.Add(MoveTemp(SecretMirrorPocket));
+	Graph.Nodes.Add(MoveTemp(SecretCryptPocket));
 
 	ActiveFloorGraph = Graph;
 	return ActiveFloorGraph;

@@ -1,5 +1,6 @@
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "AI/HazardZoneActors.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementComponent.h"
@@ -76,6 +77,20 @@ void AZombieFastThrower::Tick(float DeltaSeconds)
 	ADungeoneerCharacter* TargetPlayer = SpatialSys->FindNearestTargetPlayer(GetActorLocation(), PerceptionHearingRange, bLit);
 	if (!TargetPlayer)
 	{
+		if (const UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+		{
+			FDungeoneerNoiseEvent HeardNoise;
+			if (SensorySub->QueryStrongestActivePulse(GetActorLocation(), 1.25f, HeardNoise) && HeardNoise.Loudness >= 1.55f)
+			{
+				const FVector ToNoise = HeardNoise.WorldOrigin - GetActorLocation();
+				if (ToNoise.SizeSquared2D() > (95.0 * 95.0))
+				{
+					ECompassOctant LureOctant = CurrentHeadingOctant;
+					UDungeoneerMovementComponent::QuantizeInputToOctant(FVector2D(ToNoise.X, ToNoise.Y), 1.0f, LureOctant);
+					MoveAlongOctant(LureOctant, 0.90f);
+				}
+			}
+		}
 		return;
 	}
 

@@ -27,6 +27,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|MirrorMaze")
 	void GenerateMirrorMazeGrid(int32 RoomSeed, int32 GridWidth, int32 GridHeight, TArray<EMirrorCellType>& OutCells) const;
 
+	/** Deterministic floor biome progression: Floor 1 Crypt, Floor 2 Spore Fens, Floor 3+ Ember Forge. */
+	UFUNCTION(BlueprintPure, Category = "Dungeon|Biome")
+	static EDungeonBiomeType ResolveFloorDominantBiome(int32 FloorIndex) noexcept;
+
+	/** Next floor biome previewed in the final 2 transition nodes before the descending stairs. */
+	UFUNCTION(BlueprintPure, Category = "Dungeon|Biome")
+	static EDungeonBiomeType ResolveNextFloorBiome(int32 FloorIndex) noexcept;
+
 	UFUNCTION(BlueprintPure, Category = "Dungeon")
 	const FDungeonFloorGraph& GetActiveFloorGraph() const noexcept { return ActiveFloorGraph; }
 

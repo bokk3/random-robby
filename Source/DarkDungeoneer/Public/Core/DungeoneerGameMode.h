@@ -5,6 +5,7 @@
 #include "UI/DungeoneerMainMenuWidget.h"
 #include "DungeoneerGameMode.generated.h"
 
+class ADungeonAtmosphereActor;
 class ADungeoneerTileMapInstancer;
 class AMenuDioramaStageActor;
 class UDungeoneerCoopLobbyWidget;
@@ -47,6 +48,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
 	AMenuDioramaStageActor* GetActiveDioramaStage() const noexcept { return ActiveDioramaStage.Get(); }
 
+	UFUNCTION(BlueprintPure, Category = "Atmosphere")
+	ADungeonAtmosphereActor* GetActiveAtmosphereActor() const noexcept { return ActiveAtmosphereActor.Get(); }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon")
 	int32 InitialFloorSeed = 424242;
@@ -62,6 +66,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADungeoneerTileMapInstancer> ActiveTileMapInstancer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADungeonAtmosphereActor> ActiveAtmosphereActor;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AMenuDioramaStageActor> ActiveDioramaStage;

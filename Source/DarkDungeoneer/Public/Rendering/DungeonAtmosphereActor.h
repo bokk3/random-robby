@@ -11,6 +11,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Dungeon/DungeonTypes.h"
 #include "NiagaraComponent.h"
 #include "DungeonAtmosphereActor.generated.h"
 
@@ -57,10 +59,15 @@ public:
 
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Switches weather and volumetric fog profile dynamically. */
 	UFUNCTION(BlueprintCallable, Category = "Atmosphere")
 	void SetWeatherPreset(EDungeonWeatherPreset NewPreset);
+
+	/** Transitions smoothly (0.6s blend) to the requested dungeon biome atmosphere and Sanctuary calm factor. */
+	UFUNCTION(BlueprintCallable, Category = "Atmosphere|Biome")
+	void SetBiomeAtmosphere(EDungeonBiomeType NewBiome, bool bInSanctuary = false);
 
 	/** Manually tunes volumetric fog parameters (used during sensory reveals or room transitions). */
 	UFUNCTION(BlueprintCallable, Category = "Atmosphere")
@@ -77,10 +84,20 @@ public:
 	UNiagaraComponent* GetWeatherNiagaraComponent() const noexcept { return WeatherNiagaraComponent.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Atmosphere")
+	UHierarchicalInstancedStaticMeshComponent* GetAmbientMotesHISM() const noexcept { return AmbientMotesHISM.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Atmosphere")
 	EDungeonWeatherPreset GetActivePreset() const noexcept { return ActivePreset; }
+
+	UFUNCTION(BlueprintPure, Category = "Atmosphere|Biome")
+	EDungeonBiomeType GetActiveBiome() const noexcept { return ActiveBiome; }
+
+	/** Deterministic camera-relative ambient mote transform step (zero allocations). */
+	void UpdateAmbientMotesAroundFocus(const FVector& FocusLocation, float DeltaSeconds) noexcept;
 
 protected:
 	void ApplyWeatherConfig(const FDungeonWeatherConfig& Config);
+	void InitializeAmbientMotesPool();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -91,8 +108,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNiagaraComponent> WeatherNiagaraComponent;
 
+	/** Pre-allocated 64 drifting atmospheric motes/embers/spores rendered in 1 draw call (zero Tick allocations). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AmbientMotesHISM;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config")
 	EDungeonWeatherPreset ActivePreset = EDungeonWeatherPreset::ColdDrafts;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Config")
+	EDungeonBiomeType ActiveBiome = EDungeonBiomeType::Crypt;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presets")
 	FDungeonWeatherConfig ColdDraftsConfig;
@@ -105,4 +129,17 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presets")
 	FDungeonWeatherConfig EmberAshConfig;
+
+private:
+	static constexpr int32 NumAmbientMotes = 64;
+	TArray<FVector> MoteBaseOffsets;
+	TArray<FVector> MoteDriftVelocities;
+	float MoteTimeAccumulator = 0.0f;
+	float TargetFogDensity = 0.04f;
+	FLinearColor TargetFogAlbedo = FLinearColor(0.15f, 0.20f, 0.28f, 1.0f);
+	float TargetScatteringDistribution = 0.45f;
+	float TargetExtinctionScale = 1.0f;
+	bool bFogBlendActive = false;
+	bool bBiomeZoneSanctuary = false;
+	float ZonePollAccumulator = 0.0f;
 };

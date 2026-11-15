@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Exploder")
 	float GetEmissivePulseScalar() const noexcept { return EmissivePulseScalar; }
 
+	/** Starts or accelerates the detonation fuse (triggered e.g. by Fire/Ember dungeon floor hazards). */
+	UFUNCTION(BlueprintCallable, Category = "Exploder")
+	void IgniteOrAccelerateFuse(float FuseBoostSeconds = 1.25f) noexcept;
+
 	/** Fires whenever the deterministic fuse phase crosses a tick boundary (0..1 progress, pitch scalar). */
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExploderFuseTick, float /*FuseProgress*/, float /*PitchMultiplier*/);
 	FOnExploderFuseTick OnExploderFuseTick;

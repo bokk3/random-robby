@@ -3,9 +3,12 @@
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
+#include "Core/DungeoneerCharacter.h"
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieFastThrower.h"
+#include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -91,6 +94,8 @@ namespace TileMapDetail
 		FBox2D OuterBox = FBox2D(ForceInit);
 		TArray<FVector2D> WestDoorPositions;
 		TArray<FVector2D> EastDoorPositions;
+		TArray<FVector2D> NorthDoorPositions;
+		TArray<FVector2D> SouthDoorPositions;
 	};
 
 	inline bool IsNearAnyDoorway(const TArray<FVector2D>& DoorPositions, const double WorldX, const double WorldY, const double ClearanceRadius) noexcept
@@ -122,6 +127,14 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	FloorHISM->SetCollisionProfileName(TEXT("BlockAll"));
 	FloorHISM->SetCullDistances(0, 3800);
 
+	WetFloorHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("WetFloorHISM"));
+	WetFloorHISM->SetupAttachment(SceneRoot);
+	WetFloorHISM->NumCustomDataFloats = 4;
+	WetFloorHISM->SetCastShadow(false);
+	WetFloorHISM->bCastHiddenShadow = false;
+	WetFloorHISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WetFloorHISM->SetCullDistances(0, 3800);
+
 	WallHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("WallHISM"));
 	WallHISM->SetupAttachment(SceneRoot);
 	WallHISM->NumCustomDataFloats = 4;
@@ -130,6 +143,15 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	WallHISM->SetCollisionProfileName(TEXT("BlockAll"));
 	WallHISM->ComponentTags.Add(TEXT("DungeonWall"));
 	WallHISM->SetCullDistances(0, 3800);
+
+	DiagonalWedgeHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("DiagonalWedgeHISM"));
+	DiagonalWedgeHISM->SetupAttachment(SceneRoot);
+	DiagonalWedgeHISM->NumCustomDataFloats = 4;
+	DiagonalWedgeHISM->SetCastShadow(true);
+	DiagonalWedgeHISM->bCastHiddenShadow = true;
+	DiagonalWedgeHISM->SetCollisionProfileName(TEXT("BlockAll"));
+	DiagonalWedgeHISM->ComponentTags.Add(TEXT("DungeonWall"));
+	DiagonalWedgeHISM->SetCullDistances(0, 3800);
 
 	MirrorHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("MirrorHISM"));
 	MirrorHISM->SetupAttachment(SceneRoot);
@@ -140,6 +162,14 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	MirrorHISM->ComponentTags.Add(TEXT("MirrorReflective"));
 	MirrorHISM->SetCullDistances(0, 3800);
 
+	SconceHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("SconceHISM"));
+	SconceHISM->SetupAttachment(SceneRoot);
+	SconceHISM->NumCustomDataFloats = 4;
+	SconceHISM->SetCastShadow(false);
+	SconceHISM->bCastHiddenShadow = false;
+	SconceHISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SconceHISM->SetCullDistances(0, 3800);
+
 	BreakableHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("BreakableHISM"));
 	BreakableHISM->SetupAttachment(SceneRoot);
 	BreakableHISM->NumCustomDataFloats = 4;
@@ -148,6 +178,30 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 	BreakableHISM->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	BreakableHISM->ComponentTags.Add(TEXT("BreakableNoiseProp"));
 	BreakableHISM->SetCullDistances(0, 3800);
+
+	ForegroundParallaxHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("ForegroundParallaxHISM"));
+	ForegroundParallaxHISM->SetupAttachment(SceneRoot);
+	ForegroundParallaxHISM->NumCustomDataFloats = 4;
+	ForegroundParallaxHISM->SetCastShadow(false);
+	ForegroundParallaxHISM->bCastHiddenShadow = false;
+	ForegroundParallaxHISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ForegroundParallaxHISM->SetCullDistances(0, 3200);
+
+	SconceLightPool.Reserve(4);
+	for (int32 LightIdx = 0; LightIdx < 4; ++LightIdx)
+	{
+		const FName LightName(*FString::Printf(TEXT("SconcePoolLight_%d"), LightIdx));
+		if (UPointLightComponent* LightComp = CreateDefaultSubobject<UPointLightComponent>(LightName))
+		{
+			LightComp->SetupAttachment(SceneRoot);
+			LightComp->CastShadows = false;
+			LightComp->SetIntensity(0.0f);
+			LightComp->SetAttenuationRadius(680.0f);
+			LightComp->SetLightColor(FLinearColor(1.0f, 0.56f, 0.22f));
+			LightComp->VolumetricScatteringIntensity = 1.4f;
+			SconceLightPool.Add(LightComp);
+		}
+	}
 
 	ScratchSweepHits.Reserve(32);
 }
@@ -212,15 +266,23 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 		}
 	};
 
-	if (FloorHISM)
+	auto ConfigurePlaneHISM = [PlaneMesh, BoxFallback, &AssignHISMVisuals](
+		UHierarchicalInstancedStaticMeshComponent* Comp,
+		FName DiffuseKey,
+		FName NormalKey,
+		const FLinearColor& TintColor,
+		const float RoughnessVal)
 	{
-		FloorHISM->NumCustomDataFloats = 4;
-		if (!FloorHISM->GetStaticMesh() && (PlaneMesh || BoxFallback))
+		if (Comp)
 		{
-			FloorHISM->SetStaticMesh(PlaneMesh ? PlaneMesh : BoxFallback);
+			Comp->NumCustomDataFloats = 4;
+			if (!Comp->GetStaticMesh() && (PlaneMesh || BoxFallback))
+			{
+				Comp->SetStaticMesh(PlaneMesh ? PlaneMesh : BoxFallback);
+			}
+			AssignHISMVisuals(Comp, DiffuseKey, NormalKey, TintColor, RoughnessVal);
 		}
-		AssignHISMVisuals(FloorHISM.Get(), FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor(0.22f, 0.25f, 0.34f), 0.72f);
-	}
+	};
 
 	auto ConfigureBoxHISM = [BoxFallback, &AssignHISMVisuals](
 		UHierarchicalInstancedStaticMeshComponent* Comp,
@@ -242,9 +304,14 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 		}
 	};
 
-	ConfigureBoxHISM(WallHISM.Get(), true, FName(TEXT("Wall_Full0_D")), FName(TEXT("Wall_Full0_N")), FLinearColor(0.32f, 0.30f, 0.40f), 0.65f);
-	ConfigureBoxHISM(MirrorHISM.Get(), true, FName(TEXT("Mirror_Intact_D")), FName(TEXT("Mirror_Intact_N")), FLinearColor(0.38f, 0.88f, 0.98f), 0.08f);
-	ConfigureBoxHISM(BreakableHISM.Get(), true, FName(TEXT("Breakable_Intact_D")), FName(TEXT("Breakable_Intact_N")), FLinearColor(0.76f, 0.46f, 0.20f), 0.50f);
+	ConfigurePlaneHISM(FloorHISM.Get(),             FName(TEXT("Floor_Tile0_D")),    FName(TEXT("Floor_Tile0_N")),    FLinearColor(0.22f, 0.25f, 0.34f), 0.72f);
+	ConfigurePlaneHISM(WetFloorHISM.Get(),          FName(TEXT("Floor_Wet0_D")),     FName(TEXT("Floor_Wet0_N")),     FLinearColor(0.14f, 0.24f, 0.34f), 0.06f);
+	ConfigureBoxHISM(WallHISM.Get(),                true,  FName(TEXT("Wall_Full0_D")),     FName(TEXT("Wall_Full0_N")),     FLinearColor(0.32f, 0.30f, 0.40f), 0.65f);
+	ConfigureBoxHISM(DiagonalWedgeHISM.Get(),       true,  FName(TEXT("Wall_Diag0_D")),     FName(TEXT("Wall_Diag0_N")),     FLinearColor(0.28f, 0.28f, 0.38f), 0.58f);
+	ConfigureBoxHISM(MirrorHISM.Get(),              true,  FName(TEXT("Mirror_Intact_D")),  FName(TEXT("Mirror_Intact_N")),  FLinearColor(0.38f, 0.88f, 0.98f), 0.08f);
+	ConfigureBoxHISM(SconceHISM.Get(),              false, FName(TEXT("Doors_Sconce_D")),   FName(TEXT("Doors_Sconce_N")),   FLinearColor(1.0f, 0.62f, 0.20f),  0.28f);
+	ConfigureBoxHISM(BreakableHISM.Get(),           true,  FName(TEXT("Breakable_Intact_D")), FName(TEXT("Breakable_Intact_N")), FLinearColor(0.76f, 0.46f, 0.20f), 0.50f);
+	ConfigureBoxHISM(ForegroundParallaxHISM.Get(),  false, FName(TEXT("Wall_Chain_D")),     FName(TEXT("Wall_Chain_N")),     FLinearColor(0.14f, 0.15f, 0.20f), 0.45f);
 
 	if (Bootstrap)
 	{
@@ -254,10 +321,14 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 
 void ADungeoneerTileMapInstancer::ClearAllInstances()
 {
-	if (FloorHISM)     { FloorHISM->ClearInstances(); }
-	if (WallHISM)      { WallHISM->ClearInstances(); }
-	if (MirrorHISM)    { MirrorHISM->ClearInstances(); }
-	if (BreakableHISM) { BreakableHISM->ClearInstances(); }
+	if (FloorHISM)              { FloorHISM->ClearInstances(); }
+	if (WetFloorHISM)           { WetFloorHISM->ClearInstances(); }
+	if (WallHISM)               { WallHISM->ClearInstances(); }
+	if (DiagonalWedgeHISM)      { DiagonalWedgeHISM->ClearInstances(); }
+	if (MirrorHISM)             { MirrorHISM->ClearInstances(); }
+	if (SconceHISM)             { SconceHISM->ClearInstances(); }
+	if (BreakableHISM)          { BreakableHISM->ClearInstances(); }
+	if (ForegroundParallaxHISM) { ForegroundParallaxHISM->ClearInstances(); }
 
 	for (AActor* Encounter : SpawnedEncounterActors)
 	{
@@ -271,8 +342,18 @@ void ADungeoneerTileMapInstancer::ClearAllInstances()
 	WallEntries.Reset();
 	MirrorEntries.Reset();
 	BreakableEntries.Reset();
+	TrapVentEntries.Reset();
+	SconceWorldPositions.Reset();
 	PendingCutawayFlags.Reset();
 	LastCorridorTileCount = 0;
+
+	for (UPointLightComponent* LightComp : SconceLightPool)
+	{
+		if (LightComp)
+		{
+			LightComp->SetIntensity(0.0f);
+		}
+	}
 }
 
 void ADungeoneerTileMapInstancer::AddWallInstance(
@@ -282,7 +363,16 @@ void ADungeoneerTileMapInstancer::AddWallInstance(
 	const int32 FullUVCell,
 	const int32 CutawayUVCell)
 {
-	if (!WallHISM)
+	const bool bIsDiagonalAxis =
+		(Axis == EDungeoneerWallAxis::NorthEast ||
+		 Axis == EDungeoneerWallAxis::NorthWest ||
+		 Axis == EDungeoneerWallAxis::SouthEast ||
+		 Axis == EDungeoneerWallAxis::SouthWest);
+
+	UHierarchicalInstancedStaticMeshComponent* TargetHISM = bIsDiagonalAxis && DiagonalWedgeHISM
+		? DiagonalWedgeHISM.Get()
+		: WallHISM.Get();
+	if (!TargetHISM)
 	{
 		return;
 	}
@@ -294,29 +384,30 @@ void ADungeoneerTileMapInstancer::AddWallInstance(
 		FMath::Max(0.2f, HalfExtents.Z * 2.0f / 100.0f));
 	const FTransform InstanceTransform(FRotator(0.0f, YawDeg, 0.0f), WorldCenter, MeshScale);
 
-	const int32 InstIdx = WallHISM->AddInstance(InstanceTransform, true);
+	const int32 InstIdx = TargetHISM->AddInstance(InstanceTransform, true);
 	if (InstIdx != INDEX_NONE)
 	{
-		WallHISM->SetCustomDataValue(InstIdx, 0, 0.0f, false); // 0 = Full standing wall, 1 = Row 2 cutaway stub
-		WallHISM->SetCustomDataValue(InstIdx, 1, static_cast<float>(FullUVCell), false);
-		WallHISM->SetCustomDataValue(InstIdx, 2, static_cast<float>(CutawayUVCell), false);
-		WallHISM->SetCustomDataValue(InstIdx, 3, static_cast<float>(static_cast<uint8>(Axis)), false);
+		TargetHISM->SetCustomDataValue(InstIdx, 0, 0.0f, false); // 0 = Full standing wall, 1 = Row 2 cutaway stub
+		TargetHISM->SetCustomDataValue(InstIdx, 1, static_cast<float>(FullUVCell), false);
+		TargetHISM->SetCustomDataValue(InstIdx, 2, static_cast<float>(CutawayUVCell), false);
+		TargetHISM->SetCustomDataValue(InstIdx, 3, static_cast<float>(static_cast<uint8>(Axis)), false);
 
-		FDungeoneerWallInstanceEntry Entry;
-		Entry.HISMInstanceIndex = InstIdx;
-		Entry.WallAxis = Axis;
-		Entry.WorldCenter = WorldCenter;
-		Entry.WorldHalfExtents = HalfExtents;
-		Entry.FullUVCellIndex = FullUVCell;
-		Entry.CutawayUVCellIndex = CutawayUVCell;
-		Entry.bCanCutawayForCamera =
-			(Axis == EDungeoneerWallAxis::South ||
-			 Axis == EDungeoneerWallAxis::SouthEast ||
-			 Axis == EDungeoneerWallAxis::SouthWest);
-		Entry.bCurrentlyCutaway = false;
+		// Note: WallEntries only records primary WallHISM instances when checking PerInstanceSMCustomData on WallHISM
+		if (TargetHISM == WallHISM.Get())
+		{
+			FDungeoneerWallInstanceEntry Entry;
+			Entry.HISMInstanceIndex = InstIdx;
+			Entry.WallAxis = Axis;
+			Entry.WorldCenter = WorldCenter;
+			Entry.WorldHalfExtents = HalfExtents;
+			Entry.FullUVCellIndex = FullUVCell;
+			Entry.CutawayUVCellIndex = CutawayUVCell;
+			Entry.bCanCutawayForCamera = (Axis == EDungeoneerWallAxis::South);
+			Entry.bCurrentlyCutaway = false;
 
-		WallEntries.Add(Entry);
-		PendingCutawayFlags.Add(0);
+			WallEntries.Add(Entry);
+			PendingCutawayFlags.Add(0);
+		}
 	}
 }
 
@@ -395,6 +486,44 @@ int32 ADungeoneerTileMapInstancer::RegisterBreakableInstance(
 		Entry.ImpactLoudness = ImpactLoudness;
 		Entry.bIsShattered = false;
 		return BreakableEntries.Add(Entry);
+	}
+
+	return INDEX_NONE;
+}
+
+int32 ADungeoneerTileMapInstancer::RegisterTrapVentInstance(
+	const FVector& WorldCenter,
+	const EDungeoneerTrapHazardType HazardType,
+	const float TriggerRadiusUU,
+	const float DamageAmount,
+	const int32 UVCellIndex)
+{
+	if (!BreakableHISM)
+	{
+		return INDEX_NONE;
+	}
+
+	EnsureMeshAssetsInitialized();
+
+	const FTransform VentTransform(FRotator::ZeroRotator, WorldCenter, FVector(1.35f, 1.35f, 0.14f));
+	const int32 InstIdx = BreakableHISM->AddInstance(VentTransform, true);
+	if (InstIdx != INDEX_NONE)
+	{
+		BreakableHISM->SetCustomDataValue(InstIdx, 0, 2.0f, true); // 2 = active floor hazard vent
+		BreakableHISM->SetCustomDataValue(InstIdx, 1, static_cast<float>(UVCellIndex), true);
+		BreakableHISM->SetCustomDataValue(InstIdx, 2, static_cast<float>(static_cast<uint8>(HazardType)), true);
+		BreakableHISM->SetCustomDataValue(InstIdx, 3, 0.5f, true);
+
+		FDungeoneerTrapVentEntry Vent;
+		Vent.HISMInstanceIndex = InstIdx;
+		Vent.HazardType = HazardType;
+		Vent.WorldCenter = WorldCenter;
+		Vent.TriggerRadiusUU = TriggerRadiusUU;
+		Vent.DamageAmount = DamageAmount;
+		Vent.CooldownSeconds = 1.6f;
+		Vent.ActiveCooldown = 0.0f;
+		Vent.FuseAccelerateSeconds = 1.25f;
+		return TrapVentEntries.Add(Vent);
 	}
 
 	return INDEX_NONE;
@@ -489,7 +618,9 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 	WallEntries.Reserve(EstimatedRooms * 28);
 	PendingCutawayFlags.Reserve(EstimatedRooms * 28);
 	MirrorEntries.Reserve(EstimatedRooms * 8);
-	BreakableEntries.Reserve(EstimatedRooms * 4);
+	BreakableEntries.Reserve(EstimatedRooms * 6);
+	TrapVentEntries.Reserve(EstimatedRooms * 4);
+	SconceWorldPositions.Reserve(EstimatedRooms * 6);
 
 	// 1. Pre-compute room bounding layouts and doorway / corridor topology
 	TArray<TileMapDetail::FComputedRoomLayout> RoomLayouts;
@@ -555,12 +686,62 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		}
 	};
 
+	auto RecordSconceNearDoor = [this](const FVector2D& Door2D, const float BaseZ, const float LateralOffsetY)
+	{
+		const FVector SconcePos(Door2D.X, Door2D.Y + LateralOffsetY, BaseZ + WallHeightUU * 0.62f);
+		if (SconceHISM)
+		{
+			const int32 SconceIdx = SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, SconcePos, FVector(0.32f, 0.32f, 0.45f)), false);
+			if (SconceIdx != INDEX_NONE)
+			{
+				SconceHISM->SetCustomDataValue(SconceIdx, 0, 1.0f, false); // 1 = Emissive flame sconce
+				SconceHISM->SetCustomDataValue(SconceIdx, 1, 8.0f, false);
+			}
+		}
+		SconceWorldPositions.Add(SconcePos);
+	};
+
 	for (const FDungeonNode& NodeA : FloorGraph.Nodes)
 	{
 		const int32* LayoutAIdx = NodeIdToLayoutIdx.Find(NodeA.NodeId);
 		if (!LayoutAIdx)
 		{
 			continue;
+		}
+
+		// Handle secret Phantasm pockets attached along North (+Y) or South (-Y) parent seam
+		if (NodeA.bIsSecretRoom && NodeA.ParentRoomNodeId != INDEX_NONE)
+		{
+			if (const int32* ParentIdx = NodeIdToLayoutIdx.Find(NodeA.ParentRoomNodeId))
+			{
+				TileMapDetail::FComputedRoomLayout& SecretLay = RoomLayouts[*LayoutAIdx];
+				TileMapDetail::FComputedRoomLayout& ParentLay = RoomLayouts[*ParentIdx];
+				const bool bAttachedSouth = (SecretLay.RoomCenter.Y < ParentLay.RoomCenter.Y);
+				const double SeamY = bAttachedSouth ? ParentLay.OuterBox.Min.Y : ParentLay.OuterBox.Max.Y;
+				const FVector2D SecretSeam2D(SecretLay.RoomCenter.X, SeamY);
+				if (bAttachedSouth)
+				{
+					ParentLay.SouthDoorPositions.Add(SecretSeam2D);
+					SecretLay.NorthDoorPositions.Add(SecretSeam2D);
+				}
+				else
+				{
+					ParentLay.NorthDoorPositions.Add(SecretSeam2D);
+					SecretLay.SouthDoorPositions.Add(SecretSeam2D);
+				}
+				AllDoorways2D.Add(SecretSeam2D);
+				AddCorridorStripXY(SecretSeam2D, SecretSeam2D);
+
+				// Hide the secret threshold behind an illusory AMirrorWall_Phantasm seam
+				const FVector PhantasmNormal = bAttachedSouth ? FVector(0.0, 1.0, 0.0) : FVector(0.0, -1.0, 0.0);
+				RegisterMirrorInstance(
+					FVector(SecretSeam2D.X, SecretSeam2D.Y, WallHeightUU * 0.44f),
+					PhantasmNormal,
+					128.0f,
+					WallHeightUU * 0.45f,
+					true,
+					4);
+			}
 		}
 
 		for (const int32 OutId : NodeA.OutgoingNodeIds)
@@ -583,6 +764,8 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 				LayB.WestDoorPositions.Add(WestDoor);
 				AllDoorways2D.Add(EastDoor);
 				AllDoorways2D.Add(WestDoor);
+				RecordSconceNearDoor(EastDoor, LayA.RoomCenter.Z, -135.0f);
+				RecordSconceNearDoor(WestDoor, LayB.RoomCenter.Z, 135.0f);
 
 				const double MidX = 0.5 * (EastDoor.X + WestDoor.X);
 				AddCorridorStripXY(EastDoor, FVector2D(MidX, EastDoor.Y));
@@ -591,8 +774,6 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			}
 			else
 			{
-				// Rooms nearly touch or flush-abut (e.g. Combat -> MirrorPalaceMaze -> Vendor):
-				// align a direct threshold aperture within the shared Y wall span.
 				const double SafePad = GridStep * 1.35;
 				const double OverlapMinY = FMath::Max(LayA.OuterBox.Min.Y + SafePad, LayB.OuterBox.Min.Y + SafePad);
 				const double OverlapMaxY = FMath::Min(LayA.OuterBox.Max.Y - SafePad, LayB.OuterBox.Max.Y - SafePad);
@@ -607,12 +788,40 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 				LayB.WestDoorPositions.Add(WestDoor);
 				AllDoorways2D.Add(EastDoor);
 				AllDoorways2D.Add(WestDoor);
+				RecordSconceNearDoor(EastDoor, LayA.RoomCenter.Z, -135.0f);
 				AddCorridorStripXY(EastDoor, WestDoor);
 			}
 		}
 	}
 
-	// 2. Build Rooms with Carved Doorways
+	auto SelectBiomeFloorUV = [](const EDungeonBiomeType Biome, FRandomStream& Rand) noexcept -> int32
+	{
+		switch (Biome)
+		{
+		case EDungeonBiomeType::MirrorPalace: return 12 + Rand.RandRange(0, 3);
+		case EDungeonBiomeType::SporeFens:    return 8 + Rand.RandRange(0, 3);
+		case EDungeonBiomeType::EmberForge:   return 12 + Rand.RandRange(0, 1);
+		case EDungeonBiomeType::Crypt:
+		default:                              return Rand.RandRange(0, 3);
+		}
+	};
+
+	auto SelectBiomeHazard = [](const EDungeonBiomeType Biome, const EDungeonRoomType RoomType) noexcept -> EDungeoneerTrapHazardType
+	{
+		if (RoomType == EDungeonRoomType::MirrorPalaceMaze)
+		{
+			return EDungeoneerTrapHazardType::AcousticChime;
+		}
+		switch (Biome)
+		{
+		case EDungeonBiomeType::SporeFens:  return EDungeoneerTrapHazardType::PoisonSpore;
+		case EDungeonBiomeType::EmberForge: return EDungeoneerTrapHazardType::EmberFire;
+		case EDungeonBiomeType::Crypt:
+		default:                            return EDungeoneerTrapHazardType::Steam;
+		}
+	};
+
+	// 2. Build Rooms with Carved Doorways, Biome Atlases, Shapes, Puddles, Pillars & Traps
 	const double DoorCarveRadius = static_cast<double>(TileSizeUU) * 1.45;
 	for (int32 NodeIdx = 0; NodeIdx < FloorGraph.Nodes.Num(); ++NodeIdx)
 	{
@@ -624,7 +833,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		const int32 NumTilesY = Lay.NumTilesY;
 		const FVector RoomOrigin = Node.WorldCenter;
 
-		// 2a. Room Floor Grid (`ATLAS_Dungeon_Floors_4x4`)
+		// 2a. Room Floor Grid & Wet Specular Puddle Overlays (`FloorHISM` + `WetFloorHISM`)
 		for (int32 iy = 0; iy < NumTilesY; ++iy)
 		{
 			for (int32 ix = 0; ix < NumTilesX; ++ix)
@@ -634,28 +843,45 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 				const FVector TileCenter = RoomOrigin + FVector(LocalX, LocalY, 0.0f);
 				const FVector FloorScale(TileSizeUU / 100.0f, TileSizeUU / 100.0f, 1.0f);
 
+				// Transition Bleed (~25% on the East side when BleedBiomeType differs from primary)
+				const bool bInBleedZone = (Node.BleedBiomeType != Node.BiomeType) && (ix >= (NumTilesX * 3) / 4);
+				const EDungeonBiomeType TileBiome = bInBleedZone ? Node.BleedBiomeType : Node.BiomeType;
+
 				if (FloorHISM)
 				{
-					const int32 FloorIdx = FloorHISM->AddInstance(FTransform(FRotator::ZeroRotator, TileCenter, FloorScale), true);
+					const int32 FloorIdx = FloorHISM->AddInstance(FTransform(FRotator::ZeroRotator, TileCenter, FloorScale), false);
 					if (FloorIdx != INDEX_NONE)
 					{
-						int32 FloorUV = RoomRand.RandRange(0, 3);
+						int32 FloorUV = SelectBiomeFloorUV(TileBiome, RoomRand);
 						if (Node.RoomType == EDungeonRoomType::MirrorPalaceMaze)
 						{
 							FloorUV = 15;
-						}
-						else if (Node.RoomType == EDungeonRoomType::DeepFogGauntlet || ((ix + iy) % 5 == 0))
-						{
-							FloorUV = 4 + RoomRand.RandRange(0, 3);
 						}
 						FloorHISM->SetCustomDataValue(FloorIdx, 0, static_cast<float>(Node.NodeId), false);
 						FloorHISM->SetCustomDataValue(FloorIdx, 1, static_cast<float>(FloorUV), false);
 					}
 				}
+
+				// Deterministic wet specular puddle clusters in Crypt / SporeFens rooms
+				const bool bPlaceWetPuddle = (TileBiome == EDungeonBiomeType::Crypt || TileBiome == EDungeonBiomeType::SporeFens)
+					&& Node.RoomType != EDungeonRoomType::RestingGround
+					&& ix > 0 && ix < (NumTilesX - 1) && iy > 0 && iy < (NumTilesY - 1)
+					&& (((ix * 7 + iy * 13 + Node.NodeId) % 9) == 0);
+				if (bPlaceWetPuddle && WetFloorHISM)
+				{
+					const int32 WetIdx = WetFloorHISM->AddInstance(
+						FTransform(FRotator::ZeroRotator, TileCenter + FVector(0.0, 0.0, 1.25), FloorScale * 0.85f),
+						false);
+					if (WetIdx != INDEX_NONE)
+					{
+						WetFloorHISM->SetCustomDataValue(WetIdx, 0, static_cast<float>(Node.NodeId), false);
+						WetFloorHISM->SetCustomDataValue(WetIdx, 1, static_cast<float>(4 + RoomRand.RandRange(0, 3)), false);
+					}
+				}
 			}
 		}
 
-		// 2b. Room Perimeter 4-Axis Walls with Carved West/East Doorways
+		// 2b. Room Perimeter 4-Axis Walls with Carved N/S/E/W Doorways + Secret Seams
 		const float EdgeOffsetX = Lay.EdgeOffsetX;
 		const float EdgeOffsetY = Lay.EdgeOffsetY;
 		const float WallZ = RoomOrigin.Z + WallHeightUU * 0.5f;
@@ -666,8 +892,17 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		for (int32 ix = 1; ix < NumTilesX - 1; ++ix)
 		{
 			const float WX = RoomOrigin.X + (static_cast<float>(ix) - 0.5f * static_cast<float>(NumTilesX - 1)) * TileSizeUU;
-			AddWallInstance(FVector(WX, RoomOrigin.Y + EdgeOffsetY, WallZ), EDungeoneerWallAxis::North, NSExtents, ix % 4, 4 + (ix % 4));
-			AddWallInstance(FVector(WX, RoomOrigin.Y - EdgeOffsetY, WallZ), EDungeoneerWallAxis::South, NSExtents, ix % 4, 4 + (ix % 4));
+			const double NorthWY = RoomOrigin.Y + EdgeOffsetY;
+			const double SouthWY = RoomOrigin.Y - EdgeOffsetY;
+
+			if (!TileMapDetail::IsNearAnyDoorway(Lay.NorthDoorPositions, WX, NorthWY, DoorCarveRadius))
+			{
+				AddWallInstance(FVector(WX, NorthWY, WallZ), EDungeoneerWallAxis::North, NSExtents, ix % 4, 4 + (ix % 4));
+			}
+			if (!TileMapDetail::IsNearAnyDoorway(Lay.SouthDoorPositions, WX, SouthWY, DoorCarveRadius))
+			{
+				AddWallInstance(FVector(WX, SouthWY, WallZ), EDungeoneerWallAxis::South, NSExtents, ix % 4, 4 + (ix % 4));
+			}
 		}
 
 		for (int32 iy = 1; iy < NumTilesY - 1; ++iy)
@@ -686,10 +921,12 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			}
 		}
 
-		// 45-degree Diagonal Corner Chamfers (skip if doorway falls near corner)
-		const float DiagOffsetX = EdgeOffsetX - TileSizeUU * 0.25f;
-		const float DiagOffsetY = EdgeOffsetY - TileSizeUU * 0.25f;
-		const FVector DiagExtents(SegSpan, 34.0f, WallHeightUU * 0.5f);
+		// 45-degree Diagonal Corner Wedges (`DiagonalWedgeHISM`) — deeper bevel on OctagonalRotunda
+		const bool bOctagonal = (Node.RoomShape == EDungeonRoomShape::OctagonalRotunda);
+		const float CornerInsetRatio = bOctagonal ? 0.52f : 0.25f;
+		const float DiagOffsetX = EdgeOffsetX - TileSizeUU * CornerInsetRatio;
+		const float DiagOffsetY = EdgeOffsetY - TileSizeUU * CornerInsetRatio;
+		const FVector DiagExtents(bOctagonal ? TileSizeUU * 0.62f : SegSpan, 34.0f, WallHeightUU * 0.5f);
 		const double CornerDoorClearance = DoorCarveRadius * 0.9;
 
 		const FVector CornerNE(RoomOrigin.X + DiagOffsetX, RoomOrigin.Y + DiagOffsetY, WallZ);
@@ -714,6 +951,49 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			AddWallInstance(CornerSW, EDungeoneerWallAxis::SouthWest, DiagExtents, 11, 7);
 		}
 
+		// 2b-bis. Shape-specific Interior Pillars & Overhead Foreground Parallax Beams/Chains
+		if (Node.RoomShape == EDungeonRoomShape::PillaredGallery || Node.RoomShape == EDungeonRoomShape::CrossAmbushVault)
+		{
+			const float PillarDist = TileSizeUU * 1.45f;
+			const FVector PillarExtents(44.0f, 44.0f, WallHeightUU * 0.52f);
+			AddWallInstance(RoomOrigin + FVector(-PillarDist, -PillarDist, WallZ), EDungeoneerWallAxis::North, PillarExtents, 12, 4);
+			AddWallInstance(RoomOrigin + FVector( PillarDist, -PillarDist, WallZ), EDungeoneerWallAxis::North, PillarExtents, 12, 4);
+			AddWallInstance(RoomOrigin + FVector(-PillarDist,  PillarDist, WallZ), EDungeoneerWallAxis::North, PillarExtents, 12, 4);
+			AddWallInstance(RoomOrigin + FVector( PillarDist,  PillarDist, WallZ), EDungeoneerWallAxis::North, PillarExtents, 12, 4);
+
+			if (ForegroundParallaxHISM)
+			{
+				const FVector BeamPos = RoomOrigin + FVector(0.0f, 0.0f, 260.0f);
+				const int32 BeamIdx = ForegroundParallaxHISM->AddInstance(FTransform(FRotator::ZeroRotator, BeamPos, FVector(3.8f, 0.28f, 0.28f)), false);
+				if (BeamIdx != INDEX_NONE)
+				{
+					ForegroundParallaxHISM->SetCustomDataValue(BeamIdx, 0, static_cast<float>(Node.NodeId), false);
+					ForegroundParallaxHISM->SetCustomDataValue(BeamIdx, 1, 12.0f, false);
+				}
+			}
+		}
+
+		// Sanctuary Brazier / Descending Stairs Visual Landmarks (`SconceHISM`)
+		if (Node.RoomType == EDungeonRoomType::RestingGround && SconceHISM)
+		{
+			for (int32 r = 0; r < 4; ++r)
+			{
+				const float Angle = static_cast<float>(r) * (HALF_PI);
+				const FVector RunePos = RoomOrigin + FVector(FMath::Cos(Angle) * 280.0f, FMath::Sin(Angle) * 280.0f, 6.0f);
+				SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, RunePos, FVector(0.55f, 0.55f, 0.08f)), false);
+			}
+		}
+		else if (Node.bHasDescendingStairs && SconceHISM)
+		{
+			const FVector StairPos = RoomOrigin + FVector(EdgeOffsetX * 0.45f, 0.0f, 12.0f);
+			const int32 StairIdx = SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, StairPos, FVector(1.8f, 1.8f, 0.28f)), false);
+			if (StairIdx != INDEX_NONE)
+			{
+				SconceHISM->SetCustomDataValue(StairIdx, 0, 2.0f, false); // 2 = Descending stairwell slab
+				SconceHISM->SetCustomDataValue(StairIdx, 1, 12.0f, false);
+			}
+		}
+
 		// 2c. Mirror-Palace Maze Panels & 45-deg Bounce Prisms (`MirrorHISM`)
 		if (Node.RoomType == EDungeonRoomType::MirrorPalaceMaze || Node.NodeId % 3 == 1)
 		{
@@ -729,7 +1009,6 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 						const int32 gx = idx % 5;
 						const int32 gy = idx / 5;
 						const FVector MPos = RoomOrigin + FVector((gx - 2.0f) * TileSizeUU * 0.9f, (gy - 2.0f) * TileSizeUU * 0.9f, WallHeightUU * 0.42f);
-						// Keep entrance & exit doorway lanes traversable
 						if (TileMapDetail::IsNearAnyDoorway(AllDoorways2D, MPos.X, MPos.Y, TileSizeUU * 1.5))
 						{
 							continue;
@@ -752,10 +1031,25 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			}
 		}
 
-		// 2d. Deterministic Breakable Barrels/Urns (`PROP_Breakables_And_Traps_4x4`)
+		// 2d. Breakable Acoustic Props (loud 1.95f lures zombies + Acute Hearing ripples) & Systemic Biome Trap Vents
 		const FVector BreakOffset(RoomRand.FRandRange(-160.0f, 160.0f), RoomRand.FRandRange(-140.0f, 140.0f), 45.0f);
 		const int32 IntactCell = RoomRand.RandRange(0, 1);
-		RegisterBreakableInstance(RoomOrigin + BreakOffset, IntactCell, IntactCell + 2, 85.0f, 1.35f);
+		RegisterBreakableInstance(RoomOrigin + BreakOffset, IntactCell, IntactCell + 2, 85.0f, 1.95f);
+
+		if (Node.RoomType == EDungeonRoomType::Combat || Node.RoomType == EDungeonRoomType::DeepFogGauntlet || Node.RoomType == EDungeonRoomType::MirrorPalaceMaze)
+		{
+			const EDungeoneerTrapHazardType PrimaryTrap = SelectBiomeHazard(Node.BiomeType, Node.RoomType);
+			const FVector VentPos = RoomOrigin + FVector(RoomRand.FRandRange(-240.0f, 240.0f), RoomRand.FRandRange(-220.0f, 220.0f), 2.5f);
+			RegisterTrapVentInstance(VentPos, PrimaryTrap, 120.0f, 18.0f, 8 + (static_cast<int32>(PrimaryTrap) % 4));
+
+			// Transition bleed secondary hazard grate on final nodes
+			if (Node.BleedBiomeType != Node.BiomeType)
+			{
+				const EDungeoneerTrapHazardType BleedTrap = SelectBiomeHazard(Node.BleedBiomeType, Node.RoomType);
+				const FVector BleedVentPos = RoomOrigin + FVector(EdgeOffsetX * 0.45f, RoomRand.FRandRange(-180.0f, 180.0f), 2.5f);
+				RegisterTrapVentInstance(BleedVentPos, BleedTrap, 120.0f, 20.0f, 12 + (static_cast<int32>(BleedTrap) % 4));
+			}
+		}
 	}
 
 	// 3. Place Connecting Corridor Floor Tiles & Flanking Walls Outside Room Interiors
@@ -840,10 +1134,16 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 	// 4. Spawn Room Encounters (Exploders, Fast Throwers, Sanctuary, Vendor, Vault)
 	SpawnEncountersForFloorGraph(FloorGraph);
 
-	if (FloorHISM)     { FloorHISM->MarkRenderStateDirty(); }
-	if (WallHISM)      { WallHISM->MarkRenderStateDirty(); }
-	if (MirrorHISM)    { MirrorHISM->MarkRenderStateDirty(); }
-	if (BreakableHISM) { BreakableHISM->MarkRenderStateDirty(); }
+	if (FloorHISM)              { FloorHISM->MarkRenderStateDirty(); }
+	if (WetFloorHISM)           { WetFloorHISM->MarkRenderStateDirty(); }
+	if (WallHISM)               { WallHISM->MarkRenderStateDirty(); }
+	if (DiagonalWedgeHISM)      { DiagonalWedgeHISM->MarkRenderStateDirty(); }
+	if (MirrorHISM)             { MirrorHISM->MarkRenderStateDirty(); }
+	if (SconceHISM)             { SconceHISM->MarkRenderStateDirty(); }
+	if (BreakableHISM)          { BreakableHISM->MarkRenderStateDirty(); }
+	if (ForegroundParallaxHISM) { ForegroundParallaxHISM->MarkRenderStateDirty(); }
+
+	UpdateSconcePointLightPool();
 }
 
 void ADungeoneerTileMapInstancer::BuildFromActiveGenerator()
@@ -1052,7 +1352,7 @@ int32 ADungeoneerTileMapInstancer::EvaluateEntityStepOnBreakables(
 			if (SensorySub)
 			{
 				const float Loudness = OverrideLoudness > 0.0f ? OverrideLoudness : Entry.ImpactLoudness;
-				SensorySub->BroadcastNoiseEvent(Entry.WorldCenter, Loudness, 950.0f, false);
+				SensorySub->BroadcastNoiseEvent(Entry.WorldCenter, Loudness, 1350.0f, false);
 			}
 
 			++ShatteredThisCall;
@@ -1060,6 +1360,171 @@ int32 ADungeoneerTileMapInstancer::EvaluateEntityStepOnBreakables(
 	}
 
 	return ShatteredThisCall;
+}
+
+int32 ADungeoneerTileMapInstancer::EvaluateTrapVentsForEntities(const float DeltaSeconds)
+{
+	int32 TriggeredCount = 0;
+	UWorld* World = GetWorld();
+	if (!World || TrapVentEntries.Num() == 0)
+	{
+		return 0;
+	}
+
+	UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>();
+	UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>();
+	if (!SpatialSys)
+	{
+		return 0;
+	}
+
+	const int32 PlayerCount = SpatialSys->GetTrackedPlayerCount();
+	const int32 ZombieCount = SpatialSys->GetTrackedZombieCount();
+
+	for (FDungeoneerTrapVentEntry& Vent : TrapVentEntries)
+	{
+		if (Vent.ActiveCooldown > 0.0f)
+		{
+			Vent.ActiveCooldown = FMath::Max(0.0f, Vent.ActiveCooldown - DeltaSeconds);
+			if (Vent.ActiveCooldown <= 0.0f && BreakableHISM && Vent.HISMInstanceIndex != INDEX_NONE)
+			{
+				BreakableHISM->SetCustomDataValue(Vent.HISMInstanceIndex, 3, 0.5f, false);
+			}
+			continue;
+		}
+
+		const double RadiusSq = static_cast<double>(Vent.TriggerRadiusUU) * static_cast<double>(Vent.TriggerRadiusUU);
+		bool bTriggeredThisVent = false;
+
+		for (int32 p = 0; p < PlayerCount; ++p)
+		{
+			if (ADungeoneerCharacter* Player = SpatialSys->GetTrackedPlayerAt(p))
+			{
+				const FVector PLoc = Player->GetActorLocation();
+				if (FVector::DistSquared2D(PLoc, Vent.WorldCenter) <= RadiusSq && FMath::Abs(PLoc.Z - Vent.WorldCenter.Z) <= 200.0)
+				{
+					if (Vent.HazardType == EDungeoneerTrapHazardType::AcousticChime)
+					{
+						if (SensorySub)
+						{
+							SensorySub->BroadcastNoiseEvent(Vent.WorldCenter, 2.35f, 1500.0f, false);
+						}
+					}
+					else
+					{
+						Player->ApplyDungeoneerDamage(Vent.DamageAmount, this);
+					}
+					bTriggeredThisVent = true;
+				}
+			}
+		}
+
+		for (int32 z = 0; z < ZombieCount; ++z)
+		{
+			if (AZombieBase* Zombie = SpatialSys->GetTrackedZombieAt(z))
+			{
+				if (!Zombie->IsZombieAlive())
+				{
+					continue;
+				}
+				const FVector ZLoc = Zombie->GetActorLocation();
+				if (FVector::DistSquared2D(ZLoc, Vent.WorldCenter) <= RadiusSq && FMath::Abs(ZLoc.Z - Vent.WorldCenter.Z) <= 200.0)
+				{
+					if (Vent.HazardType == EDungeoneerTrapHazardType::AcousticChime)
+					{
+						if (SensorySub)
+						{
+							SensorySub->BroadcastNoiseEvent(Vent.WorldCenter, 2.35f, 1500.0f, false);
+						}
+					}
+					else
+					{
+						Zombie->ApplyZombieDamage(Vent.DamageAmount, this);
+						Zombie->TriggerHitFeedback((ZLoc - Vent.WorldCenter).GetSafeNormal2D(), 90.0f);
+						if (Vent.HazardType == EDungeoneerTrapHazardType::EmberFire)
+						{
+							if (AZombieExploder* Exploder = Cast<AZombieExploder>(Zombie))
+							{
+								Exploder->IgniteOrAccelerateFuse(Vent.FuseAccelerateSeconds);
+							}
+						}
+					}
+					bTriggeredThisVent = true;
+				}
+			}
+		}
+
+		if (bTriggeredThisVent)
+		{
+			Vent.ActiveCooldown = Vent.CooldownSeconds;
+			if (BreakableHISM && Vent.HISMInstanceIndex != INDEX_NONE)
+			{
+				BreakableHISM->SetCustomDataValue(Vent.HISMInstanceIndex, 3, 2.0f, true);
+			}
+			++TriggeredCount;
+		}
+	}
+
+	return TriggeredCount;
+}
+
+void ADungeoneerTileMapInstancer::UpdateSconcePointLightPool() noexcept
+{
+	if (SconceLightPool.Num() == 0)
+	{
+		return;
+	}
+
+	FVector FocusLoc = GetActorLocation();
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+		{
+			if (const ADungeoneerCharacter* Player0 = SpatialSys->GetTrackedPlayerAt(0))
+			{
+				FocusLoc = Player0->GetActorLocation();
+			}
+		}
+	}
+
+	int32 BestIdx[4] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
+	double BestDistSq[4] = { DBL_MAX, DBL_MAX, DBL_MAX, DBL_MAX };
+
+	for (int32 s = 0; s < SconceWorldPositions.Num(); ++s)
+	{
+		const double DistSq = FVector::DistSquared2D(FocusLoc, SconceWorldPositions[s]);
+		for (int32 Slot = 0; Slot < 4; ++Slot)
+		{
+			if (DistSq < BestDistSq[Slot])
+			{
+				for (int32 Shift = 3; Shift > Slot; --Shift)
+				{
+					BestDistSq[Shift] = BestDistSq[Shift - 1];
+					BestIdx[Shift] = BestIdx[Shift - 1];
+				}
+				BestDistSq[Slot] = DistSq;
+				BestIdx[Slot] = s;
+				break;
+			}
+		}
+	}
+
+	for (int32 Slot = 0; Slot < SconceLightPool.Num() && Slot < 4; ++Slot)
+	{
+		if (UPointLightComponent* LightComp = SconceLightPool[Slot].Get())
+		{
+			if (BestIdx[Slot] != INDEX_NONE)
+			{
+				LightComp->SetWorldLocation(SconceWorldPositions[BestIdx[Slot]]);
+				const float Flicker = 3900.0f + 780.0f * FMath::Sin(SconceFlickerPhase + static_cast<float>(Slot) * 1.6f);
+				LightComp->SetIntensity(Flicker);
+			}
+			else
+			{
+				LightComp->SetIntensity(0.0f);
+			}
+		}
+	}
 }
 
 void ADungeoneerTileMapInstancer::RevealMirrorIllusionSeam(const int32 MirrorEntryIndex, const bool bRevealed)
@@ -1082,4 +1547,14 @@ void ADungeoneerTileMapInstancer::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateSouthWallCutawaysForViewports();
+
+	SconceFlickerPhase += DeltaSeconds * 8.5f;
+	UpdateSconcePointLightPool();
+
+	TrapPollAccumulator += DeltaSeconds;
+	if (TrapPollAccumulator >= 0.15f)
+	{
+		EvaluateTrapVentsForEntities(TrapPollAccumulator);
+		TrapPollAccumulator = 0.0f;
+	}
 }

@@ -1,5 +1,6 @@
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -61,6 +62,20 @@ void AZombieExploder::Tick(float DeltaSeconds)
 				IgniteFuse();
 			}
 		}
+		else if (const UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+		{
+			FDungeoneerNoiseEvent HeardNoise;
+			if (SensorySub->QueryStrongestActivePulse(GetActorLocation(), 1.25f, HeardNoise) && HeardNoise.Loudness >= 1.55f)
+			{
+				const FVector ToNoise = HeardNoise.WorldOrigin - GetActorLocation();
+				if (ToNoise.SizeSquared2D() > (90.0 * 90.0))
+				{
+					ECompassOctant LureOctant = CurrentHeadingOctant;
+					UDungeoneerMovementComponent::QuantizeInputToOctant(FVector2D(ToNoise.X, ToNoise.Y), 1.0f, LureOctant);
+					MoveAlongOctant(LureOctant, 0.90f);
+				}
+			}
+		}
 	}
 	else
 	{
@@ -107,6 +122,25 @@ void AZombieExploder::IgniteFuse() noexcept
 	FuseElapsed = 0.0f;
 	NextTickPhase = 0.12f;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * 0.55f;
+}
+
+void AZombieExploder::IgniteOrAccelerateFuse(const float FuseBoostSeconds) noexcept
+{
+	if (!IsZombieAlive() || bDetonated)
+	{
+		return;
+	}
+
+	const float ClampedBoost = FMath::Max(0.0f, FuseBoostSeconds);
+	if (!bFuseIgnited)
+	{
+		IgniteFuse();
+		FuseElapsed = FMath::Min(FuseDuration * 0.85f, ClampedBoost * 0.65f);
+	}
+	else
+	{
+		FuseElapsed = FMath::Min(FuseDuration, FuseElapsed + ClampedBoost);
+	}
 }
 
 void AZombieExploder::ExecuteDetonation()

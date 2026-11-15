@@ -89,6 +89,7 @@ public:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	void InitializeSeededCatalog(int32 RoomSeed);
 
@@ -110,6 +111,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vendor")
 	TArray<FVendorCatalogItem> VendorCatalog;
+
+private:
+	float LanternSwayPhase = 0.0f;
 };
 
 /**

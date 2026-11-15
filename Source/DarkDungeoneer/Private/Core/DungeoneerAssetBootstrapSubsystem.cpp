@@ -154,7 +154,9 @@ int32 UDungeoneerAssetBootstrapSubsystem::ImportAllDungeonTexturesFromDisk()
 		TEXT("ATLAS_Dungeon_Floors_4x4"),
 		TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"),
 		TEXT("PROP_Mirror_Palace_Maze_4x4"),
-		TEXT("PROP_Breakables_And_Traps_4x4")
+		TEXT("PROP_Breakables_And_Traps_4x4"),
+		TEXT("PROP_Doors_And_Level_Transitions_4x4"),
+		TEXT("PROP_Resting_Ground_Sanctuary_4x4")
 	};
 
 	struct FDungeonChannelSpec
@@ -295,6 +297,228 @@ bool UDungeoneerAssetBootstrapSubsystem::ShouldMirrorSpritePlaneU() const noexce
 	return bFlipHorizontalForSpritePlane;
 }
 
+void UDungeoneerAssetBootstrapSubsystem::ExtractAllGridCellsFromPng(
+	const FString& PngFilePath,
+	const FString& CacheKeyPrefix,
+	const int32 GridCols,
+	const int32 GridRows,
+	const bool bIsNormalMap,
+	const bool bSRGB,
+	const bool bIsCharacterSprite,
+	const TCHAR* ChannelSuffix)
+{
+	if (GridCols <= 0 || GridRows <= 0 || !FPaths::FileExists(PngFilePath))
+	{
+		return;
+	}
+
+	TArray<uint8> CompressedBytes;
+	if (!FFileHelper::LoadFileToArray(CompressedBytes, *PngFilePath) || CompressedBytes.Num() == 0)
+	{
+		return;
+	}
+
+	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+	TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+	if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(CompressedBytes.GetData(), CompressedBytes.Num()))
+	{
+		return;
+	}
+
+	const int32 FullWidth = ImageWrapper->GetWidth();
+	const int32 FullHeight = ImageWrapper->GetHeight();
+	if (FullWidth < GridCols || FullHeight < GridRows)
+	{
+		return;
+	}
+
+	TArray64<uint8> RawBGRA;
+	if (!ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawBGRA))
+	{
+		return;
+	}
+
+	const int32 CellWidth = FullWidth / GridCols;
+	const int32 CellHeight = FullHeight / GridRows;
+	const int64 SrcStride = static_cast<int64>(FullWidth) * 4;
+	const int64 DestStride = static_cast<int64>(CellWidth) * 4;
+	const uint8* SrcBase = RawBGRA.GetData();
+	const bool bMirrorHorizontal = bIsCharacterSprite && ShouldMirrorSpritePlaneU();
+
+	for (int32 Row = 0; Row < GridRows; ++Row)
+	{
+		for (int32 Col = 0; Col < GridCols; ++Col)
+		{
+			const int32 CellIdx = Row * GridCols + Col;
+			const FName CacheKey = bIsCharacterSprite
+				? FName(*FString::Printf(TEXT("%s_R%d_C%d_%s"), *CacheKeyPrefix, Row, Col, ChannelSuffix))
+				: FName(*FString::Printf(TEXT("%s_Cell%d_%s"), *CacheKeyPrefix, CellIdx, ChannelSuffix));
+
+			if (ExtractedCellTextures.Contains(CacheKey))
+			{
+				continue;
+			}
+
+			UTexture2D* CellTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8);
+			if (!CellTex)
+			{
+				continue;
+			}
+
+			FTexturePlatformData* PlatformData = CellTex->GetPlatformData();
+			if (!PlatformData || PlatformData->Mips.Num() == 0)
+			{
+				continue;
+			}
+
+			FTexture2DMipMap& Mip = PlatformData->Mips[0];
+			uint8* DestBytes = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+			if (!DestBytes)
+			{
+				Mip.BulkData.Unlock();
+				continue;
+			}
+
+			const int32 StartX = Col * CellWidth;
+			const int32 StartY = Row * CellHeight;
+			for (int32 RowY = 0; RowY < CellHeight; ++RowY)
+			{
+				const uint8* SrcRow = SrcBase + static_cast<int64>(StartY + RowY) * SrcStride + static_cast<int64>(StartX) * 4;
+				uint8* DstRow = DestBytes + static_cast<int64>(RowY) * DestStride;
+				if (!bMirrorHorizontal)
+				{
+					FMemory::Memcpy(DstRow, SrcRow, DestStride);
+				}
+				else
+				{
+					for (int32 ColX = 0; ColX < CellWidth; ++ColX)
+					{
+						const int32 SrcCol = CellWidth - 1 - ColX;
+						DstRow[ColX * 4 + 0] = SrcRow[SrcCol * 4 + 0];
+						DstRow[ColX * 4 + 1] = SrcRow[SrcCol * 4 + 1];
+						DstRow[ColX * 4 + 2] = bIsNormalMap ? static_cast<uint8>(255 - SrcRow[SrcCol * 4 + 2]) : SrcRow[SrcCol * 4 + 2];
+						DstRow[ColX * 4 + 3] = SrcRow[SrcCol * 4 + 3];
+					}
+				}
+			}
+
+			Mip.BulkData.Unlock();
+			FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(CellTex, bIsNormalMap, bSRGB);
+			ExtractedCellTextures.Add(CacheKey, CellTex);
+
+			if (bIsCharacterSprite && !bIsNormalMap)
+			{
+				if (UTexture2D* MaskTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8))
+				{
+					FTexturePlatformData* MaskPlatformData = MaskTex->GetPlatformData();
+					if (MaskPlatformData && MaskPlatformData->Mips.Num() > 0)
+					{
+						FTexture2DMipMap& MaskMip = MaskPlatformData->Mips[0];
+						if (uint8* MaskBytes = static_cast<uint8*>(MaskMip.BulkData.Lock(LOCK_READ_WRITE)))
+						{
+							for (int32 RowY = 0; RowY < CellHeight; ++RowY)
+							{
+								const uint8* SrcRow = SrcBase + static_cast<int64>(StartY + RowY) * SrcStride + static_cast<int64>(StartX) * 4;
+								uint8* MaskRow = MaskBytes + static_cast<int64>(RowY) * DestStride;
+								for (int32 ColX = 0; ColX < CellWidth; ++ColX)
+								{
+									const int32 SrcCol = bMirrorHorizontal ? (CellWidth - 1 - ColX) : ColX;
+									const uint8 AlphaByte = SrcRow[SrcCol * 4 + 3];
+									const uint8 MaskVal = (AlphaByte >= 64) ? 255 : 0;
+									MaskRow[ColX * 4 + 0] = MaskVal;
+									MaskRow[ColX * 4 + 1] = MaskVal;
+									MaskRow[ColX * 4 + 2] = MaskVal;
+									MaskRow[ColX * 4 + 3] = MaskVal;
+								}
+							}
+							MaskMip.BulkData.Unlock();
+							FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(MaskTex, false, false);
+							SpriteMaskTextures.Add(CacheKey, MaskTex);
+						}
+						else
+						{
+							MaskMip.BulkData.Unlock();
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
+	const FName CacheKey,
+	const FColor& PrimaryColor,
+	const FColor& SecondaryColor,
+	const bool bIsNormalMap,
+	const bool bSRGB,
+	const uint8 PatternKind)
+{
+	if (TObjectPtr<UTexture2D>* Existing = ExtractedCellTextures.Find(CacheKey))
+	{
+		return Existing->Get();
+	}
+
+	constexpr int32 Size = 64;
+	UTexture2D* ProcTex = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
+	if (!ProcTex)
+	{
+		return nullptr;
+	}
+
+	FTexturePlatformData* PlatformData = ProcTex->GetPlatformData();
+	if (!PlatformData || PlatformData->Mips.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	FTexture2DMipMap& Mip = PlatformData->Mips[0];
+	uint8* Bytes = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+	if (!Bytes)
+	{
+		Mip.BulkData.Unlock();
+		return nullptr;
+	}
+
+	for (int32 Y = 0; Y < Size; ++Y)
+	{
+		for (int32 X = 0; X < Size; ++X)
+		{
+			bool bUseSecondary = false;
+			if (PatternKind == 0) // Checker / masonry bevel
+			{
+				const bool bBorder = (X < 4 || X >= Size - 4 || Y < 4 || Y >= Size - 4);
+				const bool bStep = ((Y / 8) % 2 == 0) && (X > 10 && X < Size - 10);
+				bUseSecondary = bBorder || bStep;
+			}
+			else if (PatternKind == 1) // Brazier / sconce glow
+			{
+				const int32 DX = X - Size / 2;
+				const int32 DY = Y - Size / 2;
+				bUseSecondary = (DX * DX + DY * DY) < (18 * 18);
+			}
+			else // Runic sanctuary / hanging chain silhouette
+			{
+				const int32 DX = FMath::Abs(X - Size / 2);
+				const int32 DY = FMath::Abs(Y - Size / 2);
+				bUseSecondary = (DX + DY == 20) || (DX + DY == 19) || ((Y % 12 < 6) && DX < 6);
+			}
+
+			const FColor& C = bUseSecondary ? SecondaryColor : PrimaryColor;
+			const int32 Idx = (Y * Size + X) * 4;
+			Bytes[Idx + 0] = C.B;
+			Bytes[Idx + 1] = C.G;
+			Bytes[Idx + 2] = C.R;
+			Bytes[Idx + 3] = 255;
+		}
+	}
+
+	Mip.BulkData.Unlock();
+	FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(ProcTex, bIsNormalMap, bSRGB);
+	ExtractedCellTextures.Add(CacheKey, ProcTex);
+	return ProcTex;
+}
+
 int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 {
 	ComputeSpritePlaneOrientation();
@@ -302,48 +526,93 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 	const FString DungeonRoot = FPaths::ProjectContentDir() / TEXT("Art/Dungeon");
 	const FString RigsRoot = FPaths::ProjectContentDir() / TEXT("Art/Rigs");
 
-	struct FCellExtractSpec
+	auto AliasCellKey = [this](const TCHAR* AliasKey, const TCHAR* SourceKey)
 	{
-		const TCHAR* BaseDir;
+		if (TObjectPtr<UTexture2D>* Src = ExtractedCellTextures.Find(FName(SourceKey)))
+		{
+			ExtractedCellTextures.Add(FName(AliasKey), *Src);
+		}
+		if (TObjectPtr<UTexture2D>* SrcMask = SpriteMaskTextures.Find(FName(SourceKey)))
+		{
+			SpriteMaskTextures.Add(FName(AliasKey), *SrcMask);
+		}
+	};
+
+	struct FDungeonExtractDef
+	{
 		const TCHAR* SubDir;
-		const TCHAR* FileName;
-		const TCHAR* CacheKey;
-		int32 CellIndex;
-		bool bIsNormalMap;
-		bool bSRGB;
-		bool bIsCharacterSprite;
+		const TCHAR* DiffuseFile;
+		const TCHAR* NormalFile;
+		const TCHAR* Prefix;
+	};
+	const FDungeonExtractDef DungeonDefs[] =
+	{
+		{ TEXT("ATLAS_Dungeon_Floors_4x4"),             TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),             TEXT("ATLAS_Dungeon_Floors_4x4_N.png"),             TEXT("Floor") },
+		{ TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"),  TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"),  TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_N.png"),  TEXT("Wall") },
+		{ TEXT("PROP_Mirror_Palace_Maze_4x4"),          TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),          TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),          TEXT("Mirror") },
+		{ TEXT("PROP_Breakables_And_Traps_4x4"),        TEXT("PROP_Breakables_And_Traps_4x4_D.png"),        TEXT("PROP_Breakables_And_Traps_4x4_N.png"),        TEXT("Breakable") },
+		{ TEXT("PROP_Doors_And_Level_Transitions_4x4"), TEXT("PROP_Doors_And_Level_Transitions_4x4_D.png"), TEXT("PROP_Doors_And_Level_Transitions_4x4_N.png"), TEXT("Doors") },
+		{ TEXT("PROP_Resting_Ground_Sanctuary_4x4"),    TEXT("PROP_Resting_Ground_Sanctuary_4x4_D.png"),    TEXT("PROP_Resting_Ground_Sanctuary_4x4_N.png"),    TEXT("Sanctuary") }
 	};
 
-	const FCellExtractSpec Specs[] =
+	for (const FDungeonExtractDef& Def : DungeonDefs)
 	{
-		// Dungeon Environment Cells (4x4 atlases)
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Tile0_D"),       0, false, true,  false },
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_N.png"),            TEXT("Floor_Tile0_N"),       0, true,  false, false },
-		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Wet0_D"),        4, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Full0_D"),        0, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_N.png"), TEXT("Wall_Full0_N"),        0, true,  false, false },
-		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Cutaway_D"),      4, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),         TEXT("Mirror_Intact_D"),     0, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),         TEXT("Mirror_Intact_N"),     0, true,  false, false },
-		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_D.png"),       TEXT("Breakable_Intact_D"),  0, false, true,  false },
-		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false, false }
-	};
-
-	for (const FCellExtractSpec& Spec : Specs)
-	{
-		const FString FullPath = FString(Spec.BaseDir) / Spec.SubDir / Spec.FileName;
-		ExtractAtlasCellTexture(
-			FullPath,
-			FName(Spec.CacheKey),
-			Spec.CellIndex,
-			4,
-			4,
-			Spec.bIsNormalMap,
-			Spec.bSRGB,
-			Spec.bIsCharacterSprite);
+		ExtractAllGridCellsFromPng(DungeonRoot / Def.SubDir / Def.DiffuseFile, Def.Prefix, 4, 4, false, true, false, TEXT("D"));
+		ExtractAllGridCellsFromPng(DungeonRoot / Def.SubDir / Def.NormalFile,  Def.Prefix, 4, 4, true, false, false, TEXT("N"));
 	}
 
-	// Extract all 16 directional walk-cycle cells (4 rows x 4 alternating stride frames) for each character/zombie rig
+	// Preserve & expand backward-compatible named aliases across all 16 unlocked cells
+	AliasCellKey(TEXT("Floor_Tile0_D"),       TEXT("Floor_Cell0_D"));
+	AliasCellKey(TEXT("Floor_Tile0_N"),       TEXT("Floor_Cell0_N"));
+	AliasCellKey(TEXT("Floor_Wet0_D"),        TEXT("Floor_Cell4_D"));
+	AliasCellKey(TEXT("Floor_Wet0_N"),        TEXT("Floor_Cell4_N"));
+	AliasCellKey(TEXT("Floor_Fens0_D"),       TEXT("Floor_Cell8_D"));
+	AliasCellKey(TEXT("Floor_Fens0_N"),       TEXT("Floor_Cell8_N"));
+	AliasCellKey(TEXT("Floor_Ember0_D"),      TEXT("Floor_Cell12_D"));
+	AliasCellKey(TEXT("Floor_Ember0_N"),      TEXT("Floor_Cell12_N"));
+
+	AliasCellKey(TEXT("Wall_Full0_D"),        TEXT("Wall_Cell0_D"));
+	AliasCellKey(TEXT("Wall_Full0_N"),        TEXT("Wall_Cell0_N"));
+	AliasCellKey(TEXT("Wall_Cutaway_D"),      TEXT("Wall_Cell4_D"));
+	AliasCellKey(TEXT("Wall_Diag0_D"),        TEXT("Wall_Cell8_D"));
+	AliasCellKey(TEXT("Wall_Diag0_N"),        TEXT("Wall_Cell8_N"));
+	AliasCellKey(TEXT("Wall_Chain_D"),        TEXT("Wall_Cell12_D"));
+	AliasCellKey(TEXT("Wall_Chain_N"),        TEXT("Wall_Cell12_N"));
+
+	AliasCellKey(TEXT("Mirror_Intact_D"),     TEXT("Mirror_Cell0_D"));
+	AliasCellKey(TEXT("Mirror_Intact_N"),     TEXT("Mirror_Cell0_N"));
+	AliasCellKey(TEXT("Breakable_Intact_D"),  TEXT("Breakable_Cell0_D"));
+	AliasCellKey(TEXT("Breakable_Intact_N"),  TEXT("Breakable_Cell0_N"));
+	AliasCellKey(TEXT("Trap_Vent0_D"),        TEXT("Breakable_Cell8_D"));
+	AliasCellKey(TEXT("Trap_Vent0_N"),        TEXT("Breakable_Cell8_N"));
+
+	AliasCellKey(TEXT("Doors_Arch_D"),        TEXT("Doors_Cell0_D"));
+	AliasCellKey(TEXT("Doors_Arch_N"),        TEXT("Doors_Cell0_N"));
+	AliasCellKey(TEXT("Doors_Sconce_D"),      TEXT("Doors_Cell8_D"));
+	AliasCellKey(TEXT("Doors_Sconce_N"),      TEXT("Doors_Cell8_N"));
+	AliasCellKey(TEXT("Doors_Stairs_D"),      TEXT("Doors_Cell12_D"));
+	AliasCellKey(TEXT("Doors_Stairs_N"),      TEXT("Doors_Cell12_N"));
+	AliasCellKey(TEXT("Sanctuary_Brazier_D"), TEXT("Sanctuary_Cell0_D"));
+	AliasCellKey(TEXT("Sanctuary_Brazier_N"), TEXT("Sanctuary_Cell0_N"));
+	AliasCellKey(TEXT("Sanctuary_Rune_D"),    TEXT("Sanctuary_Cell12_D"));
+	AliasCellKey(TEXT("Sanctuary_Rune_N"),    TEXT("Sanctuary_Cell12_N"));
+
+	// Safe procedural fallbacks when optional PNG sheets (Doors / Sanctuary) are not yet on disk
+	const FColor FlatNorm(128, 128, 255, 255);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Arch_D")),        FColor(46, 52, 68),  FColor(95, 86, 70),   false, true, 0);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Arch_N")),        FlatNorm,           FColor(148, 148, 245), true, false, 0);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Sconce_D")),      FColor(52, 42, 34),  FColor(255, 168, 52),  false, true, 1);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Sconce_N")),      FlatNorm,           FColor(128, 168, 240), true, false, 1);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Stairs_D")),      FColor(38, 42, 54),  FColor(140, 118, 62),  false, true, 0);
+	RegisterProceduralTileFallback(FName(TEXT("Doors_Stairs_N")),      FlatNorm,           FColor(108, 148, 235), true, false, 0);
+	RegisterProceduralTileFallback(FName(TEXT("Sanctuary_Brazier_D")), FColor(56, 46, 38),  FColor(255, 138, 38),  false, true, 1);
+	RegisterProceduralTileFallback(FName(TEXT("Sanctuary_Brazier_N")), FlatNorm,           FColor(148, 168, 240), true, false, 1);
+	RegisterProceduralTileFallback(FName(TEXT("Sanctuary_Rune_D")),    FColor(22, 38, 46),  FColor(64, 218, 238),  false, true, 2);
+	RegisterProceduralTileFallback(FName(TEXT("Sanctuary_Rune_N")),    FlatNorm,           FColor(128, 168, 245), true, false, 2);
+	RegisterProceduralTileFallback(FName(TEXT("Wall_Chain_D")),        FColor(24, 26, 34),  FColor(68, 72, 86),    false, true, 2);
+	RegisterProceduralTileFallback(FName(TEXT("Wall_Chain_N")),        FlatNorm,           FColor(148, 148, 240), true, false, 2);
+
+	// Extract all 16 directional walk-cycle cells (4 rows x 4 alternating stride frames) per character/zombie rig cleanly in 1 PNG decode per file
 	struct FRigExtractDef
 	{
 		const TCHAR* SubDir;
@@ -358,49 +627,26 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		{ TEXT("ZombieFastThrower"), TEXT("Rig_ZombieFastThrower_Raw_D.png"), TEXT("Rig_ZombieFastThrower_Raw_N.png"), TEXT("Thrower") }
 	};
 
-	auto AliasCellKey = [this](const TCHAR* AliasKey, const TCHAR* SourceKey)
-	{
-		if (TObjectPtr<UTexture2D>* Src = ExtractedCellTextures.Find(FName(SourceKey)))
-		{
-			ExtractedCellTextures.Add(FName(AliasKey), *Src);
-		}
-		if (TObjectPtr<UTexture2D>* SrcMask = SpriteMaskTextures.Find(FName(SourceKey)))
-		{
-			SpriteMaskTextures.Add(FName(AliasKey), *SrcMask);
-		}
-	};
-
 	for (const FRigExtractDef& Rig : RigDefs)
 	{
-		const FString DiffusePath = FString(RigsRoot) / Rig.SubDir / Rig.DiffuseFile;
-		const FString NormalPath = FString(RigsRoot) / Rig.SubDir / Rig.NormalFile;
+		ExtractAllGridCellsFromPng(FString(RigsRoot) / Rig.SubDir / Rig.DiffuseFile, Rig.KeyPrefix, 4, 4, false, true, true, TEXT("D"));
+		ExtractAllGridCellsFromPng(FString(RigsRoot) / Rig.SubDir / Rig.NormalFile,  Rig.KeyPrefix, 4, 4, true, false, true, TEXT("N"));
 
 		for (int32 Row = 0; Row < 4; ++Row)
 		{
-			for (int32 Col = 0; Col < 4; ++Col)
+			const FString RowSrcD = FString::Printf(TEXT("%s_R%d_C0_D"), Rig.KeyPrefix, Row);
+			const FString RowSrcN = FString::Printf(TEXT("%s_R%d_C0_N"), Rig.KeyPrefix, Row);
+			const FString RowAliasD = FString::Printf(TEXT("%s_Row%d_D"), Rig.KeyPrefix, Row);
+			const FString RowAliasN = FString::Printf(TEXT("%s_Row%d_N"), Rig.KeyPrefix, Row);
+			AliasCellKey(*RowAliasD, *RowSrcD);
+			AliasCellKey(*RowAliasN, *RowSrcN);
+
+			if (Row == 0)
 			{
-				const int32 CellIdx = Row * 4 + Col;
-				const FString DiffKey = FString::Printf(TEXT("%s_R%d_C%d_D"), Rig.KeyPrefix, Row, Col);
-				const FString NormKey = FString::Printf(TEXT("%s_R%d_C%d_N"), Rig.KeyPrefix, Row, Col);
-
-				ExtractAtlasCellTexture(DiffusePath, FName(*DiffKey), CellIdx, 4, 4, false, true, true);
-				ExtractAtlasCellTexture(NormalPath, FName(*NormKey), CellIdx, 4, 4, true, false, true);
-
-				if (Col == 0)
-				{
-					const FString RowAliasD = FString::Printf(TEXT("%s_Row%d_D"), Rig.KeyPrefix, Row);
-					const FString RowAliasN = FString::Printf(TEXT("%s_Row%d_N"), Rig.KeyPrefix, Row);
-					AliasCellKey(*RowAliasD, *DiffKey);
-					AliasCellKey(*RowAliasN, *NormKey);
-
-					if (Row == 0)
-					{
-						const FString Cell0AliasD = FString::Printf(TEXT("%s_Cell0_D"), Rig.KeyPrefix);
-						const FString Cell0AliasN = FString::Printf(TEXT("%s_Cell0_N"), Rig.KeyPrefix);
-						AliasCellKey(*Cell0AliasD, *DiffKey);
-						AliasCellKey(*Cell0AliasN, *NormKey);
-					}
-				}
+				const FString Cell0AliasD = FString::Printf(TEXT("%s_Cell0_D"), Rig.KeyPrefix);
+				const FString Cell0AliasN = FString::Printf(TEXT("%s_Cell0_N"), Rig.KeyPrefix);
+				AliasCellKey(*Cell0AliasD, *RowSrcD);
+				AliasCellKey(*Cell0AliasN, *RowSrcN);
 			}
 		}
 	}

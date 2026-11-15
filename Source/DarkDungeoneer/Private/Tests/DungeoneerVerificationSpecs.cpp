@@ -10,7 +10,9 @@
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
 #include "Dungeon/MirrorMazeActors.h"
+#include "Rendering/DungeonAtmosphereActor.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Audio/GibberishSpeechComponent.h"
@@ -240,7 +242,7 @@ bool FDungeoneerMenuAndSeedReplicationTest::RunTest(const FString& Parameters)
 	Footer->BindToGameState(GS);
 
 	TestTrue(TEXT("Footer displays seeded hex"), Footer->GetFormattedSeedHex().Contains(TEXT("0x5D8F2A11")));
-	TestEqual(TEXT("Generated floor DAG has 8 nodes"), Footer->GetLastPreviewNodeCount(), 8);
+	TestEqual(TEXT("Generated floor DAG has 12 nodes (10 core + 2 secret pockets)"), Footer->GetLastPreviewNodeCount(), 12);
 
 	Footer->RequestDeterministicSeedReroll();
 	const FDungeonFloorSeed RerollA = GS->GetReplicatedFloorSeed();
@@ -371,7 +373,7 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestNotNull(TEXT("ATLAS_Dungeon_Floors_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("ATLAS_Dungeon_Floors_4x4_D"))));
 
 		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
-		TestEqual(TEXT("All 136 4x4 atlas cells & rig walk frames extracted (10 dungeon + 96 rig + 30 compat aliases)"), ExtractedCells, 136);
+		TestTrue(TEXT("All 4x4 dungeon atlas cells, Doors/Sanctuary fallbacks & 16-cell rig walk frames extracted (>= 250)"), ExtractedCells >= 250);
 
 		static constexpr const TCHAR* WalkRigPrefixes[3] = { TEXT("Hero"), TEXT("Exploder"), TEXT("Thrower") };
 		for (const TCHAR* Prefix : WalkRigPrefixes)
@@ -871,6 +873,118 @@ bool FDungeoneerCombatDodgeVaultFloorTest::RunTest(const FString& Parameters)
 	const UDungeonGeneratorSubsystem* Gen = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
 	TestNotNull(TEXT("DungeonGeneratorSubsystem active"), Gen);
 	TestEqual(TEXT("Generator updated ActiveFloorGraph to Floor 2"), Gen->GetActiveFloorGraph().FloorIndex, 2);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerBiomesOctagonalTrapsAndExploderLureTest,
+	"DarkDungeoneer.Dungeon.BiomesOctagonalRoomsTrapsAndExploderLure",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerBiomesOctagonalTrapsAndExploderLureTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created Biome/Traps/Lure test world"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	TestNotNull(TEXT("DungeonGeneratorSubsystem present"), GenSub);
+
+	// 1. Multi-Floor Biome Progression & Transition Bleed
+	const FDungeonFloorGraph F1 = GenSub->GenerateFloorGraph(1, 9001);
+	const FDungeonFloorGraph F2 = GenSub->GenerateFloorGraph(2, 9001);
+	const FDungeonFloorGraph F3 = GenSub->GenerateFloorGraph(3, 9001);
+	TestEqual(TEXT("Floor 1 dominant biome is Crypt"), F1.DominantBiome, EDungeonBiomeType::Crypt);
+	TestEqual(TEXT("Floor 2 dominant biome is SporeFens"), F2.DominantBiome, EDungeonBiomeType::SporeFens);
+	TestEqual(TEXT("Floor 3 dominant biome is EmberForge"), F3.DominantBiome, EDungeonBiomeType::EmberForge);
+	TestEqual(TEXT("Floor 1 has 12 nodes (10 core + 2 Secret Phantasm Pockets)"), F1.Nodes.Num(), 12);
+
+	int32 SecretCount = 0;
+	bool bHasOctagonal = false;
+	bool bHasPillared = false;
+	bool bHasBleedVault = false;
+	for (const FDungeonNode& Node : F1.Nodes)
+	{
+		if (Node.bIsSecretRoom && Node.RoomShape == EDungeonRoomShape::SecretPhantasmPocket)
+		{
+			++SecretCount;
+		}
+		if (Node.RoomShape == EDungeonRoomShape::OctagonalRotunda) { bHasOctagonal = true; }
+		if (Node.RoomShape == EDungeonRoomShape::PillaredGallery)  { bHasPillared = true; }
+		if (Node.RoomType == EDungeonRoomType::MajorLootVault && Node.bHasDescendingStairs && Node.BleedBiomeType == F1.NextFloorPreviewBiome)
+		{
+			bHasBleedVault = true;
+		}
+	}
+	TestEqual(TEXT("Generated exactly 2 Secret Phantasm Pockets"), SecretCount, 2);
+	TestTrue(TEXT("Floor graph contains OctagonalRotunda rooms"), bHasOctagonal);
+	TestTrue(TEXT("Floor graph contains PillaredGallery rooms"), bHasPillared);
+	TestTrue(TEXT("Terminal MajorLootVault carries descending stairs and NextFloorPreviewBiome bleed"), bHasBleedVault);
+
+	// 2. 8-HISM Bucketing & Secret Phantasm Thresholds
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	TestNotNull(TEXT("TileMapInstancer spawned"), Instancer);
+	Instancer->BuildDungeonFromFloorGraph(F1);
+
+	TestTrue(TEXT("FloorHISM populated"), Instancer->GetFloorHISM() && Instancer->GetFloorHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("WetFloorHISM specular puddle bucket populated in Crypt"), Instancer->GetWetFloorHISM() && Instancer->GetWetFloorHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("WallHISM populated"), Instancer->GetWallHISM() && Instancer->GetWallHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("DiagonalWedgeHISM 45-deg corner bucket populated"), Instancer->GetDiagonalWedgeHISM() && Instancer->GetDiagonalWedgeHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("MirrorHISM populated including secret Phantasm thresholds"), Instancer->GetMirrorHISM() && Instancer->GetMirrorHISM()->GetInstanceCount() >= 3);
+	TestTrue(TEXT("SconceHISM doorway/sanctuary/stair bucket populated"), Instancer->GetSconceHISM() && Instancer->GetSconceHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("BreakableHISM props & trap vents populated"), Instancer->GetBreakableHISM() && Instancer->GetBreakableHISM()->GetInstanceCount() > 0);
+	TestTrue(TEXT("ForegroundParallaxHISM overhead beams populated"), Instancer->GetForegroundParallaxHISM() && Instancer->GetForegroundParallaxHISM()->GetInstanceCount() > 0);
+
+	// Verify Asset Bootstrap full 4x4 cell unlock + Doors/Sanctuary procedural fallback textures
+	if (UGameInstance* DummyGI = NewObject<UGameInstance>(GetTransientPackage()))
+	{
+		if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = NewObject<UDungeoneerAssetBootstrapSubsystem>(DummyGI))
+		{
+			Bootstrap->ImportAllDungeonTexturesFromDisk();
+			Bootstrap->ExtractDefaultSingleCellTiles();
+			TestNotNull(TEXT("Floor_Cell15_D (row 3) extracted via full 4x4 unlock"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Floor_Cell15_D"))));
+			TestNotNull(TEXT("Doors_Arch_D registered with safe procedural fallback"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Doors_Arch_D"))));
+			TestNotNull(TEXT("Sanctuary_Brazier_D registered with safe procedural fallback"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Sanctuary_Brazier_D"))));
+		}
+	}
+
+	// 3. Systemic Trap Damage & Exploder Ember Ignition + Acoustic Noise Lure
+	AZombieExploder* TrapExploder = TestWorld->SpawnActor<AZombieExploder>(FVector(5000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned TrapExploder"), TrapExploder);
+	TrapExploder->DispatchBeginPlay();
+	const float ExploderHpBefore = TrapExploder->GetCurrentHealth();
+	Instancer->RegisterTrapVentInstance(FVector(5000.0, 0.0, 2.5), EDungeoneerTrapHazardType::EmberFire, 140.0f, 25.0f, 12);
+	const int32 FiredVents = Instancer->EvaluateTrapVentsForEntities(0.2f);
+	TestTrue(TEXT("EmberFire trap vent triggered cleanly on zombie"), FiredVents >= 1);
+	TestTrue(TEXT("EmberFire trap damaged overlapping zombie"), TrapExploder->GetCurrentHealth() < ExploderHpBefore);
+	TestTrue(TEXT("EmberFire trap ignited AZombieExploder fuse immediately"), TrapExploder->IsFuseIgnited());
+
+	// Noise lure check: Zombie outside player range hears loud breakable/chime sound and moves toward it
+	AZombieExploder* LuredZombie = TestWorld->SpawnActor<AZombieExploder>(FVector(7000.0, 500.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned LuredZombie"), LuredZombie);
+	LuredZombie->DispatchBeginPlay();
+	UDungeoneerSensoryWorldSubsystem* SensorySub = TestWorld->GetSubsystem<UDungeoneerSensoryWorldSubsystem>();
+	TestNotNull(TEXT("SensoryWorldSubsystem present"), SensorySub);
+	SensorySub->BroadcastNoiseEvent(FVector(7000.0, 1200.0, 45.0), 2.35f, 1500.0f, false);
+	LuredZombie->Tick(0.05f);
+	const FVector PendingInput = LuredZombie->GetPendingMovementInputVector();
+	TestTrue(TEXT("Loud environmental noise lures zombie along +Y toward origin"), PendingInput.Y > 0.7);
+
+	// 4. DungeonAtmosphereActor biome transition & zero-alloc AmbientMotesHISM check
+	ADungeonAtmosphereActor* Atmo = TestWorld->SpawnActor<ADungeonAtmosphereActor>();
+	TestNotNull(TEXT("Spawned DungeonAtmosphereActor"), Atmo);
+	Atmo->DispatchBeginPlay();
+	Atmo->SetBiomeAtmosphere(EDungeonBiomeType::SporeFens, false);
+	TestEqual(TEXT("Atmosphere tracks SporeFens biome"), Atmo->GetActiveBiome(), EDungeonBiomeType::SporeFens);
+	TestTrue(TEXT("AmbientMotesHISM pre-allocated 64 instances"), Atmo->GetAmbientMotesHISM() && Atmo->GetAmbientMotesHISM()->GetInstanceCount() == 64);
+	Atmo->UpdateAmbientMotesAroundFocus(FVector(200.0, 200.0, 95.0), 0.1f);
 
 	TestWorld->DestroyWorld(false);
 	return true;

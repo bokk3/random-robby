@@ -5,6 +5,7 @@
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
+#include "Rendering/DungeonAtmosphereActor.h"
 #include "UI/DungeoneerMainMenuWidget.h"
 #include "UI/DungeoneerCoopLobbyWidget.h"
 #include "UI/DungeoneerMenuFooterWidget.h"
@@ -109,6 +110,28 @@ void ADungeoneerGameMode::StartPlay()
 	if (ActiveTileMapInstancer)
 	{
 		ActiveTileMapInstancer->BuildFromActiveGenerator();
+	}
+	if (ActiveAtmosphereActor)
+	{
+		if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+		{
+			ActiveAtmosphereActor->SetBiomeAtmosphere(DungeonSys->GetActiveFloorGraph().DominantBiome, false);
+		}
+	}
+
+	if (!ActiveAtmosphereActor)
+	{
+		ActiveAtmosphereActor = World->SpawnActor<ADungeonAtmosphereActor>(
+			ADungeonAtmosphereActor::StaticClass(),
+			FVector::ZeroVector,
+			FRotator::ZeroRotator);
+	}
+	if (ActiveAtmosphereActor)
+	{
+		if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+		{
+			ActiveAtmosphereActor->SetBiomeAtmosphere(DungeonSys->GetActiveFloorGraph().DominantBiome, false);
+		}
 	}
 
 	FVector EntryRoomCenter = FVector::ZeroVector;
@@ -330,6 +353,28 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 	if (ActiveTileMapInstancer)
 	{
 		ActiveTileMapInstancer->BuildFromActiveGenerator();
+	}
+	if (ActiveAtmosphereActor)
+	{
+		if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+		{
+			ActiveAtmosphereActor->SetBiomeAtmosphere(DungeonSys->GetActiveFloorGraph().DominantBiome, false);
+		}
+	}
+
+	if (!ActiveAtmosphereActor)
+	{
+		ActiveAtmosphereActor = World->SpawnActor<ADungeonAtmosphereActor>(
+			ADungeonAtmosphereActor::StaticClass(),
+			FVector::ZeroVector,
+			FRotator::ZeroRotator);
+	}
+	if (ActiveAtmosphereActor)
+	{
+		if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
+		{
+			ActiveAtmosphereActor->SetBiomeAtmosphere(DungeonSys->GetActiveFloorGraph().DominantBiome, false);
+		}
 	}
 
 	FVector NextEntryCenter = FVector::ZeroVector;

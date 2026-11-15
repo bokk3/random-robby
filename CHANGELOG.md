@@ -7,7 +7,30 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- Future post-1.0 content expansions (additional procedural biomes, boss encounters, and online dedicated server hardening).
+- Future post-1.1 content expansions (boss arenas, unique relic synergies, and online dedicated server hardening).
+
+---
+
+## [1.1.0] - 2026-11-15
+
+### Added
+- **Multi-Biome Procedural Floor Progression & Tactical Room Shapes (`DungeonTypes.h`, `UDungeonGeneratorSubsystem`)**:
+  - Added `EDungeonBiomeType` (`Crypt`, `MirrorPalace`, `SporeFens`, `EmberForge`), `EDungeonRoomShape` (`SquareChamber`, `OctagonalRotunda`, `PillaredGallery`, `CrossAmbushVault`, `SecretPhantasmPocket`), transition-bleed fields (`BleedBiomeType`, `bHasDescendingStairs`), and `ResolveFloorDominantBiome` / `ResolveNextFloorBiome`.
+  - Upgraded `GenerateFloorGraph` to **10 core tactical rooms + 2 `SecretPhantasmPocket` rooms** (`12` nodes total), pairing Floor 1 (*Sunken Crypt*), Floor 2 (*Blighted Spore Fens*), and Floor 3+ (*Cinder Kiln*) with an *Obsidian Mirror-Palace* branch, Sanctuary & Vendor nodes, ~25% next-biome transition bleed on the final 2 nodes before the descending stairwell, and illusory `AMirrorWall_Phantasm` secret seams.
+- **Full `4x4` Sheet Extraction & Procedural Fallback Assets (`UDungeoneerAssetBootstrapSubsystem`)**:
+  - Added batch single-decode `ExtractAllGridCellsFromPng` extracting all `16` cells (`Cell0..Cell15`) across existing 4x4 dungeon and rig atlases while preserving existing aliases.
+  - Registered `PROP_Doors_And_Level_Transitions_4x4` (`Doors_Arch_D/N`, `Doors_Sconce_D/N`, `Doors_Stairs_D/N`) and `PROP_Resting_Ground_Sanctuary_4x4` (`Sanctuary_Brazier_D/N`, `Sanctuary_Rune_D/N`) with crisp procedural `64x64` pixel-art fallback synthesis (`RegisterProceduralTileFallback`) when optional PNGs are absent on disk.
+- **8-HISM Bucketing & Systemic Floor Traps (`ADungeoneerTileMapInstancer`, `AZombieExploder`, `AZombieFastThrower`)**:
+  - Expanded HISM rendering buckets to `8` components (`FloorHISM`, `WetFloorHISM` low-roughness puddles, `WallHISM`, `DiagonalWedgeHISM` 45° corners, `MirrorHISM`, `SconceHISM`, `BreakableHISM`, `ForegroundParallaxHISM` overhead beams/chains at `Z = +260 UU`) plus a pre-allocated `4`-slot shadowless flickering `SconceLightPool`.
+  - Added interactive `FDungeoneerTrapVentEntry` floor hazards (`Steam`, `EmberFire`, `PoisonSpore`, `ChronoGas`, `AcousticChime`) via `RegisterTrapVentInstance` and `EvaluateTrapVentsForEntities` affecting both players and zombies; `EmberFire` vents ignite or accelerate `AZombieExploder::IgniteOrAccelerateFuse`.
+  - Upgraded breakables (`1.95f` loudness, `1350 UU` radius) and `AcousticChime` wires (`2.35f` loudness, `1500 UU` radius) to lure nearby `AZombieExploder` and `AZombieFastThrower` enemies toward the sound origin via `UDungeoneerSensoryWorldSubsystem::QueryStrongestActivePulse`.
+- **Zero-Allocation Biome Atmosphere & Subtle Eye Candy (`ADungeonAtmosphereActor`, `AVendorActor`, `ADungeoneerGameMode`)**:
+  - Added pre-allocated `64`-instance `AmbientMotesHISM` around player 0 + smooth `0.6s` volumetric fog blending across dungeon biomes and Sanctuary safe zones, wired into `ADungeoneerGameMode`, alongside subtle `AVendorActor` lantern sway.
+
+### Changed & Verified
+- Added `DarkDungeoneer.Dungeon.BiomesOctagonalRoomsTrapsAndExploderLure` in `Source/DarkDungeoneer/Private/Tests/DungeoneerVerificationSpecs.cpp` (and updated bootstrap extraction & 12-node DAG assertions).
+- `python scripts/verify_architecture_invariants.py` passed (`85` files verified, zero `Tick` allocations, zero banned symbols, math invariants & `AssetManifest.json` valid).
+- All `10` headless UE `5.8.2` automation tests passed (`UE_TEST_EXIT=0`, `Result={Success}` for all 10 specs).
 
 ---
 

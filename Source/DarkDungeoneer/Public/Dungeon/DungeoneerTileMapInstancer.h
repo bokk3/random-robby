@@ -6,8 +6,49 @@
 #include "DungeoneerTileMapInstancer.generated.h"
 
 class UHierarchicalInstancedStaticMeshComponent;
+class UPointLightComponent;
 class UStaticMesh;
 struct FHitResult;
+
+UENUM(BlueprintType)
+enum class EDungeoneerTrapHazardType : uint8
+{
+	Steam         UMETA(DisplayName = "Pressurized Steam Vent"),
+	EmberFire     UMETA(DisplayName = "Ember Magma Grate"),
+	PoisonSpore   UMETA(DisplayName = "Blight Spore Vent"),
+	ChronoGas     UMETA(DisplayName = "Chrono-Leech Seep"),
+	AcousticChime UMETA(DisplayName = "Shattered Glass / Chime Wire")
+};
+
+USTRUCT(BlueprintType)
+struct DARKDUNGEONEER_API FDungeoneerTrapVentEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	int32 HISMInstanceIndex = INDEX_NONE;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	EDungeoneerTrapHazardType HazardType = EDungeoneerTrapHazardType::Steam;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	FVector WorldCenter = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	float TriggerRadiusUU = 115.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	float DamageAmount = 18.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	float CooldownSeconds = 1.6f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	float ActiveCooldown = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Traps")
+	float FuseAccelerateSeconds = 1.25f;
+};
 
 /**
  * 8-compass wall orientation axes supporting orthogonal (N/S/E/W) and
@@ -190,19 +231,44 @@ public:
 		int32 IntactUVCellIndex = 0,
 		int32 ShatteredUVCellIndex = 2,
 		float TriggerRadiusUU = 85.0f,
-		float ImpactLoudness = 1.25f);
+		float ImpactLoudness = 1.95f);
+
+	/** Registers an interactive floor trap vent / chime inside BreakableHISM that affects both players and zombies. */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Traps")
+	int32 RegisterTrapVentInstance(
+		const FVector& WorldCenter,
+		EDungeoneerTrapHazardType HazardType,
+		float TriggerRadiusUU = 115.0f,
+		float DamageAmount = 18.0f,
+		int32 UVCellIndex = 8);
+
+	/** Ticks systemic floor trap vents across overlapping players and zombies (including Exploder fire ignition). */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Traps")
+	int32 EvaluateTrapVentsForEntities(float DeltaSeconds);
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetFloorHISM() const noexcept { return FloorHISM.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
+	UHierarchicalInstancedStaticMeshComponent* GetWetFloorHISM() const noexcept { return WetFloorHISM.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetWallHISM() const noexcept { return WallHISM.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
+	UHierarchicalInstancedStaticMeshComponent* GetDiagonalWedgeHISM() const noexcept { return DiagonalWedgeHISM.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetMirrorHISM() const noexcept { return MirrorHISM.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
+	UHierarchicalInstancedStaticMeshComponent* GetSconceHISM() const noexcept { return SconceHISM.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetBreakableHISM() const noexcept { return BreakableHISM.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
+	UHierarchicalInstancedStaticMeshComponent* GetForegroundParallaxHISM() const noexcept { return ForegroundParallaxHISM.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|Encounters")
 	int32 GetSpawnedEncounterCount() const noexcept { return SpawnedEncounterActors.Num(); }
@@ -218,6 +284,7 @@ public:
 	const TArray<FDungeoneerWallInstanceEntry>& GetWallEntries() const noexcept { return WallEntries; }
 	const TArray<FDungeoneerMirrorInstanceEntry>& GetMirrorEntries() const noexcept { return MirrorEntries; }
 	const TArray<FDungeoneerBreakableInstanceEntry>& GetBreakableEntries() const noexcept { return BreakableEntries; }
+	const TArray<FDungeoneerTrapVentEntry>& GetTrapVentEntries() const noexcept { return TrapVentEntries; }
 
 protected:
 	void EnsureMeshAssetsInitialized();
@@ -225,6 +292,7 @@ protected:
 	void ResetPendingCutaways() noexcept;
 	void AccumulateCutawayAlongSegment(const FVector& CameraLocation, const FVector& PlayerLocation) noexcept;
 	void ApplyPendingCutawayTransitions() noexcept;
+	void UpdateSconcePointLightPool() noexcept;
 	void SpawnEncountersForFloorGraph(const FDungeonFloorGraph& FloorGraph);
 	void AddWallInstance(
 		const FVector& WorldCenter,
@@ -240,13 +308,28 @@ protected:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> FloorHISM;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WetFloorHISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WallHISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> DiagonalWedgeHISM;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> MirrorHISM;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> SconceHISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BreakableHISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ForegroundParallaxHISM;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Lighting")
+	TArray<TObjectPtr<UPointLightComponent>> SconceLightPool;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Layout")
 	float TileSizeUU = 256.0f;
@@ -271,10 +354,18 @@ private:
 	TArray<FDungeoneerBreakableInstanceEntry> BreakableEntries;
 
 	UPROPERTY(Transient)
+	TArray<FDungeoneerTrapVentEntry> TrapVentEntries;
+
+	UPROPERTY(Transient)
+	TArray<FVector> SconceWorldPositions;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> SpawnedEncounterActors;
 
 	int32 LastCorridorTileCount = 0;
 	bool bTexturedHISMApplied = false;
+	float TrapPollAccumulator = 0.0f;
+	float SconceFlickerPhase = 0.0f;
 
 	/** Pre-allocated byte mask parallel to WallEntries so Tick writes CustomData without heap allocation. */
 	TArray<uint8> PendingCutawayFlags;

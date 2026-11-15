@@ -1,14 +1,15 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `1.0.0` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `1.1.0` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
 
-## Completed Milestones (`v0.1.0` – `v1.0.0`)
+## Completed Milestones (`v0.1.0` – `v1.1.0`)
 
 | SemVer Tag | Milestone | Status | Key Modules & Verification |
 | :--- | :--- | :--- | :--- |
+| `v1.1.0` | Multi-Biome Floor Plans, 8-HISM Bucketing, Systemic Traps & Atmosphere (`TASK-1101`) | Done | `EDungeonBiomeType`/`EDungeonRoomShape` (`10` core + `2` Secret Phantasm Pockets + transition bleed), full 16-cell `AssetBootstrap` + Doors/Sanctuary procedural fallbacks, `8`-HISM buckets (`WetFloorHISM`, `DiagonalWedgeHISM`, `SconceHISM`, `ForegroundParallaxHISM`) + `4`-light `SconceLightPool`, `FDungeoneerTrapVentEntry` + `IgniteOrAccelerateFuse` + acoustic noise lures, `AmbientMotesHISM` (`64` instances) & `0.6s` fog blend, `10` UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 | `v0.1.0` | Project & Config Bootstrap | Done | UE 5.8 C++20 `.uproject`, `.Target.cs` (`V7`), `DarkDungeoneer.Build.cs`, `Default*.ini`, rules/skills |
 | `v0.2.0` | Core 4-Axis & Split-Screen Isolation | Done | `ADungeoneerCharacter`, `UDungeoneerMovementComponent`, `UDungeoneerLocalPlayerSubsystem`, `FDungeoneerSensoryViewExtension` |
 | `v0.3.0` | 2.5D Pixel-Lit Shader & Pro Sprite Rigs | Done | `PixelLit25D.ush`, `U25DDirectionalRigComponent`, `USensoryPerkComponent`, `slice_normal_rig.py`, `Content/Art/Rigs/` |

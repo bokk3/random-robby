@@ -121,6 +121,22 @@ public:
 
 private:
 	UTexture2D* ResolveAnyTextureByKey(FName Key) const noexcept;
+	void ExtractAllGridCellsFromPng(
+		const FString& PngFilePath,
+		const FString& CacheKeyPrefix,
+		int32 GridCols,
+		int32 GridRows,
+		bool bIsNormalMap,
+		bool bSRGB,
+		bool bIsCharacterSprite,
+		const TCHAR* ChannelSuffix);
+	UTexture2D* RegisterProceduralTileFallback(
+		FName CacheKey,
+		const FColor& PrimaryColor,
+		const FColor& SecondaryColor,
+		bool bIsNormalMap,
+		bool bSRGB,
+		uint8 PatternKind);
 	void ComputeSpritePlaneOrientation() const noexcept;
 
 	mutable FRotator CachedSpritePlaneRotation = FRotator(60.0f, 180.0f, 0.0f);

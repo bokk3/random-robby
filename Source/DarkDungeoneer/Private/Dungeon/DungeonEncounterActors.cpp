@@ -150,7 +150,7 @@ void ARestingGroundActor::Tick(float DeltaSeconds)
 
 AVendorActor::AVendorActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
 
 	VendorRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VendorRoot"));
@@ -191,6 +191,17 @@ void AVendorActor::BeginPlay()
 		FVector(1.80, 1.10, 1.40),
 		FLinearColor(0.24f, 0.72f, 0.78f),
 		0.42f);
+}
+
+void AVendorActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (MerchantLanternLight)
+	{
+		LanternSwayPhase += DeltaSeconds * 3.2f;
+		MerchantLanternLight->SetRelativeLocation(FVector(FMath::Sin(LanternSwayPhase) * 14.0, FMath::Cos(LanternSwayPhase * 0.7f) * 8.0, 175.0));
+		MerchantLanternLight->SetIntensity(3450.0f + 450.0f * FMath::Sin(LanternSwayPhase * 2.1f));
+	}
 }
 
 void AVendorActor::InitializeSeededCatalog(int32 RoomSeed)

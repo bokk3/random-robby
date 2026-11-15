@@ -221,3 +221,19 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
   - Connected `[F]`/`[E]` interaction to unlock seeded `AMajorLootVaultActor` vaults, purchase gear/sensory upgrades at `AVendorActor` stalls, and descend unlocked Vaults via `ADungeoneerGameMode::AdvanceToNextDungeonFloor()`.
   - Added live `FLOOR | GOLD | KILLS | [STATE]` + contextual `[F]` interaction prompts onto `UDungeoneerPlayerHUDWidget`, attached cleanly per `ULocalPlayer` when entering the dungeon.
 - **Verification**: `verify_architecture_invariants.py` passed (`85` files), `DarkDungeoneerEditor` & `DarkDungeoneer.exe` built cleanly, and all `9` headless UE `5.8.2` tests (including `DarkDungeoneer.Gameplay.CombatDodgeVaultAndFloorLoop`) passed with `UE_TEST_EXIT=0`.
+
+---
+
+## Devlog #14 — Vibrant Multi-Biome Floor Plans, 8-HISM Bucketing & Systemic Traps (`v1.1.0`)
+
+### Architecture & Pacing Upgrades
+- **Tight Hybrid-Biome Floor Graphs (`UDungeonGeneratorSubsystem`)**:
+  - Upgraded the floor generator from a small 8-node linear sequence to a compact **10 core rooms + 2 `SecretPhantasmPocket` rooms** layout (`12` nodes). Each floor centers on a dominant biome (**Floor 1**: `Crypt`, **Floor 2**: `SporeFens`, **Floor 3+**: `EmberForge`) with an `Obsidian Mirror-Palace` puzzle branch, Sanctuary/Vendor mid-floor respite, secret chambers concealed behind pass-through `AMirrorWall_Phantasm` thresholds, and a ~25% visual/hazard **Transition Bleed** across the final 2 rooms before the descending Vault stairwell.
+  - Added architectural room silhouettes (`OctagonalRotunda`, `PillaredGallery`, `CrossAmbushVault`, `SquareChamber`) to break visual repetition cleanly within fixed HISM budgets.
+- **8-HISM Bucketing & Procedural Fallback Extraction (`UDungeoneerAssetBootstrapSubsystem`, `ADungeoneerTileMapInstancer`)**:
+  - Replaced repeated per-cell PNG decodes with single-pass `ExtractAllGridCellsFromPng`, unlocking all `16` sub-cells per `4x4` dungeon sheet (`ATLAS_Dungeon_Floors_4x4`, `PROP_Dungeon_Walls_And_Cutaways_4x4`, `PROP_Mirror_Palace_Maze_4x4`, `PROP_Breakables_And_Traps_4x4`) and registering `PROP_Doors_And_Level_Transitions_4x4` / `PROP_Resting_Ground_Sanctuary_4x4` with procedural `64x64` pixel-art fallbacks when PNG sheets are absent on disk.
+  - Expanded `ADungeoneerTileMapInstancer` to `8` draw-call-batched HISM buckets (`FloorHISM`, `WetFloorHISM`, `WallHISM`, `DiagonalWedgeHISM`, `MirrorHISM`, `SconceHISM`, `BreakableHISM`, `ForegroundParallaxHISM`) plus a pooled `4`-slot shadowless doorway sconce point-light rig.
+- **Systemic Hazard Interactivity & Ambient Atmosphere**:
+  - Implemented `FDungeoneerTrapVentEntry` (`Steam`, `EmberFire`, `PoisonSpore`, `ChronoGas`, `AcousticChime`) affecting both players and zombies; `EmberFire` floor grates call `AZombieExploder::IgniteOrAccelerateFuse(...)` while shattered breakables (`1.95f` loudness) and chime wires (`2.35f` loudness) lure nearby zombies toward sound origins.
+  - Added `64` pre-allocated camera-relative `AmbientMotesHISM` instances, `0.6s` volumetric fog blending in `ADungeonAtmosphereActor`, and subtle `AVendorActor` lantern sway while keeping every `Tick` heap-allocation-free.
+- **Verification**: `verify_architecture_invariants.py` passed (`85` files), `DarkDungeoneerEditor` & `DarkDungeoneer` compiled cleanly, and all `10` headless UE `5.8.2` automation tests (including `DarkDungeoneer.Dungeon.BiomesOctagonalRoomsTrapsAndExploderLure`) passed with `UE_TEST_EXIT=0`.
