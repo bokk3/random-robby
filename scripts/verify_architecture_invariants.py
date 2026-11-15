@@ -85,6 +85,17 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Social/DungeoneerInventoryComponent.cpp",
     "Source/DarkDungeoneer/Public/Social/TradeManagerComponent.h",
     "Source/DarkDungeoneer/Private/Social/TradeManagerComponent.cpp",
+    # Task Group 7 (Replicable GameState Seed & v0.8.0 Menu/Lobby UI)
+    "Source/DarkDungeoneer/Public/Core/DungeoneerGameState.h",
+    "Source/DarkDungeoneer/Private/Core/DungeoneerGameState.cpp",
+    "Source/DarkDungeoneer/Public/UI/DungeoneerMainMenuWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerMainMenuWidget.cpp",
+    "Source/DarkDungeoneer/Public/UI/MenuDioramaStageActor.h",
+    "Source/DarkDungeoneer/Private/UI/MenuDioramaStageActor.cpp",
+    "Source/DarkDungeoneer/Public/UI/DungeoneerCoopLobbyWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerCoopLobbyWidget.cpp",
+    "Source/DarkDungeoneer/Public/UI/DungeoneerMenuFooterWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerMenuFooterWidget.cpp",
 ]
 
 
