@@ -29,6 +29,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Misc/Paths.h"
 #include "Rendering/25DAnimOrchestratorComponent.h"
@@ -364,6 +365,24 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		const int32 RigCount = Bootstrap->ImportAllRigTexturesFromDisk();
 		TestEqual(TEXT("All 18 2.5D rig textures imported"), RigCount, 18);
 
+		const int32 DungeonTexCount = Bootstrap->ImportAllDungeonTexturesFromDisk();
+		TestEqual(TEXT("All 16 2.5D dungeon atlas textures imported"), DungeonTexCount, 16);
+		TestNotNull(TEXT("ATLAS_Dungeon_Floors_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("ATLAS_Dungeon_Floors_4x4_D"))));
+
+		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
+		TestEqual(TEXT("16 single-cell tile textures extracted from 4x4 atlases"), ExtractedCells, 16);
+
+		UTexture2D* FloorTileTex = Bootstrap->GetExtractedCellTexture(FName(TEXT("Floor_Tile0_D")));
+		TestNotNull(TEXT("Extracted single-cell Floor_Tile0_D cached"), FloorTileTex);
+		if (FloorTileTex)
+		{
+			TestEqual(TEXT("Extracted Floor_Tile0_D configured to TF_Nearest"), FloorTileTex->Filter, TextureFilter::TF_Nearest);
+			TestEqual(TEXT("Extracted Floor_Tile0_D configured to TEXTUREGROUP_Pixels2D"), static_cast<TextureGroup>(FloorTileTex->LODGroup), TEXTUREGROUP_Pixels2D);
+		}
+		TestNotNull(TEXT("Extracted Hero_Cell0_D cached"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Hero_Cell0_D"))));
+		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds HISM textured material"),
+			Bootstrap->CreateDungeonOrRigMaterial(Bootstrap, FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor::White, 0.72f, true));
+
 		UTexture2D* HeroDiffuse = Bootstrap->GetLoadedRigTexture(FName(TEXT("Hero_D")));
 		TestNotNull(TEXT("Hero_D texture present in cache"), HeroDiffuse);
 		if (HeroDiffuse)
@@ -529,6 +548,20 @@ bool FDungeoneerTileMapInstancerAndMirrorBounceTest::RunTest(const FString& Para
 	TestTrue(TEXT("WallHISM preserves bCastHiddenShadow = true"), static_cast<bool>(WallHISM->bCastHiddenShadow));
 	TestTrue(TEXT("MirrorHISM carries MirrorReflective tag"), MirrorHISM->ComponentHasTag(TEXT("MirrorReflective")));
 	TestTrue(TEXT("HISM floor tiles & 4-axis walls populated"), Instancer->GetFloorHISM()->GetInstanceCount() >= 9 && WallHISM->GetInstanceCount() >= 8);
+	TestTrue(TEXT("Walkable 4-axis connecting corridors built between linked rooms"), Instancer->GetCorridorTileCount() > 0);
+	TestTrue(TEXT("Room encounters (Zombies, Sanctuary, Vendor, Vault) spawned deterministically"), Instancer->GetSpawnedEncounterCount() >= 5);
+
+	bool bEntryEastDoorBlocked = false;
+	const FVector2D EntryEastDoorPos(1152.0, 0.0);
+	for (const FDungeoneerWallInstanceEntry& WallEntry : Instancer->GetWallEntries())
+	{
+		if (FVector2D::DistSquared(FVector2D(WallEntry.WorldCenter.X, WallEntry.WorldCenter.Y), EntryEastDoorPos) < FMath::Square(160.0))
+		{
+			bEntryEastDoorBlocked = true;
+			break;
+		}
+	}
+	TestFalse(TEXT("Entry room East doorway aperture cleanly carved with zero wall blockage"), bEntryEastDoorBlocked);
 
 	// 2. Per-viewport South-Wall Cutaway check
 	int32 SouthWallIdx = INDEX_NONE;

@@ -6,6 +6,8 @@
 #include "ZombieBase.generated.h"
 
 class ADungeoneerCharacter;
+class UPointLightComponent;
+class UStaticMeshComponent;
 class UZombieSpatialSubsystem;
 
 /**
@@ -20,10 +22,17 @@ class DARKDUNGEONEER_API AZombieBase : public ACharacter
 public:
 	AZombieBase();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const override;
+
+	/** Ensures the visible 2.5D placeholder/textured mesh and emissive light are initialized cleanly. */
+	void EnsureVisualMeshInitialized();
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Visual")
+	UStaticMeshComponent* GetZombieVisualMesh() const noexcept { return ZombieVisualMesh.Get(); }
 
 	/** Evaluates whether this zombie falls inside any flashlight cone, Dark Vision radius, or active noise pulse. */
 	bool IsDetectedByViewer(const AActor* ViewerActor, const FVector& ViewerOrigin) const noexcept;
@@ -47,6 +56,16 @@ protected:
 	void MoveAlongOctant(ECompassOctant Octant, float Scale = 1.0f) noexcept;
 	void AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept;
 	virtual void OnZombieDied();
+	virtual FName GetArchetypeDiffuseKey() const noexcept { return FName(TEXT("Exploder_Cell0_D")); }
+	virtual FName GetArchetypeNormalKey() const noexcept { return FName(TEXT("Exploder_Cell0_N")); }
+	virtual FLinearColor GetArchetypeVisualTint() const noexcept { return FLinearColor(0.85f, 0.30f, 0.12f); }
+	virtual FVector GetArchetypeVisualScale() const noexcept { return FVector(0.75, 0.75, 1.45); }
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zombie|Visual")
+	TObjectPtr<UStaticMeshComponent> ZombieVisualMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zombie|Visual")
+	TObjectPtr<UPointLightComponent> ZombieEmissiveLight;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "1.0"))
 	float MaxHealth = 120.0f;
@@ -73,4 +92,5 @@ private:
 	FVector PreviousLocation = FVector::ZeroVector;
 	float StepDistanceAccumulator = 0.0f;
 	int32 StepSequenceCounter = 0;
+	bool bTexturedVisualsApplied = false;
 };

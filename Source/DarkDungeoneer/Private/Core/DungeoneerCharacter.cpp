@@ -1,4 +1,5 @@
 #include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerMovementConfig.h"
 #include "Rendering/SensoryPerkComponent.h"
@@ -15,8 +16,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputCoreTypes.h"
@@ -99,6 +102,30 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 		{
 			HeroVisualMesh->SetStaticMesh(CylinderMesh);
 			HeroVisualMesh->SetRelativeScale3D(FVector(0.85, 0.85, 1.65));
+		}
+	}
+
+	if (!bTexturedVisualsApplied)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (const UGameInstance* GI = World->GetGameInstance())
+			{
+				if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
+				{
+					if (UMaterialInstanceDynamic* HeroMat = Bootstrap->CreateDungeonOrRigMaterial(
+						this,
+						FName(TEXT("Hero_Cell0_D")),
+						FName(TEXT("Hero_Cell0_N")),
+						FLinearColor(0.95f, 0.78f, 0.28f),
+						0.45f,
+						false))
+					{
+						HeroVisualMesh->SetMaterial(0, HeroMat);
+						bTexturedVisualsApplied = true;
+					}
+				}
+			}
 		}
 	}
 

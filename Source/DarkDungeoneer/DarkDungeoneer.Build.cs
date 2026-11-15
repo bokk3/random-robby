@@ -39,7 +39,8 @@ public class DarkDungeoneer : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"ApplicationCore"
+			"ApplicationCore",
+			"ImageWrapper"
 		});
 	}
 }

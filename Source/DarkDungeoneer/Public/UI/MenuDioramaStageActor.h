@@ -112,4 +112,5 @@ private:
 	float ChronoGasHazeAlpha = 0.75f;
 	int32 EmittedSonarPulseCount = 0;
 	bool bAutoSweepOctants = true;
+	bool bTexturedShowcaseApplied = false;
 };

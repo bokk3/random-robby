@@ -2,11 +2,18 @@
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Rendering/SensoryPerkComponent.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Components/PointLightComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 
 AZombieBase::AZombieBase()
 {
@@ -15,6 +22,85 @@ AZombieBase::AZombieBase()
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+
+	ZombieVisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ZombieVisualMesh"));
+	ZombieVisualMesh->SetupAttachment(RootComponent);
+	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, -5.0));
+	ZombieVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	ZombieEmissiveLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ZombieEmissiveLight"));
+	ZombieEmissiveLight->SetupAttachment(RootComponent);
+	ZombieEmissiveLight->SetRelativeLocation(FVector(0.0, 0.0, 50.0));
+	ZombieEmissiveLight->SetIntensity(1100.0f);
+	ZombieEmissiveLight->SetAttenuationRadius(360.0f);
+	ZombieEmissiveLight->CastShadows = false;
+}
+
+void AZombieBase::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	EnsureVisualMeshInitialized();
+}
+
+void AZombieBase::EnsureVisualMeshInitialized()
+{
+	if (!ZombieVisualMesh)
+	{
+		return;
+	}
+
+	if (!ZombieVisualMesh->GetStaticMesh())
+	{
+		if (UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			ZombieVisualMesh->SetStaticMesh(CylinderMesh);
+		}
+	}
+	ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale());
+
+	const FLinearColor Tint = GetArchetypeVisualTint();
+	if (ZombieEmissiveLight)
+	{
+		ZombieEmissiveLight->SetLightColor(Tint);
+	}
+
+	if (!bTexturedVisualsApplied)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (const UGameInstance* GI = World->GetGameInstance())
+			{
+				if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
+				{
+					if (UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
+						this,
+						GetArchetypeDiffuseKey(),
+						GetArchetypeNormalKey(),
+						Tint,
+						0.45f,
+						false))
+					{
+						ZombieVisualMesh->SetMaterial(0, Mat);
+						bTexturedVisualsApplied = true;
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	if (!ZombieVisualMesh->GetMaterial(0))
+	{
+		if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+		{
+			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
+			{
+				MID->SetVectorParameterValue(FName(TEXT("Color")), Tint);
+				MID->SetScalarParameterValue(FName(TEXT("Roughness")), 0.45f);
+				ZombieVisualMesh->SetMaterial(0, MID);
+			}
+		}
+	}
 }
 
 void AZombieBase::BeginPlay()
@@ -23,6 +109,8 @@ void AZombieBase::BeginPlay()
 	CurrentHealth = MaxHealth;
 	PreviousLocation = GetActorLocation();
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+
+	EnsureVisualMeshInitialized();
 
 	if (bIsMirrorDecoy)
 	{

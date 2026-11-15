@@ -4,12 +4,18 @@
 #include "Audio.h"
 #include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
 #include "ImageUtils.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "Sound/SoundWave.h"
+#include "TextureResource.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 
@@ -49,11 +55,18 @@ namespace AssetBootstrapPrivate
 void UDungeoneerAssetBootstrapSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+
+	// Auto-import generated 2.5D rig and dungeon textures and crop single-cell tiles on startup
+	ImportAllRigTexturesFromDisk();
+	ImportAllDungeonTexturesFromDisk();
+	ExtractDefaultSingleCellTiles();
 }
 
 void UDungeoneerAssetBootstrapSubsystem::Deinitialize()
 {
 	LoadedRigTextures.Reset();
+	LoadedDungeonTextures.Reset();
+	ExtractedCellTextures.Reset();
 	LoadedVoiceStems.Reset();
 	SensoryMPC = nullptr;
 	MaterialConfigAsset = nullptr;
@@ -120,6 +133,288 @@ int32 UDungeoneerAssetBootstrapSubsystem::ImportAllRigTexturesFromDisk()
 	}
 
 	return LoadedRigTextures.Num();
+}
+
+int32 UDungeoneerAssetBootstrapSubsystem::ImportAllDungeonTexturesFromDisk()
+{
+	const FString DungeonRoot = FPaths::ProjectContentDir() / TEXT("Art/Dungeon");
+	if (!FPaths::DirectoryExists(DungeonRoot))
+	{
+		return LoadedDungeonTextures.Num();
+	}
+
+	static constexpr const TCHAR* DungeonSets[] =
+	{
+		TEXT("ATLAS_Dungeon_Floors_4x4"),
+		TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"),
+		TEXT("PROP_Mirror_Palace_Maze_4x4"),
+		TEXT("PROP_Breakables_And_Traps_4x4")
+	};
+
+	struct FDungeonChannelSpec
+	{
+		const TCHAR* Suffix;
+		bool bIsNormalMap;
+		bool bSRGB;
+	};
+	static constexpr FDungeonChannelSpec ChannelSpecs[] =
+	{
+		{ TEXT("D"),   false, true },
+		{ TEXT("N"),   true,  false },
+		{ TEXT("H"),   false, false },
+		{ TEXT("R"),   false, false },
+		{ TEXT("ORM"), false, false },
+		{ TEXT("E"),   false, true }
+	};
+
+	for (const TCHAR* SetName : DungeonSets)
+	{
+		for (const FDungeonChannelSpec& Channel : ChannelSpecs)
+		{
+			const FName Key(*FString::Printf(TEXT("%s_%s"), SetName, Channel.Suffix));
+			if (LoadedDungeonTextures.Contains(Key))
+			{
+				continue;
+			}
+
+			const FString FilePath = DungeonRoot / SetName / FString::Printf(TEXT("%s_%s.png"), SetName, Channel.Suffix);
+			if (!FPaths::FileExists(FilePath))
+			{
+				continue;
+			}
+
+			if (UTexture2D* ImportedTex = FImageUtils::ImportFileAsTexture2D(FilePath))
+			{
+				FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(ImportedTex, Channel.bIsNormalMap, Channel.bSRGB);
+				LoadedDungeonTextures.Add(Key, ImportedTex);
+			}
+		}
+	}
+
+	return LoadedDungeonTextures.Num();
+}
+
+int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
+{
+	const FString DungeonRoot = FPaths::ProjectContentDir() / TEXT("Art/Dungeon");
+	const FString RigsRoot = FPaths::ProjectContentDir() / TEXT("Art/Rigs");
+
+	struct FCellExtractSpec
+	{
+		const TCHAR* BaseDir;
+		const TCHAR* SubDir;
+		const TCHAR* FileName;
+		const TCHAR* CacheKey;
+		int32 CellIndex;
+		bool bIsNormalMap;
+		bool bSRGB;
+	};
+
+	const FCellExtractSpec Specs[] =
+	{
+		// Dungeon Environment Cells (4x4 atlases)
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Tile0_D"),       0, false, true },
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_N.png"),            TEXT("Floor_Tile0_N"),       0, true,  false },
+		{ *DungeonRoot, TEXT("ATLAS_Dungeon_Floors_4x4"),            TEXT("ATLAS_Dungeon_Floors_4x4_D.png"),            TEXT("Floor_Wet0_D"),        4, false, true },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Full0_D"),        0, false, true },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_N.png"), TEXT("Wall_Full0_N"),        0, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4"), TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4_D.png"), TEXT("Wall_Cutaway_D"),      4, false, true },
+		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_D.png"),         TEXT("Mirror_Intact_D"),     0, false, true },
+		{ *DungeonRoot, TEXT("PROP_Mirror_Palace_Maze_4x4"),         TEXT("PROP_Mirror_Palace_Maze_4x4_N.png"),         TEXT("Mirror_Intact_N"),     0, true,  false },
+		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_D.png"),       TEXT("Breakable_Intact_D"),  0, false, true },
+		{ *DungeonRoot, TEXT("PROP_Breakables_And_Traps_4x4"),       TEXT("PROP_Breakables_And_Traps_4x4_N.png"),       TEXT("Breakable_Intact_N"),  0, true,  false },
+		// Character & Zombie Sprite Cells (Cell 0 = South Idle/Step0)
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_D.png"),              TEXT("Hero_Cell0_D"),        0, false, true },
+		{ *RigsRoot,    TEXT("DungeoneerHero"),                      TEXT("Rig_DungeoneerHero_Raw_N.png"),              TEXT("Hero_Cell0_N"),        0, true,  false },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_D.png"),              TEXT("Exploder_Cell0_D"),    0, false, true },
+		{ *RigsRoot,    TEXT("ZombieExploder"),                      TEXT("Rig_ZombieExploder_Raw_N.png"),              TEXT("Exploder_Cell0_N"),    0, true,  false },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_D.png"),           TEXT("Thrower_Cell0_D"),     0, false, true },
+		{ *RigsRoot,    TEXT("ZombieFastThrower"),                   TEXT("Rig_ZombieFastThrower_Raw_N.png"),           TEXT("Thrower_Cell0_N"),     0, true,  false }
+	};
+
+	for (const FCellExtractSpec& Spec : Specs)
+	{
+		const FString FullPath = FString(Spec.BaseDir) / Spec.SubDir / Spec.FileName;
+		ExtractAtlasCellTexture(FullPath, FName(Spec.CacheKey), Spec.CellIndex, 4, 4, Spec.bIsNormalMap, Spec.bSRGB);
+	}
+
+	return ExtractedCellTextures.Num();
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::ExtractAtlasCellTexture(
+	const FString& PngFilePath,
+	const FName CacheKey,
+	const int32 CellIndex,
+	const int32 GridCols,
+	const int32 GridRows,
+	const bool bIsNormalMap,
+	const bool bSRGB)
+{
+	if (TObjectPtr<UTexture2D>* Existing = ExtractedCellTextures.Find(CacheKey))
+	{
+		return Existing->Get();
+	}
+
+	if (GridCols <= 0 || GridRows <= 0 || !FPaths::FileExists(PngFilePath))
+	{
+		return nullptr;
+	}
+
+	TArray<uint8> CompressedBytes;
+	if (!FFileHelper::LoadFileToArray(CompressedBytes, *PngFilePath) || CompressedBytes.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+	TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+	if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(CompressedBytes.GetData(), CompressedBytes.Num()))
+	{
+		return nullptr;
+	}
+
+	const int32 FullWidth = ImageWrapper->GetWidth();
+	const int32 FullHeight = ImageWrapper->GetHeight();
+	if (FullWidth < GridCols || FullHeight < GridRows)
+	{
+		return nullptr;
+	}
+
+	TArray64<uint8> RawBGRA;
+	if (!ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawBGRA))
+	{
+		return nullptr;
+	}
+
+	const int32 CellWidth = FullWidth / GridCols;
+	const int32 CellHeight = FullHeight / GridRows;
+	const int32 TotalCells = GridCols * GridRows;
+	const int32 ClampedCell = FMath::Clamp(CellIndex, 0, TotalCells - 1);
+	const int32 CellCol = ClampedCell % GridCols;
+	const int32 CellRow = ClampedCell / GridCols;
+	const int32 StartX = CellCol * CellWidth;
+	const int32 StartY = CellRow * CellHeight;
+
+	UTexture2D* CellTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8);
+	if (!CellTex)
+	{
+		return nullptr;
+	}
+
+	FTexturePlatformData* PlatformData = CellTex->GetPlatformData();
+	if (!PlatformData || PlatformData->Mips.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	FTexture2DMipMap& Mip = PlatformData->Mips[0];
+	uint8* DestBytes = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+	if (!DestBytes)
+	{
+		Mip.BulkData.Unlock();
+		return nullptr;
+	}
+
+	const int64 SrcStride = static_cast<int64>(FullWidth) * 4;
+	const int64 DestStride = static_cast<int64>(CellWidth) * 4;
+	const uint8* SrcBase = RawBGRA.GetData();
+
+	for (int32 RowY = 0; RowY < CellHeight; ++RowY)
+	{
+		const uint8* SrcRow = SrcBase + static_cast<int64>(StartY + RowY) * SrcStride + static_cast<int64>(StartX) * 4;
+		uint8* DstRow = DestBytes + static_cast<int64>(RowY) * DestStride;
+		FMemory::Memcpy(DstRow, SrcRow, DestStride);
+	}
+
+	Mip.BulkData.Unlock();
+
+	FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(CellTex, bIsNormalMap, bSRGB);
+	ExtractedCellTextures.Add(CacheKey, CellTex);
+	return CellTex;
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::ResolveAnyTextureByKey(const FName Key) const noexcept
+{
+	if (Key.IsNone())
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UTexture2D>* Cell = ExtractedCellTextures.Find(Key))
+	{
+		return Cell->Get();
+	}
+	if (const TObjectPtr<UTexture2D>* Dungeon = LoadedDungeonTextures.Find(Key))
+	{
+		return Dungeon->Get();
+	}
+	if (const TObjectPtr<UTexture2D>* Rig = LoadedRigTextures.Find(Key))
+	{
+		return Rig->Get();
+	}
+	return nullptr;
+}
+
+UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRigMaterial(
+	UObject* Outer,
+	const FName DiffuseKey,
+	const FName NormalKey,
+	const FLinearColor& FallbackTint,
+	const float RoughnessVal,
+	const bool bForHISM)
+{
+	UObject* EffectiveOuter = Outer ? Outer : this;
+	UTexture2D* DiffuseTex = ResolveAnyTextureByKey(DiffuseKey);
+	UTexture2D* NormalTex = ResolveAnyTextureByKey(NormalKey);
+
+	if (DiffuseTex)
+	{
+		const TCHAR* EngineMatPath = bForHISM
+			? TEXT("/Engine/EngineDebugMaterials/VertexPaint_2Tex_Color.VertexPaint_2Tex_Color")
+			: TEXT("/Engine/Engine_MI_Shaders/M_Shader_Simple.M_Shader_Simple");
+
+		if (UMaterialInterface* EngineMat = LoadObject<UMaterialInterface>(nullptr, EngineMatPath))
+		{
+			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(EngineMat, EffectiveOuter))
+			{
+				MID->SetTextureParameterValue(FName(TEXT("Diffuse")), DiffuseTex);
+				if (bForHISM)
+				{
+					MID->SetTextureParameterValue(FName(TEXT("Diffuse2")), DiffuseTex);
+				}
+
+				if (NormalTex)
+				{
+					MID->SetTextureParameterValue(FName(TEXT("Normal")), NormalTex);
+					if (bForHISM)
+					{
+						MID->SetTextureParameterValue(FName(TEXT("Normal2")), NormalTex);
+					}
+				}
+
+				// Verify the pre-compiled engine shader actually exposes "Diffuse"
+				if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse"))) == DiffuseTex)
+				{
+					const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.25f);
+					MID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), SubtleTint);
+					MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+					MID->SetScalarParameterValue(FName(TEXT("UsePinkDebug")), 0.0f);
+					return MID;
+				}
+			}
+		}
+	}
+
+	if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+	{
+		if (UMaterialInstanceDynamic* FallbackMID = UMaterialInstanceDynamic::Create(BaseShapeMat, EffectiveOuter))
+		{
+			FallbackMID->SetVectorParameterValue(FName(TEXT("Color")), FallbackTint);
+			FallbackMID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+			return FallbackMID;
+		}
+	}
+
+	return nullptr;
 }
 
 int32 UDungeoneerAssetBootstrapSubsystem::ImportAllVoiceStemsFromDisk()
@@ -272,6 +567,18 @@ bool UDungeoneerAssetBootstrapSubsystem::SaveCoreDataAssetsToDisk()
 UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetLoadedRigTexture(FName Key) const noexcept
 {
 	const TObjectPtr<UTexture2D>* Found = LoadedRigTextures.Find(Key);
+	return Found ? Found->Get() : nullptr;
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetLoadedDungeonTexture(FName Key) const noexcept
+{
+	const TObjectPtr<UTexture2D>* Found = LoadedDungeonTextures.Find(Key);
+	return Found ? Found->Get() : nullptr;
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetExtractedCellTexture(FName Key) const noexcept
+{
+	const TObjectPtr<UTexture2D>* Found = ExtractedCellTextures.Find(Key);
 	return Found ? Found->Get() : nullptr;
 }
 

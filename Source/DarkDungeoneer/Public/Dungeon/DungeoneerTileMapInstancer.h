@@ -204,6 +204,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetBreakableHISM() const noexcept { return BreakableHISM.Get(); }
 
+	UFUNCTION(BlueprintPure, Category = "Dungeon|Encounters")
+	int32 GetSpawnedEncounterCount() const noexcept { return SpawnedEncounterActors.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|Corridors")
+	int32 GetCorridorTileCount() const noexcept { return LastCorridorTileCount; }
+
 	const TArray<FDungeoneerWallInstanceEntry>& GetWallEntries() const noexcept { return WallEntries; }
 	const TArray<FDungeoneerMirrorInstanceEntry>& GetMirrorEntries() const noexcept { return MirrorEntries; }
 	const TArray<FDungeoneerBreakableInstanceEntry>& GetBreakableEntries() const noexcept { return BreakableEntries; }
@@ -214,6 +220,7 @@ protected:
 	void ResetPendingCutaways() noexcept;
 	void AccumulateCutawayAlongSegment(const FVector& CameraLocation, const FVector& PlayerLocation) noexcept;
 	void ApplyPendingCutawayTransitions() noexcept;
+	void SpawnEncountersForFloorGraph(const FDungeonFloorGraph& FloorGraph);
 	void AddWallInstance(
 		const FVector& WorldCenter,
 		EDungeoneerWallAxis Axis,
@@ -245,6 +252,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Cutaway")
 	float CutawaySphereRadiusUU = 80.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Encounters")
+	bool bSpawnRoomEncounters = true;
+
 private:
 	UPROPERTY(Transient)
 	TArray<FDungeoneerWallInstanceEntry> WallEntries;
@@ -254,6 +264,12 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<FDungeoneerBreakableInstanceEntry> BreakableEntries;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> SpawnedEncounterActors;
+
+	int32 LastCorridorTileCount = 0;
+	bool bTexturedHISMApplied = false;
 
 	/** Pre-allocated byte mask parallel to WallEntries so Tick writes CustomData without heap allocation. */
 	TArray<uint8> PendingCutawayFlags;

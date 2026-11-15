@@ -6,6 +6,7 @@
 
 class UBoxComponent;
 class UPointLightComponent;
+class UStaticMeshComponent;
 class ADungeoneerCharacter;
 
 USTRUCT(BlueprintType)
@@ -56,6 +57,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround")
 	TObjectPtr<UBoxComponent> SanctuaryBounds;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Visual")
+	TObjectPtr<UStaticMeshComponent> BrazierMesh;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Lighting")
 	TObjectPtr<UPointLightComponent> CampfireLight;
 
@@ -83,6 +87,9 @@ class DARKDUNGEONEER_API AVendorActor : public AActor
 public:
 	AVendorActor();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+
 	void InitializeSeededCatalog(int32 RoomSeed);
 
 	UFUNCTION(BlueprintPure, Category = "Vendor")
@@ -92,6 +99,15 @@ public:
 	bool ConsumeCatalogStock(const FGuid& ItemGuid) noexcept;
 
 protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vendor|Visual")
+	TObjectPtr<USceneComponent> VendorRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vendor|Visual")
+	TObjectPtr<UStaticMeshComponent> StallMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vendor|Lighting")
+	TObjectPtr<UPointLightComponent> MerchantLanternLight;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vendor")
 	TArray<FVendorCatalogItem> VendorCatalog;
 };
@@ -108,6 +124,9 @@ class DARKDUNGEONEER_API AMajorLootVaultActor : public AActor
 public:
 	AMajorLootVaultActor();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+
 	UFUNCTION(BlueprintCallable, Category = "Vault")
 	void UnlockVaultWithSeed(int32 RoomSeed);
 
@@ -116,6 +135,16 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Vault")
 	const TArray<FVendorCatalogItem>& GetVaultLootTable() const noexcept { return VaultRewards; }
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vault|Visual")
+	TObjectPtr<USceneComponent> VaultRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vault|Visual")
+	TObjectPtr<UStaticMeshComponent> VaultChestMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vault|Lighting")
+	TObjectPtr<UPointLightComponent> VaultBeaconLight;
 
 private:
 	UPROPERTY(VisibleInstanceOnly, Category = "Vault")

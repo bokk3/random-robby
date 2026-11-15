@@ -3,6 +3,48 @@
 #include "Core/DungeoneerCharacter.h"
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+
+namespace EncounterVisualHelper
+{
+	static void ApplyEncounterPrimitiveVisual(
+		AActor* OwnerActor,
+		UStaticMeshComponent* MeshComp,
+		const TCHAR* MeshAssetPath,
+		const FVector& Scale3D,
+		const FLinearColor& TintColor,
+		float RoughnessVal)
+	{
+		if (!OwnerActor || !MeshComp)
+		{
+			return;
+		}
+		if (!MeshComp->GetStaticMesh())
+		{
+			if (UStaticMesh* MeshAsset = LoadObject<UStaticMesh>(nullptr, MeshAssetPath))
+			{
+				MeshComp->SetStaticMesh(MeshAsset);
+			}
+		}
+		MeshComp->SetRelativeScale3D(Scale3D);
+		if (!MeshComp->GetMaterial(0))
+		{
+			if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+			{
+				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseShapeMat, OwnerActor))
+				{
+					MID->SetVectorParameterValue(FName(TEXT("Color")), TintColor);
+					MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+					MeshComp->SetMaterial(0, MID);
+				}
+			}
+		}
+	}
+}
 
 ARestingGroundActor::ARestingGroundActor()
 {
@@ -15,8 +57,13 @@ ARestingGroundActor::ARestingGroundActor()
 	SanctuaryBounds->OnComponentBeginOverlap.AddDynamic(this, &ARestingGroundActor::HandleZoneOverlapBegin);
 	SanctuaryBounds->OnComponentEndOverlap.AddDynamic(this, &ARestingGroundActor::HandleZoneOverlapEnd);
 
+	BrazierMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BrazierMesh"));
+	BrazierMesh->SetupAttachment(RootComponent);
+	BrazierMesh->SetRelativeLocation(FVector(0.0, 0.0, 45.0));
+
 	CampfireLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("CampfireLight"));
 	CampfireLight->SetupAttachment(RootComponent);
+	CampfireLight->SetRelativeLocation(FVector(0.0, 0.0, 120.0));
 	CampfireLight->SetLightColor(FLinearColor(1.0f, 0.58f, 0.24f));
 	CampfireLight->SetIntensity(9000.0f);
 	CampfireLight->SetAttenuationRadius(1100.0f);
@@ -26,6 +73,14 @@ ARestingGroundActor::ARestingGroundActor()
 void ARestingGroundActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	EncounterVisualHelper::ApplyEncounterPrimitiveVisual(
+		this,
+		BrazierMesh.Get(),
+		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"),
+		FVector(1.15, 1.15, 0.90),
+		FLinearColor(1.0f, 0.55f, 0.16f),
+		0.35f);
 
 	if (UWorld* World = GetWorld())
 	{
@@ -96,6 +151,45 @@ AVendorActor::AVendorActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+
+	VendorRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VendorRoot"));
+	SetRootComponent(VendorRoot);
+
+	StallMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StallMesh"));
+	StallMesh->SetupAttachment(VendorRoot);
+	StallMesh->SetRelativeLocation(FVector(0.0, 0.0, 70.0));
+
+	MerchantLanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("MerchantLanternLight"));
+	MerchantLanternLight->SetupAttachment(VendorRoot);
+	MerchantLanternLight->SetRelativeLocation(FVector(0.0, 0.0, 175.0));
+	MerchantLanternLight->SetLightColor(FLinearColor(0.22f, 0.88f, 0.96f));
+	MerchantLanternLight->SetIntensity(3600.0f);
+	MerchantLanternLight->SetAttenuationRadius(850.0f);
+	MerchantLanternLight->CastShadows = false;
+}
+
+void AVendorActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	EncounterVisualHelper::ApplyEncounterPrimitiveVisual(
+		this,
+		StallMesh.Get(),
+		TEXT("/Engine/BasicShapes/Cube.Cube"),
+		FVector(1.80, 1.10, 1.40),
+		FLinearColor(0.24f, 0.72f, 0.78f),
+		0.42f);
+}
+
+void AVendorActor::BeginPlay()
+{
+	Super::BeginPlay();
+	EncounterVisualHelper::ApplyEncounterPrimitiveVisual(
+		this,
+		StallMesh.Get(),
+		TEXT("/Engine/BasicShapes/Cube.Cube"),
+		FVector(1.80, 1.10, 1.40),
+		FLinearColor(0.24f, 0.72f, 0.78f),
+		0.42f);
 }
 
 void AVendorActor::InitializeSeededCatalog(int32 RoomSeed)
@@ -153,6 +247,45 @@ AMajorLootVaultActor::AMajorLootVaultActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+
+	VaultRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VaultRoot"));
+	SetRootComponent(VaultRoot);
+
+	VaultChestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VaultChestMesh"));
+	VaultChestMesh->SetupAttachment(VaultRoot);
+	VaultChestMesh->SetRelativeLocation(FVector(0.0, 0.0, 65.0));
+
+	VaultBeaconLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("VaultBeaconLight"));
+	VaultBeaconLight->SetupAttachment(VaultRoot);
+	VaultBeaconLight->SetRelativeLocation(FVector(0.0, 0.0, 190.0));
+	VaultBeaconLight->SetLightColor(FLinearColor(1.0f, 0.82f, 0.22f));
+	VaultBeaconLight->SetIntensity(4800.0f);
+	VaultBeaconLight->SetAttenuationRadius(1050.0f);
+	VaultBeaconLight->CastShadows = false;
+}
+
+void AMajorLootVaultActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	EncounterVisualHelper::ApplyEncounterPrimitiveVisual(
+		this,
+		VaultChestMesh.Get(),
+		TEXT("/Engine/BasicShapes/Cube.Cube"),
+		FVector(1.60, 1.20, 1.30),
+		FLinearColor(0.95f, 0.78f, 0.18f),
+		0.22f);
+}
+
+void AMajorLootVaultActor::BeginPlay()
+{
+	Super::BeginPlay();
+	EncounterVisualHelper::ApplyEncounterPrimitiveVisual(
+		this,
+		VaultChestMesh.Get(),
+		TEXT("/Engine/BasicShapes/Cube.Cube"),
+		FVector(1.60, 1.20, 1.30),
+		FLinearColor(0.95f, 0.78f, 0.18f),
+		0.22f);
 }
 
 void AMajorLootVaultActor::UnlockVaultWithSeed(int32 RoomSeed)

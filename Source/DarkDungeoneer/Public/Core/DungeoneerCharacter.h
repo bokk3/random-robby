@@ -166,4 +166,5 @@ protected:
 private:
 	float CurrentFlashlightYawDeg = 270.0f;
 	float OctantSyncAccumulator = 0.0f;
+	bool bTexturedVisualsApplied = false;
 };

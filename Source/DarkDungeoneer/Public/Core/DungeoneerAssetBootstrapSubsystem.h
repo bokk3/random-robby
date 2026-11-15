@@ -6,15 +6,17 @@
 
 class UTexture2D;
 class USoundWave;
+class UMaterialInstanceDynamic;
 class UMaterialParameterCollection;
 class UDungeoneer25DMaterialConfig;
 class UDungeoneerMovementConfig;
 
 /**
- * TASK-903: Runtime & Editor Content Bootstrap Subsystem.
- * Imports generated 2.5D rig PNGs (Art/Rigs) with TEXTUREGROUP_Pixels2D + TF_Nearest,
- * loads phoneme/hero WAV banks (Audio/Voices), synthesizes MPC_SensoryState parameters,
- * and serializes core DataAsset/.uasset packages cleanly to Content/.
+ * TASK-903 & TASK-907: Runtime & Editor Content Bootstrap Subsystem.
+ * Imports generated 2.5D rig PNGs (Art/Rigs) and dungeon atlas PNGs (Art/Dungeon) with
+ * TEXTUREGROUP_Pixels2D + TF_Nearest, extracts single-cell 2.5D tiles for pre-compiled engine
+ * materials, loads phoneme/hero WAV banks (Audio/Voices), synthesizes MPC_SensoryState
+ * parameters, and serializes core DataAsset/.uasset packages cleanly to Content/.
  */
 UCLASS()
 class DARKDUNGEONEER_API UDungeoneerAssetBootstrapSubsystem : public UGameInstanceSubsystem
@@ -28,6 +30,36 @@ public:
 	/** Imports all 18 generated rig PNG sheets (_D, _N, _ORM across 6 rig directories) from Content/Art/Rigs. */
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
 	int32 ImportAllRigTexturesFromDisk();
+
+	/** Imports all generated dungeon atlas/prop PNG sheets from Content/Art/Dungeon. */
+	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
+	int32 ImportAllDungeonTexturesFromDisk();
+
+	/** Crops single-cell textures from 4x4 dungeon/rig sheets so standard Basic/Engine materials tile cleanly. */
+	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
+	int32 ExtractDefaultSingleCellTiles();
+
+	/** Decompresses a PNG sheet and extracts a single (Col, Row) cell into a TF_Nearest transient UTexture2D. */
+	UTexture2D* ExtractAtlasCellTexture(
+		const FString& PngFilePath,
+		FName CacheKey,
+		int32 CellIndex,
+		int32 GridCols = 4,
+		int32 GridRows = 4,
+		bool bIsNormalMap = false,
+		bool bSRGB = true);
+
+	/**
+	 * Builds a textured UMaterialInstanceDynamic using pre-compiled Engine materials (zero shader-compile hitch),
+	 * automatically falling back to tinted BasicShapeMaterial if a texture or engine shader is unavailable.
+	 */
+	UMaterialInstanceDynamic* CreateDungeonOrRigMaterial(
+		UObject* Outer,
+		FName DiffuseKey,
+		FName NormalKey,
+		const FLinearColor& FallbackTint,
+		float RoughnessVal = 0.75f,
+		bool bForHISM = false);
 
 	/** Imports all WAV voice stems & 24-syllable gibberish banks from Content/Audio/Voices. */
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
@@ -45,6 +77,12 @@ public:
 	UTexture2D* GetLoadedRigTexture(FName Key) const noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	UTexture2D* GetLoadedDungeonTexture(FName Key) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	UTexture2D* GetExtractedCellTexture(FName Key) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
 	USoundWave* GetLoadedVoiceStem(FName Key) const noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
@@ -60,11 +98,25 @@ public:
 	int32 GetLoadedRigTextureCount() const noexcept { return LoadedRigTextures.Num(); }
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	int32 GetLoadedDungeonTextureCount() const noexcept { return LoadedDungeonTextures.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	int32 GetExtractedCellTextureCount() const noexcept { return ExtractedCellTextures.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
 	int32 GetLoadedVoiceStemCount() const noexcept { return LoadedVoiceStems.Num(); }
 
 private:
+	UTexture2D* ResolveAnyTextureByKey(FName Key) const noexcept;
+
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UTexture2D>> LoadedRigTextures;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> LoadedDungeonTextures;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> ExtractedCellTextures;
 
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<USoundWave>> LoadedVoiceStems;

@@ -11,6 +11,25 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.3] - 2026-11-15
+
+### Added
+- **Dungeon & Rig Single-Cell Texture Bootstrapper (`TASK-907` — `UDungeoneerAssetBootstrapSubsystem`)**:
+  - Extended `UDungeoneerAssetBootstrapSubsystem` with `ImportAllDungeonTexturesFromDisk()` loading all `16` generated dungeon sheets (`ATLAS_Dungeon_Floors_4x4`, `PROP_Dungeon_Walls_And_Cutaways_4x4`, `PROP_Mirror_Palace_Maze_4x4`, `PROP_Breakables_And_Traps_4x4`) configured with `TF_Nearest` + `TEXTUREGROUP_Pixels2D` (`TMGS_NoMipmaps`).
+  - Added `IImageWrapper`-backed `ExtractAtlasCellTexture()` and `ExtractDefaultSingleCellTiles()` cropping `16` clean single-cell `UTexture2D` tiles (`Floor_Tile0`, `Wall_Full0`, `Wall_Cutaway`, `Mirror_Intact`, `Breakable_Intact`, `Hero_Cell0`, `Exploder_Cell0`, `Thrower_Cell0`) into transient `PF_B8G8R8A8` pixel-art textures without modifying the `18`-rig cache invariant.
+  - Added `CreateDungeonOrRigMaterial()` binding pre-compiled Engine shaders (`/Engine/EngineDebugMaterials/VertexPaint_2Tex_Color` for HISM batches and `/Engine/Engine_MI_Shaders/M_Shader_Simple` for actor/diorama meshes) with fallback to `/Engine/BasicShapes/BasicShapeMaterial`, and wired auto-upgrade across `ADungeoneerTileMapInstancer`, `ADungeoneerCharacter`, `AMenuDioramaStageActor`, and `AZombieBase`.
+- **Doorway Carving, 4-Axis Connecting Corridors & Live Room Encounters (`TASK-908` — `ADungeoneerTileMapInstancer`, `AZombieBase`, `DungeonEncounterActors`)**:
+  - Updated `ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph()` to pre-compute room bounding rectangles, carve walkable East/West doorway apertures (plus corner-chamfer clearance) across connected DAG edges (handling both open void gaps and flush-abutting rooms such as `CombatA/B <-> MirrorPalaceMaze <-> Vendor/RestingGround`), and generate deduplicated `TSet<FIntPoint>` 3-tile-wide stone corridors (`FloorHISM`) flanked by cutaway-aware `WallHISM` corridor walls.
+  - Added visible `UStaticMeshComponent` visuals and emissive/beacon `UPointLightComponent`s to `AZombieBase` (`AZombieExploder` magma orange + `CustomData[2]` belly pulse; `AZombieFastThrower` chrono cyan), `ARestingGroundActor`, `AVendorActor`, and `AMajorLootVaultActor`.
+  - Added `ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph()` (`bSpawnRoomEncounters = true`) spawning and tracking per-room encounter actors (`SpawnedEncounterActors`, cleaned on rebuild in `ClearAllInstances()`).
+
+### Verified
+- Extended `DarkDungeoneer.UI.HUDAndTradeModalAndAssetBootstrap` and `DarkDungeoneer.Dungeon.TileMapInstancerCutawayAndMirrorBounce` in `DungeoneerVerificationSpecs.cpp` to assert all `16` dungeon textures, `16` extracted single-cell tiles, `CreateDungeonOrRigMaterial` HISM output, non-zero connecting corridor tiles, carved Entry East doorway clearance, and spawned room encounters (`>= 5`).
+- Passed `scripts/verify_architecture_invariants.py` (`85` tracked files, zero `Tick` allocations, zero banned symbols).
+- Compiled `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) and passed all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
+
+---
+
 ## [0.9.2] - 2026-11-15
 
 ### Fixed

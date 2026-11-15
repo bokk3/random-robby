@@ -72,9 +72,14 @@ void AZombieExploder::Tick(float DeltaSeconds)
 		EmissivePulseScalar = 0.5f + 0.5f * FMath::Sin(FuseElapsed * PulseFreq * PI);
 
 		// Push emissive belly-crack glow via Custom Primitive Data (zero MID allocation)
+		const float PulseCPD = EmissivePulseScalar * (1.0f + Progress * 4.0f);
 		if (UMeshComponent* BodyMesh = GetMesh())
 		{
-			BodyMesh->SetCustomPrimitiveDataFloat(2, EmissivePulseScalar * (1.0f + Progress * 4.0f));
+			BodyMesh->SetCustomPrimitiveDataFloat(2, PulseCPD);
+		}
+		if (ZombieVisualMesh)
+		{
+			ZombieVisualMesh->SetCustomPrimitiveDataFloat(2, PulseCPD);
 		}
 
 		// Deterministic accelerating tick phase crossings (shrinking step interval as fuse nears 1.0)

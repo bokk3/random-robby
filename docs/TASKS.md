@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.2` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.3` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -22,6 +22,7 @@
 | `v0.9.0` | Split-Screen HUD, 2PC Trade Modal, `.uasset` Bootstrap & 2.5D Hybrid Anim/Slicer | Done | `UDungeoneerPlayerHUDWidget`, `UDungeoneerTradeModalWidget`, `UDungeoneerAssetBootstrapSubsystem`, `slice_normal_rig.py` (`_E.png` + `AtlasMetadata.json`), `U25DAnimOrchestratorComponent`, 7 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.1` | 2.5D Modular Dungeon HISM Assembly, South-Wall Cutaways & Mirror Light-Bounce | Done | `slice_normal_rig.py --mode dungeon`, `ADungeoneerTileMapInstancer`, `UMirrorLightBounceComponent`, 4 Dungeon Atlases/Props, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.2` | Startup Black-Screen Fix, Visible Diorama/HISM Materials & In-Place Dungeon Play | Done | `/Engine/Maps/Entry`, `AMenuDioramaStageActor` meshes/fill light, `ADungeoneerCharacter` hero mesh + WASD/mouse fallback, `ADungeoneerGameMode::EnterLiveDungeonFromMenu`, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.9.3` | Dungeon Texture Bootstrap, 4-Axis Corridor Carving & Live Room Encounters | Done | `UDungeoneerAssetBootstrapSubsystem` single-cell extraction + textured HISM/rig materials, carved doorways, deduplicated corridors, `AZombieBase`/encounter visuals & spawner, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 
 ---
 
@@ -88,6 +89,18 @@
 - [x] **`TASK-906` — Startup Map, Diorama Stage Meshes/Lighting, Hero Fallback Input & In-Place Dungeon Launch**
   - **Files**: `Config/DefaultEngine.ini`, `Source/DarkDungeoneer/Public/UI/MenuDioramaStageActor.h`, `Private/UI/MenuDioramaStageActor.cpp`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/Core/DungeoneerGameMode.h`, `Private/Core/DungeoneerGameMode.cpp`, `Private/UI/DungeoneerMainMenuWidget.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
   - **Scope**: Replace `/Engine/Maps/Templates/OpenWorld` with `/Engine/Maps/Entry`, populate all `AMenuDioramaStageActor`, `ADungeoneerTileMapInstancer`, and `ADungeoneerCharacter` meshes/materials/fill lights cleanly, prevent pawn view-target clobbering (`bAutoManageActiveCameraTarget = false`), and enable in-place menu-to-dungeon transition (`EnterLiveDungeonFromMenu`) plus direct `WASD`/Mouse aim fallback when Enhanced Input DataAssets are unset.
+
+## Completed Subdivided Tasks (`v0.9.3`)
+
+### Milestone `v0.9.3` — Dungeon Texture Bootstrap, 4-Axis Corridor Carving & Live Room Encounters (`TASK-907`–`TASK-908`)
+
+- [x] **`TASK-907` — Dungeon Atlas Import, Single-Cell Cropping & Textured HISM/Rig Materials**
+  - **Files**: `Source/DarkDungeoneer/DarkDungeoneer.Build.cs`, `Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Private/Core/DungeoneerCharacter.cpp`, `Private/UI/MenuDioramaStageActor.cpp`
+  - **Scope**: Add `ImageWrapper` dependency; import all `16` dungeon sheets (`ATLAS_*`, `PROP_*`) with `TF_Nearest` + `TEXTUREGROUP_Pixels2D`; crop `16` single-cell tile textures from `4x4` sheets on startup (`ExtractAtlasCellTexture`) and bind pre-compiled textured engine shaders (`VertexPaint_2Tex_Color` / `M_Shader_Simple`) cleanly across HISM builders, characters, zombies, and menu diorama proxies.
+
+- [x] **`TASK-908` — Doorway Carving, Deduplicated 4-Axis Corridors & Live Room Encounter Spawning**
+  - **Files**: `Source/DarkDungeoneer/Public/Dungeon/DungeoneerTileMapInstancer.h`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Public/AI/ZombieExploder.h`, `Private/AI/ZombieExploder.cpp`, `Public/AI/ZombieFastThrower.h`, `Public/Dungeon/DungeonEncounterActors.h`, `Private/Dungeon/DungeonEncounterActors.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Carve doorway apertures across open-void and flush-abutting rooms in `BuildDungeonFromFloorGraph`, merge T-junction corridor floor cells via `TSet<FIntPoint>` with cutaway-aware flanking corridor walls, attach visible meshes + beacon lights to zombies, Resting Ground, Vendor, and Major Loot Vault actors, and spawn/track room encounters deterministically.
 
 ---
 

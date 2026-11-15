@@ -1,10 +1,12 @@
 #include "UI/MenuDioramaStageActor.h"
 #include "AI/ZombieBase.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Camera/CameraComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dungeon/MirrorMazeActors.h"
+#include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -82,7 +84,18 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 	UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
-	auto InitProxyMesh = [this, BaseShapeMat](UStaticMeshComponent* MeshComp, UStaticMesh* MeshAsset, const FVector& Scale, const FLinearColor& TintColor, float RoughnessVal)
+	const UWorld* World = GetWorld();
+	const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI ? GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>() : nullptr;
+
+	auto InitProxyMesh = [this, BaseShapeMat, Bootstrap](
+		UStaticMeshComponent* MeshComp,
+		UStaticMesh* MeshAsset,
+		const FVector& Scale,
+		FName DiffuseKey,
+		FName NormalKey,
+		const FLinearColor& TintColor,
+		float RoughnessVal)
 	{
 		if (!MeshComp)
 		{
@@ -93,6 +106,16 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 			MeshComp->SetStaticMesh(MeshAsset);
 		}
 		MeshComp->SetRelativeScale3D(Scale);
+
+		if (Bootstrap && !bTexturedShowcaseApplied && !DiffuseKey.IsNone())
+		{
+			if (UMaterialInstanceDynamic* TexturedMID = Bootstrap->CreateDungeonOrRigMaterial(this, DiffuseKey, NormalKey, TintColor, RoughnessVal, false))
+			{
+				MeshComp->SetMaterial(0, TexturedMID);
+				return;
+			}
+		}
+
 		if (BaseShapeMat && !MeshComp->GetMaterial(0))
 		{
 			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
@@ -104,11 +127,16 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 		}
 	};
 
-	InitProxyMesh(ShowcaseFloorMesh.Get(), PlaneMesh, FVector(18.0, 18.0, 1.0), FLinearColor(0.12f, 0.14f, 0.20f), 0.72f);
-	InitProxyMesh(ExploderShowcaseProxy.Get(), CylinderMesh, FVector(0.95, 0.95, 1.35), FLinearColor(0.95f, 0.38f, 0.08f), 0.45f);
-	InitProxyMesh(FastThrowerShowcaseProxy.Get(), CylinderMesh, FVector(0.70, 0.70, 1.45), FLinearColor(0.25f, 0.82f, 0.95f), 0.40f);
-	InitProxyMesh(PhantasmMirrorShowcaseProxy.Get(), CubeMesh, FVector(0.25, 2.20, 2.40), FLinearColor(0.55f, 0.90f, 1.0f), 0.10f);
-	InitProxyMesh(DecoyProjectionProxy.Get(), CylinderMesh, FVector(0.75, 0.75, 1.30), FLinearColor(0.62f, 0.28f, 0.92f), 0.35f);
+	InitProxyMesh(ShowcaseFloorMesh.Get(), PlaneMesh, FVector(18.0, 18.0, 1.0), FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor(0.18f, 0.21f, 0.28f), 0.72f);
+	InitProxyMesh(ExploderShowcaseProxy.Get(), CylinderMesh, FVector(0.95, 0.95, 1.35), FName(TEXT("Exploder_Cell0_D")), FName(TEXT("Exploder_Cell0_N")), FLinearColor(0.95f, 0.38f, 0.08f), 0.45f);
+	InitProxyMesh(FastThrowerShowcaseProxy.Get(), CylinderMesh, FVector(0.70, 0.70, 1.45), FName(TEXT("Thrower_Cell0_D")), FName(TEXT("Thrower_Cell0_N")), FLinearColor(0.25f, 0.82f, 0.95f), 0.40f);
+	InitProxyMesh(PhantasmMirrorShowcaseProxy.Get(), CubeMesh, FVector(0.25, 2.20, 2.40), FName(TEXT("Mirror_Intact_D")), FName(TEXT("Mirror_Intact_N")), FLinearColor(0.55f, 0.90f, 1.0f), 0.10f);
+	InitProxyMesh(DecoyProjectionProxy.Get(), CylinderMesh, FVector(0.75, 0.75, 1.30), NAME_None, NAME_None, FLinearColor(0.62f, 0.28f, 0.92f), 0.35f);
+
+	if (Bootstrap)
+	{
+		bTexturedShowcaseApplied = true;
+	}
 }
 
 void AMenuDioramaStageActor::BeginPlay()
