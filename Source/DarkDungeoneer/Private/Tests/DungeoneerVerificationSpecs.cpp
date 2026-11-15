@@ -13,8 +13,20 @@
 #include "UI/MenuDioramaStageActor.h"
 #include "UI/DungeoneerCoopLobbyWidget.h"
 #include "UI/DungeoneerMenuFooterWidget.h"
+#include "UI/DungeoneerPlayerHUDWidget.h"
+#include "UI/DungeoneerTradeModalWidget.h"
+#include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
+#include "Dungeon/DungeonEncounterActors.h"
+#include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialParameterCollection.h"
+#include "Misc/Paths.h"
+#include "Rendering/25DAnimOrchestratorComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "UObject/Package.h"
 
 #if WITH_AUTOMATION_TESTS
@@ -238,6 +250,211 @@ bool FDungeoneerMenuAndSeedReplicationTest::RunTest(const FString& Parameters)
 	Stage->SetShowcaseModePreview(EDungeoneerMenuAction::MirrorTrial);
 	Stage->Tick(0.5f);
 	TestTrue(TEXT("Diorama flashlight sweeps smoothly toward NE"), Stage->GetCurrentFlashlightYawDeg() > 0.0f);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerHUDAndTradeModalAndAssetBootstrapTest,
+	"DarkDungeoneer.UI.HUDAndTradeModalAndAssetBootstrap",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Transient UWorld created for v0.9.0 specs"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	// 1. TASK-901: Per-viewport Player HUD Widget binds cleanly to ADungeoneerCharacter
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>();
+	TestNotNull(TEXT("ADungeoneerCharacter spawned"), Hero);
+	if (Hero && Hero->GetDungeoneerMovement())
+	{
+		Hero->GetDungeoneerMovement()->SetMoveInputVector(FVector2D(1.0f, 1.0f));
+		Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(-1.0f, 0.0f));
+		Hero->GetDungeoneerMovement()->SetChronoSlowRatio(0.25f);
+	}
+
+	UDungeoneerPlayerHUDWidget* HUD = NewObject<UDungeoneerPlayerHUDWidget>(TestWorld);
+	TestNotNull(TEXT("UDungeoneerPlayerHUDWidget allocated"), HUD);
+	if (HUD && Hero)
+	{
+		HUD->RefreshHUDFromCharacter(Hero);
+		TestEqual(TEXT("HUD MoveOctant matches NE"), HUD->GetMoveOctant(), ECompassOctant::NE);
+		TestEqual(TEXT("HUD AimOctant matches W"), HUD->GetAimOctant(), ECompassOctant::W);
+		TestTrue(TEXT("HUD HealthPercent at 1.0"), FMath::IsNearlyEqual(HUD->GetHealthPercent(), 1.0f, 1e-4f));
+		TestTrue(TEXT("HUD BatteryPercent at 1.0"), FMath::IsNearlyEqual(HUD->GetBatteryPercent(), 1.0f, 1e-4f));
+		TestTrue(TEXT("HUD ChronoSlowRatio at 0.25"), FMath::IsNearlyEqual(HUD->GetChronoSlowRatio(), 0.25f, 1e-4f));
+		TestTrue(TEXT("HUD formatted Chrono-Slow text displays S=0.25"), HUD->GetFormattedChronoSlowText().Contains(TEXT("S=0.25")));
+	}
+
+	// 2. TASK-902: Resting Ground Trade Modal + Gibberish Speech + Vendor Purchase 2PC
+	AVendorActor* Vendor = TestWorld->SpawnActor<AVendorActor>();
+	TestNotNull(TEXT("AVendorActor spawned"), Vendor);
+	Vendor->InitializeSeededCatalog(1337);
+	TestTrue(TEXT("Seeded vendor catalog non-empty"), Vendor->GetVendorCatalog().Num() >= 2);
+
+	AActor* PlayerActor = TestWorld->SpawnActor<AActor>();
+	UDungeoneerInventoryComponent* PlayerInv = NewObject<UDungeoneerInventoryComponent>(PlayerActor);
+	UTradeManagerComponent* TradeMgr = NewObject<UTradeManagerComponent>(PlayerActor);
+	UGibberishSpeechComponent* SpeechComp = NewObject<UGibberishSpeechComponent>(Vendor);
+	PlayerInv->RegisterComponent();
+	TradeMgr->RegisterComponent();
+	SpeechComp->RegisterComponent();
+
+	PlayerInv->AuthorityAdjustGold(500);
+	const int32 GoldBefore = PlayerInv->GetGoldBalance();
+	const int32 ItemPrice = Vendor->GetVendorCatalog()[1].GoldPrice;
+	const FName TargetItemId = Vendor->GetVendorCatalog()[1].ItemId;
+
+	UDungeoneerTradeModalWidget* TradeModal = NewObject<UDungeoneerTradeModalWidget>(TestWorld);
+	TradeModal->BindTradeContext(Vendor, SpeechComp, TradeMgr, PlayerInv);
+	TradeModal->SelectVendorCatalogIndex(1);
+	TestEqual(TEXT("Selected catalog index updated to 1"), TradeModal->GetSelectedCatalogIndex(), 1);
+	TestTrue(TEXT("Vendor catalog selection starts procedural gibberish"), SpeechComp->IsPlayingGibberish());
+
+	const bool bPurchased = TradeModal->ExecuteSelectedVendorPurchase();
+	TestTrue(TEXT("Vendor purchase executed cleanly"), bPurchased);
+	TestTrue(TEXT("OnTradeAckReceived marked bLastTradeCommitted=true"), TradeModal->WasLastTradeCommitted());
+	TestEqual(TEXT("Player gold debited accurately"), PlayerInv->GetGoldBalance(), GoldBefore - ItemPrice);
+	TestEqual(TEXT("Purchased relic added to player inventory"), PlayerInv->GetItems().Num(), 1);
+	if (PlayerInv->GetItems().Num() > 0)
+	{
+		TestEqual(TEXT("Purchased item ID matches vendor catalog"), PlayerInv->GetItems()[0].ItemId, TargetItemId);
+	}
+
+	// 3. TASK-903: Runtime & .uasset Content Bootstrap Subsystem
+	UGameInstance* TestGameInstance = NewObject<UGameInstance>(GetTransientPackage());
+	TestNotNull(TEXT("Dummy UGameInstance allocated for UGameInstanceSubsystem Outer"), TestGameInstance);
+	UDungeoneerAssetBootstrapSubsystem* Bootstrap = TestGameInstance ? NewObject<UDungeoneerAssetBootstrapSubsystem>(TestGameInstance) : nullptr;
+	TestNotNull(TEXT("UDungeoneerAssetBootstrapSubsystem allocated"), Bootstrap);
+	if (Bootstrap)
+	{
+		const int32 RigCount = Bootstrap->ImportAllRigTexturesFromDisk();
+		TestEqual(TEXT("All 18 2.5D rig textures imported"), RigCount, 18);
+
+		UTexture2D* HeroDiffuse = Bootstrap->GetLoadedRigTexture(FName(TEXT("Hero_D")));
+		TestNotNull(TEXT("Hero_D texture present in cache"), HeroDiffuse);
+		if (HeroDiffuse)
+		{
+			TestEqual(TEXT("Hero_D configured to TF_Nearest"), HeroDiffuse->Filter, TextureFilter::TF_Nearest);
+			TestEqual(TEXT("Hero_D configured to TEXTUREGROUP_Pixels2D"), static_cast<TextureGroup>(HeroDiffuse->LODGroup), TEXTUREGROUP_Pixels2D);
+		}
+
+		const int32 VoiceCount = Bootstrap->ImportAllVoiceStemsFromDisk();
+		TestTrue(TEXT("All WAV phoneme/hero stems imported (>= 48)"), VoiceCount >= 48);
+
+		UMaterialParameterCollection* MPC = Bootstrap->EnsureSensoryMPC();
+		TestNotNull(TEXT("MPC_SensoryState synthesized"), MPC);
+		if (MPC)
+		{
+			TestNotNull(TEXT("HearingPulseRadius scalar registered"), MPC->GetScalarParameterByName(FName(TEXT("HearingPulseRadius"))));
+		}
+
+		const bool bSavedAssets = Bootstrap->SaveCoreDataAssetsToDisk();
+		TestTrue(TEXT("Core .uasset DataAssets & MPC saved to Content/"), bSavedAssets);
+
+		TestTrue(TEXT("MPC_SensoryState.uasset exists on disk"),
+			FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Materials/MPC_SensoryState.uasset")));
+		TestTrue(TEXT("DA_25DMaterialConfig.uasset exists on disk"),
+			FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Materials/DA_25DMaterialConfig.uasset")));
+		TestTrue(TEXT("DA_MovementConfig.uasset exists on disk"),
+			FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Core/DA_MovementConfig.uasset")));
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneer25DAnimOrchestratorTest,
+	"DarkDungeoneer.Rendering.25DAnimOrchestratorAndAtlasMetadata",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneer25DAnimOrchestratorTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Transient UWorld created for 2.5D Anim Orchestrator test"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	AActor* Host = TestWorld->SpawnActor<AActor>();
+	TestNotNull(TEXT("Host actor spawned"), Host);
+
+	UStaticMeshComponent* CutoutPlane = NewObject<UStaticMeshComponent>(Host);
+	UCapsuleComponent* ShadowProxy = NewObject<UCapsuleComponent>(Host);
+	U25DAnimOrchestratorComponent* Orchestrator = NewObject<U25DAnimOrchestratorComponent>(Host);
+	CutoutPlane->RegisterComponent();
+	ShadowProxy->RegisterComponent();
+	Orchestrator->RegisterComponent();
+	Orchestrator->BindRigPrimitives(CutoutPlane, ShadowProxy);
+
+	TestFalse(TEXT("Shadow proxy hidden in main pass"), ShadowProxy->bRenderInMainPass);
+	TestTrue(TEXT("Shadow proxy casts hidden shadow"), static_cast<bool>(ShadowProxy->bCastHiddenShadow));
+
+	int32 CapturedContacts = 0;
+	int32 LastContactFrame = -1;
+	Orchestrator->OnStepContact.AddLambda([&CapturedContacts, &LastContactFrame](const F25DStepContactEvent& Evt)
+	{
+		++CapturedContacts;
+		LastContactFrame = Evt.FrameIndex;
+	});
+
+	// Default StrideLengthUU = 140.0f -> columns step every 35 UU (cols 0, 1, 2, 3)
+	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
+	TestEqual(TEXT("Walk distance 40 UU advances to frame col 1"), Orchestrator->GetCurrentFrameColumn(), 1);
+	TestEqual(TEXT("No step contact fired on passing frame 1"), CapturedContacts, 0);
+	TestTrue(TEXT("120Hz stride hop lifted plane smoothly"), Orchestrator->GetCurrentStrideHopZ() > 0.0f);
+	TestTrue(TEXT("120Hz directional velocity lean engaged"), FMath::Abs(Orchestrator->GetCurrentVelocityLeanDeg().X) > 0.0f);
+
+	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
+	TestEqual(TEXT("Walk distance 80 UU advances to frame col 2"), Orchestrator->GetCurrentFrameColumn(), 2);
+	TestEqual(TEXT("Step contact fired deterministically on frame 2"), CapturedContacts, 1);
+	TestEqual(TEXT("Last contact frame is 2"), LastContactFrame, 2);
+
+	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
+	TestEqual(TEXT("Walk distance 120 UU advances to frame col 3"), Orchestrator->GetCurrentFrameColumn(), 3);
+	TestEqual(TEXT("No step contact fired on passing frame 3"), CapturedContacts, 1);
+
+	Orchestrator->AdvanceWalkDistance(25.0f, FVector(300.0, 0.0, 0.0), 0.016f);
+	TestEqual(TEXT("Walk distance 145 UU wraps cleanly to frame col 0"), Orchestrator->GetCurrentFrameColumn(), 0);
+	TestEqual(TEXT("Step contact fired deterministically on frame 0"), CapturedContacts, 2);
+	TestEqual(TEXT("Last contact frame is 0"), LastContactFrame, 0);
+
+	// Directional octant -> CustomData[0] = Row * 4 + Col (West row = 3, col = 0 => cell 12)
+	Orchestrator->SetDirectionFromOctant(ECompassOctant::W, false);
+	TestEqual(TEXT("West octant selects row 3"), Orchestrator->GetDirectionalRow(), 3);
+	TestTrue(TEXT("CustomData[0] pushed cell index 12.0f to CutoutPlane"),
+		CutoutPlane->GetCustomPrimitiveData().Data.Num() >= 5 &&
+		FMath::IsNearlyEqual(CutoutPlane->GetCustomPrimitiveData().Data[E25DAnimCPD::UVCellIndex], 12.0f, 1e-4f));
+
+	// Pre-explosion belly swell + CustomData[1] Emissive Pulse
+	Orchestrator->SetPreExplosionFuseState(0.85f, 3.0f);
+	Orchestrator->AdvanceWalkDistance(0.0f, FVector::ZeroVector, 0.15f);
+	TestTrue(TEXT("Belly-swell spring expands XY scale above 1.15"), Orchestrator->GetCurrentBellySwellScale().X > 1.15);
+	TestTrue(TEXT("CustomData[1] holds EmissiveFusePulse = 3.0f"),
+		FMath::IsNearlyEqual(CutoutPlane->GetCustomPrimitiveData().Data[E25DAnimCPD::EmissiveFusePulse], 3.0f, 1e-4f));
+
+	// Alchemical Flask Element RGB Tint via CustomData[2..4] without MIDs
+	Orchestrator->SetFlaskElementByType(2); // Chrono Violet-Blue (0.48, 0.22, 1.0)
+	TestTrue(TEXT("CustomData[2] holds Chrono R = 0.48"),
+		FMath::IsNearlyEqual(CutoutPlane->GetCustomPrimitiveData().Data[E25DAnimCPD::FlaskElementR], 0.48f, 1e-4f));
+	TestTrue(TEXT("CustomData[4] holds Chrono B = 1.00"),
+		FMath::IsNearlyEqual(CutoutPlane->GetCustomPrimitiveData().Data[E25DAnimCPD::FlaskElementB], 1.0f, 1e-4f));
+
+	// Deliverable 1 outputs on disk
+	TestTrue(TEXT("Hero_E.png emissive mask exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Rigs/Hero/Rig_Hero_E.png")));
+	TestTrue(TEXT("Hero AtlasMetadata.json exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Rigs/Hero/AtlasMetadata.json")));
+	TestTrue(TEXT("DungeoneerHero AtlasMetadata.json exists on disk"),
+		FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Art/Rigs/DungeoneerHero/AtlasMetadata.json")));
 
 	TestWorld->DestroyWorld(false);
 	return true;

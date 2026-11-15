@@ -96,6 +96,15 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/UI/DungeoneerCoopLobbyWidget.cpp",
     "Source/DarkDungeoneer/Public/UI/DungeoneerMenuFooterWidget.h",
     "Source/DarkDungeoneer/Private/UI/DungeoneerMenuFooterWidget.cpp",
+    # Task Group 8 (v0.9.0 Split-Screen HUD, Trade Modal & Runtime Asset Bootstrap)
+    "Source/DarkDungeoneer/Public/UI/DungeoneerPlayerHUDWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerPlayerHUDWidget.cpp",
+    "Source/DarkDungeoneer/Public/UI/DungeoneerTradeModalWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerTradeModalWidget.cpp",
+    "Source/DarkDungeoneer/Public/Core/DungeoneerAssetBootstrapSubsystem.h",
+    "Source/DarkDungeoneer/Private/Core/DungeoneerAssetBootstrapSubsystem.cpp",
+    "Source/DarkDungeoneer/Public/Rendering/25DAnimOrchestratorComponent.h",
+    "Source/DarkDungeoneer/Private/Rendering/25DAnimOrchestratorComponent.cpp",
 ]
 
 
