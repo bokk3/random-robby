@@ -11,6 +11,29 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.1] - 2026-11-15
+
+### Added
+- **Dungeon Mode Atlas & Mirror Portal Mask Extractor (`slice_normal_rig.py --mode dungeon`)**:
+  - Extended `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py` with `--mode dungeon`, `--dungeon-sheet-type`, and `--synthesize-dungeon {atlas_floors,prop_walls,prop_mirrors,prop_breakables,all}`.
+  - Seamless `ATLAS_*` exports (`_D.png` opaque RGBA, deep-relief `_N.png`, 8-bit POM heightmap `_H.png`, and wetness/puddle roughness mask `_R.png` encoding `0.05` specular puddles at byte `13`) plus 16-cell `AtlasMetadata.json`.
+  - Cutout `PROP_*` exports stripping `#FF00FF` magenta to alpha `0` (`_D.png`) while extracting `#00FF00` interior mirror panes into the Red channel of `_ORM.png` (`MirrorPortalMask = 255`) and replacing raw green glass on Diffuse with dark mirror slate `(18, 24, 32, 255)`.
+  - Generated all 4 dungeon sprite sheets (`ATLAS_Dungeon_Floors_4x4`, `PROP_Dungeon_Walls_And_Cutaways_4x4`, `PROP_Mirror_Palace_Maze_4x4`, `PROP_Breakables_And_Traps_4x4`) under `Content/Art/Dungeon/` and synced SHA-256 checksums in `Content/AssetManifest.json`.
+- **Zero-Draw-Call Modular HISM Builder & Per-Viewport Cutaways (`ADungeoneerTileMapInstancer`)**:
+  - Instantiates procedural `UDungeonGeneratorSubsystem` floor graphs into 4 batched `UHierarchicalInstancedStaticMeshComponent`s (`FloorHISM`, `WallHISM`, `MirrorHISM` tagged `MirrorReflective`, `BreakableHISM`) across all 4 axes (orthogonal N/S/E/W + 45-degree diagonal NE/NW/SE/SW corner chamfers).
+  - Performs zero-allocation per-viewport sphere sweeps (`ULocalPlayer` viewports) and deterministic segment-vs-box checks in `Tick` to toggle occluded South/SE/SW foreground wall instances to Row 2 knee-high cutaway stubs (`CustomData[0] = 1.0f`) while preserving `bCastHiddenShadow = true`.
+  - Evaluates steps onto `PROP_Breakables_And_Traps` instances (`EvaluateEntityStepOnBreakables`), swapping `CustomData[0..1]` to shattered UV cells and broadcasting `FDungeoneerNoiseEvent` ripples into `UDungeoneerSensoryWorldSubsystem` for the Acute Hearing sensory layer.
+- **Deterministic Mirror-Palace Light Bounce (`UMirrorLightBounceComponent`)**:
+  - Added `UMirrorLightBounceComponent` (also attached as default subobject on `ADungeoneerCharacter`) pre-allocating a secondary `USpotLightComponent` outside `TickComponent`.
+  - Traces along the flashlight axis against `MirrorReflective` actors/HISM instances, applies $\mathbf{R} = \mathbf{I} - 2(\mathbf{I}\cdot\mathbf{N})\mathbf{N}$ reflection math, positions the bounce spotlight down the reflected corridor, and reveals struck `Phantasm` mirror seams (`CustomData[0] = 1.0f`).
+
+### Verified
+- Extended `--self-test` in `slice_normal_rig.py` to cover both `rig` and `dungeon` modes.
+- Added `DarkDungeoneer.Dungeon.TileMapInstancerCutawayAndMirrorBounce` automation spec and updated `scripts/verify_architecture_invariants.py` (`85` tracked files).
+- Built `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development`, passing all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
+
+---
+
 ## [0.9.0] - 2026-11-15
 
 ### Added

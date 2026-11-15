@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.0` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.1` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -20,6 +20,7 @@
 | `v0.8.0` | Main Menu UI, 2.5D Diorama, Prediction & Seed Replication | Done | `ADungeoneerGameState`, `FSavedMove_Dungeoneer`, `UMirrorCaptureBudgetSubsystem`, `AZombieBase::IsNetRelevantFor`, `TASK-801`–`TASK-804`, 5 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.8.1` | Standalone Executable & Programmatic UMG Bootstrap | Done | `DarkDungeoneer.exe`, `RebuildWidget()` UMG fallback trees, `Launch-DarkDungeoneer.bat` |
 | `v0.9.0` | Split-Screen HUD, 2PC Trade Modal, `.uasset` Bootstrap & 2.5D Hybrid Anim/Slicer | Done | `UDungeoneerPlayerHUDWidget`, `UDungeoneerTradeModalWidget`, `UDungeoneerAssetBootstrapSubsystem`, `slice_normal_rig.py` (`_E.png` + `AtlasMetadata.json`), `U25DAnimOrchestratorComponent`, 7 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.9.1` | 2.5D Modular Dungeon HISM Assembly, South-Wall Cutaways & Mirror Light-Bounce | Done | `slice_normal_rig.py --mode dungeon`, `ADungeoneerTileMapInstancer`, `UMirrorLightBounceComponent`, 4 Dungeon Atlases/Props, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 
 ---
 
@@ -66,6 +67,18 @@
 - [x] **`TASK-903` — Runtime Content Bootstrap, `.uasset` Serialization & 2.5D Hybrid Slicer/Animator**
   - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Public/Rendering/25DAnimOrchestratorComponent.h`, `Private/Rendering/25DAnimOrchestratorComponent.cpp`, `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`
   - **Scope**: Upgrade 4x4 magenta (`#FF00FF`) slicer to emit zero-halo `_D.png`, distance-bevel + 3x3 Sobel `_N.png`, high-luminance emissive `_E.png`, and 16-cell `AtlasMetadata.json`; drive distance-locked walk cycles, 120Hz springs, `OnStepContact` audio/sensory events, and Custom Primitive Data `[0..4]` in `U25DAnimOrchestratorComponent`; import all 18 rig PNGs + 50 WAV stems and serialize idempotent `MPC_SensoryState.uasset`, `DA_25DMaterialConfig.uasset`, and `DA_MovementConfig.uasset`.
+
+## Completed Subdivided Tasks (`v0.9.1`)
+
+### Milestone `v0.9.1` — Modular Dungeon Instancing, Per-Viewport Cutaways & Mirror Light-Bounce (`TASK-904`–`TASK-905`)
+
+- [x] **`TASK-904` — Dungeon Atlas & Mirror Portal Mask Extractor (`slice_normal_rig.py --mode dungeon`)**
+  - **Files**: `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`, `Content/Art/Dungeon/*`, `Content/AssetManifest.json`
+  - **Scope**: Add `--mode dungeon` processing borderless seamless `ATLAS_*` floor arrays (`_D`, `_N`, `_H` POM heightmap, `_R` puddle roughness `0.05`) and `#FF00FF`-keyed `PROP_*` walls/mirrors/breakables extracting `#00FF00` mirror panes into `_ORM` Red (`MirrorPortalMask = 255`).
+
+- [x] **`TASK-905` — Zero-Draw-Call Dungeon HISM Builder, Cutaways & Mirror Light-Bounce**
+  - **Files**: `Source/DarkDungeoneer/Public/Dungeon/DungeoneerTileMapInstancer.h`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Public/Dungeon/MirrorLightBounceComponent.h`, `Private/Dungeon/MirrorLightBounceComponent.cpp`, `Private/Core/DungeoneerCharacter.cpp`
+  - **Scope**: Assemble 4-axis (`N/S/E/W` + 45° `NE/NW/SE/SW`) procedural dungeon HISM rooms, toggle per-viewport South-wall cutaways via `SetCustomDataValue(0, 1.0f)` preserving `bCastHiddenShadow`, bounce character flashlight beams off `MirrorReflective` panes via `R = I - 2 * (I . N) * N` onto a pre-allocated secondary `USpotLightComponent` to reveal illusion seams, and shatter stepped-on breakables with `FDungeoneerNoiseEvent` Acute Hearing ripples.
 
 ---
 

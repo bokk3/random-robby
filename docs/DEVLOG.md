@@ -81,3 +81,23 @@ With those fixes, `DarkDungeoneerEditor (Win64 Development)` compiled cleanly in
 ### Verification (`v0.9.0`)
 - Added `DarkDungeoneer.UI.HUDAndTradeModalAndAssetBootstrap` and `DarkDungeoneer.Rendering.25DAnimOrchestratorAndAtlasMetadata` to `DungeoneerVerificationSpecs.cpp`.
 - Passed `scripts/verify_architecture_invariants.py` (`81` files verified), rebuilt both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings, and passed all `7` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
+
+---
+
+## Devlog #06 (`v0.9.1`) — 2.5D Modular Dungeon HISM Assembly, South-Wall Cutaways & Mirror Light-Bounce
+
+### Dungeon Atlas Slicing & `#00FF00` Mirror Portal Extraction (`slice_normal_rig.py --mode dungeon`)
+- Extending `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py` cleanly required splitting environment assets into two distinct material families under `--mode dungeon` (`TO_GENERATE_DUNGEON.md`):
+  1. **`ATLAS_*` Seamless Tile Arrays**: Edge-to-edge 4x4 floor tiles skip `#FF00FF` chroma keying completely (`alpha = 255`), synthesizing deep-relief mortar normal maps (`_N.png`), 8-bit POM heightmaps (`_H.png`), and wetness/roughness masks (`_R.png`) where standing water puddles encode exact `0.05` specular roughness (`byte 13`) to mirror dynamic player lanterns and zombie embers.
+  2. **`PROP_*` Cutouts & Mirror Portal Keys**: Strips `#FF00FF` magenta into clean `0` alpha, detects `#00FF00` pure green interior mirror panes, packs `MirrorPortalMask = 255` directly into the Red channel of `_ORM.png` (`R = MirrorPortalMask`, `G = Roughness`, `B = Metallic`), and swaps the diffuse glass to dark slate `(18, 24, 32, 255)` so unmasked fallback renders never flash neon green.
+
+### Zero-Draw-Call HISM Assembly, Per-Viewport Cutaways & Law-of-Reflection Bounce
+- **`ADungeoneerTileMapInstancer`**: Instantiates `UDungeonGeneratorSubsystem` floor graphs into 4 `UHierarchicalInstancedStaticMeshComponent` buckets (`FloorHISM`, `WallHISM`, `MirrorHISM`, `BreakableHISM`) supporting both cardinal (`N/S/E/W`) and 45° diagonal chamfer walls (`NE/NW/SE/SW`) so 8-compass traversal flows around octagon corners without jagged stair-stepping.
+  - Note on UE `5.8.2` HISM instances in headless `-NullRHI` tests: `AddInstance()` skips creation if `GetStaticMesh()` is null, so `EnsureMeshAssetsInitialized()` binds `/Engine/BasicShapes/Plane.Plane` and `Cube.Cube` fallbacks safely outside the CDO constructor (`OnConstruction` / `BeginPlay`), guaranteeing `PerInstanceSMCustomData` reads and sweeps work identically in headless CI and live gameplay.
+  - **Split-Screen Cutaway Zero-Allocations**: `UpdateSouthWallCutawaysForViewports()` iterates every `ULocalPlayer` viewport (`GetGameInstance()->GetLocalPlayers()`), runs a pre-allocated `World->SweepMultiByChannel` plus deterministic segment-vs-box intersection against `South` / `SouthEast` / `SouthWest` wall entries using a fixed `PendingCutawayFlags` byte buffer, and swaps occluded foreground walls via `WallHISM->SetCustomDataValue(..., 0, 1.0f, ...)` while leaving `WallHISM->bCastHiddenShadow = true`.
+- **`UMirrorLightBounceComponent`**: Attached on `ADungeoneerCharacter` and pre-allocating its secondary `USpotLightComponent` during `BeginPlay()` (never in `TickComponent`), computes $\mathbf{R} = \mathbf{I} - 2(\mathbf{I} \cdot \mathbf{N})\mathbf{N}$ whenever the flashlight ray strikes a `MirrorReflective` actor or HISM pane, steers the bounce beam down the reflected corridor, and reveals any downstream `Phantasm` illusion seams (`CustomData[0] = 1.0f`).
+- **Breakable Noise Emitters**: Stepping onto intact `PROP_Breakables_And_Traps` instances (`EvaluateEntityStepOnBreakables`) transitions their HISM UV cell (`0/1` -> `2/3`) and pushes an acoustic `FDungeoneerNoiseEvent` into `UDungeoneerSensoryWorldSubsystem` so nearby enemies and the **Acute Hearing** sensory stencil ring react immediately.
+
+### Verification (`v0.9.1`)
+- Added `DarkDungeoneer.Dungeon.TileMapInstancerCutawayAndMirrorBounce` to `DungeoneerVerificationSpecs.cpp`, checking 4-axis HISM assembly, `bCastHiddenShadow` retention across cutaway toggles, specular $\mathbf{R}$ vector accuracy + Phantasm seam reveal, and breakable UV swap + `UDungeoneerSensoryWorldSubsystem` ripple emission.
+- Updated `scripts/verify_architecture_invariants.py` (`85` tracked files + dungeon atlas/prop disk checks) and compiled both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development`, passing all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
