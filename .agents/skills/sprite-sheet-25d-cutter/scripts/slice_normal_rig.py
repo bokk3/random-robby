@@ -102,8 +102,8 @@ def synthesize_archetype_sheet(archetype_name):
     img = Image.new("RGBA", (sheet_w, sheet_h), (255, 0, 255, 255))
     draw = ImageDraw.Draw(img)
 
-    # 4 rows: 0 = South, 1 = North, 2 = East, 3 = West
-    # 4 cols: 0 = Contact A, 1 = Passing A, 2 = Contact B, 3 = Passing B
+    # 4 rows: 0 = South (or SE), 1 = North (or SW), 2 = East (or NE), 3 = West (or NW)
+    # 4 cols: 0 = Contact/Idle A (peak), 1 = Full Left Step (dip), 2 = Passing B (peak), 3 = Full Right Step (dip)
     for row in range(4):
         for col in range(4):
             ox = col * frame_w
@@ -111,13 +111,16 @@ def synthesize_archetype_sheet(archetype_name):
             cx = ox + frame_w // 2
             cy = oy + frame_h // 2
 
-            bob = -1 if col in (1, 3) else 0
-            stride = -3 if col == 0 else (3 if col == 2 else 0)
+            bob = -2 if col in (0, 2) else 1
+            # Col 1 = Left step forward (-4), Col 3 = Right step forward (+4), Col 0/2 = planted/crossing
+            stride = -4 if col == 1 else (4 if col == 3 else 0)
+            left_drop = 2 if col == 1 else (0 if col != 3 else -2)
+            right_drop = 2 if col == 3 else (0 if col != 1 else -2)
 
             if archetype_name == "hero":
                 boot_color = (45, 36, 30, 255)
-                draw.rectangle([cx - 7 + stride, cy + 14, cx - 3 + stride, cy + 24], fill=boot_color)
-                draw.rectangle([cx + 2 - stride, cy + 14, cx + 6 - stride, cy + 24], fill=boot_color)
+                draw.rectangle([cx - 6 + stride, cy + 13 + left_drop, cx - 2 + stride, cy + 23 + left_drop], fill=boot_color)
+                draw.rectangle([cx + 2 - stride, cy + 13 + right_drop, cx + 6 - stride, cy + 23 + right_drop], fill=boot_color)
 
                 cloak_dark = (22, 24, 30, 255)
                 cloak_mid = (36, 40, 48, 255)
@@ -175,8 +178,8 @@ def synthesize_archetype_sheet(archetype_name):
                 magma_orange = (255, 85, 0, 255)
                 magma_core = (255, 195, 60, 255)
 
-                draw.rectangle([cx - 8 + stride, cy + 12, cx - 2 + stride, cy + 22], fill=flesh_dark)
-                draw.rectangle([cx + 3 - stride, cy + 12, cx + 9 - stride, cy + 22], fill=flesh_dark)
+                draw.rectangle([cx - 7 + stride, cy + 12 + left_drop, cx - 2 + stride, cy + 22 + left_drop], fill=flesh_dark)
+                draw.rectangle([cx + 2 - stride, cy + 12 + right_drop, cx + 7 - stride, cy + 22 + right_drop], fill=flesh_dark)
 
                 # Bloated torso & shackles
                 draw.ellipse([cx - 15 - pulse, cy - 8 + bob, cx + 15 + pulse, cy + 16 + bob], fill=flesh_base)
@@ -198,8 +201,8 @@ def synthesize_archetype_sheet(archetype_name):
                 flask_cyan = (0, 255, 255, 255)
                 flask_hi = (110, 235, 255, 255)
 
-                draw.line([(cx - 5 + stride, cy + 10), (cx - 7 + stride, cy + 24)], fill=flesh_shade, width=2)
-                draw.line([(cx + 5 - stride, cy + 10), (cx + 7 - stride, cy + 24)], fill=flesh_shade, width=2)
+                draw.line([(cx - 4 + stride, cy + 10 + bob), (cx - 6 + stride, cy + 23 + left_drop)], fill=flesh_shade, width=3)
+                draw.line([(cx + 4 - stride, cy + 10 + bob), (cx + 6 - stride, cy + 23 + right_drop)], fill=flesh_shade, width=3)
 
                 draw.polygon([
                     (cx - 7, cy + 10 + bob),
@@ -214,7 +217,7 @@ def synthesize_archetype_sheet(archetype_name):
                     draw.point((cx + 2, cy - 15 + bob), fill=(255, 204, 0, 255))
 
                 sign = -1 if row == 3 else 1
-                hand_x = cx + sign * (12 + (5 if col == 2 else 0))
+                hand_x = cx + sign * (12 + (5 if col == 3 else 0))
                 hand_y = cy - 2 + bob - (4 if col == 1 else 0)
                 draw.line([(cx + sign * 6, cy - 4 + bob), (hand_x, hand_y)], fill=flesh_shade, width=2)
                 # Pure #00FFFF alchemical flask for dynamic elemental tinting in UE 5.8
@@ -587,6 +590,206 @@ def chroma_key_and_cleanup(image, key_color=CHROMA_KEY_MAGENTA, tolerance=52):
             arr[fallback_mask, 2] = np.minimum(b[fallback_mask], g_fb + 12).astype(np.uint8)
 
     return Image.fromarray(arr, "RGBA")
+
+
+# -----------------------------------------------------------------------------
+# Walk-Cycle Stride Validation & Procedural Repair (--validate-stride / --repair-stride)
+# -----------------------------------------------------------------------------
+ROW_ORIENTATION_NAMES = ("South/SE", "North/SW", "East/NE", "West/NW")
+
+
+def _extract_foreground_bbox(cell_arr):
+    """Returns tight (x0, y0, x1, y1) bounding box of opaque foreground pixels or None."""
+    ys, xs = np.nonzero(cell_arr[:, :, 3] > 20)
+    if len(ys) == 0:
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+
+def measure_row_stride_variance(cell_left_step, cell_right_step, variance_threshold=0.15):
+    """
+    Measures lower-third leg-region pixel variance (IoU + MSE + combined leg delta)
+    between Column 1 (Full Left Step) and Column 3 (Full Right Step).
+    Returns dict with lower_iou, lower_mse, lower_variance, and passed bool.
+    """
+    fg1 = cell_left_step[:, :, 3] > 20
+    fg3 = cell_right_step[:, :, 3] > 20
+    union_fg = fg1 | fg3
+    ys, xs = np.nonzero(union_fg)
+    if len(ys) == 0:
+        return {"lower_iou": 0.0, "lower_mse": 0.0, "lower_variance": 0.0, "passed": False}
+
+    y0, y1 = int(ys.min()), int(ys.max()) + 1
+    x0, x1 = int(xs.min()), int(xs.max()) + 1
+    # Lower-third bounding box focuses cleanly on stride leg & foot alternation
+    y_leg_start = y0 + int(round((y1 - y0) * (2.0 / 3.0)))
+    y_leg_start = max(y0, min(y_leg_start, y1 - 1))
+
+    m1 = fg1[y_leg_start:y1, x0:x1]
+    m3 = fg3[y_leg_start:y1, x0:x1]
+    leg_union = m1 | m3
+    union_count = int(np.count_nonzero(leg_union))
+    if union_count == 0:
+        return {"lower_iou": 1.0, "lower_mse": 0.0, "lower_variance": 0.0, "passed": False}
+
+    inter_count = int(np.count_nonzero(m1 & m3))
+    lower_iou = float(inter_count) / float(union_count)
+
+    c1 = cell_left_step[y_leg_start:y1, x0:x1].astype(np.float32) / 255.0
+    c3 = cell_right_step[y_leg_start:y1, x0:x1].astype(np.float32) / 255.0
+    lower_mse = float(np.mean((c1 - c3) ** 2))
+
+    # Count leg pixels that either differ in silhouette OR shift/swap depth tone > 8%
+    rgb_delta = np.max(np.abs(c1[:, :, :3] - c3[:, :, :3]), axis=2) > 0.08
+    diff_pixels = (m1 != m3) | (leg_union & rgb_delta)
+    lower_variance = float(np.count_nonzero(diff_pixels)) / float(union_count)
+
+    return {
+        "lower_iou": round(lower_iou, 4),
+        "lower_mse": round(lower_mse, 5),
+        "lower_variance": round(lower_variance, 4),
+        "passed": bool(lower_variance >= variance_threshold),
+    }
+
+
+def _warp_cell_region_nearest(cell_arr, y_start, y_end, x_center, sx=1.0, dx_shear=0.0, dy_offset=0, mirror_x=False, shade=1.0):
+    """Warps a horizontal strip of a cell cleanly via nearest-neighbor sampling with zero alpha halo."""
+    h, w = cell_arr.shape[:2]
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    span_y = max(float(y_end - y_start), 1.0)
+    t_leg = np.clip((ys - float(y_start)) / span_y, 0.0, 1.0)
+
+    src_x = ((xs - x_center) / max(sx, 0.25)) - (dx_shear * t_leg) + x_center
+    if mirror_x:
+        src_x = 2.0 * x_center - src_x
+    src_y = ys - float(dy_offset)
+
+    ix = np.clip(np.rint(src_x).astype(np.int32), 0, w - 1)
+    iy = np.clip(np.rint(src_y).astype(np.int32), 0, h - 1)
+    valid = (src_x >= -0.5) & (src_x < w - 0.5) & (src_y >= y_start) & (src_y < y_end)
+
+    out = np.zeros_like(cell_arr)
+    out[valid] = cell_arr[iy[valid], ix[valid]]
+    fg = out[:, :, 3] >= 128
+    out[~fg] = 0
+    out[fg, 3] = 255
+    if shade != 1.0:
+        out[fg, :3] = np.clip(out[fg, :3].astype(np.float32) * shade, 0, 255).astype(np.uint8)
+    return out
+
+
+def _synthesize_row_strides_from_seed(seed_cell, row_idx):
+    """
+    Rebuilds [Col 0 Idle/Contact A, Col 1 Full Left Step, Col 2 Passing B, Col 3 Full Right Step]
+    from a single valid cell by preserving asymmetrical upper-body gear and applying
+    lower-body horizontal/depth shear + leg-split warping + torso height bobbing.
+    """
+    h, w = seed_cell.shape[:2]
+    bbox = _extract_foreground_bbox(seed_cell)
+    if bbox is None:
+        return [seed_cell.copy() for _ in range(4)]
+
+    x0, y0, x1, y1 = bbox
+    x_center = 0.5 * float(x0 + x1 - 1)
+    y_split = y0 + int(round((y1 - y0) * 0.66))
+    y_split = max(y0 + 1, min(y_split, y1 - 2))
+
+    # Row-aware shear direction so both frontal (South/North) and side (East/West) silhouettes clearly split legs
+    base_shear = 4.0 if row_idx in (0, 1) else 7.0
+    torso_src = seed_cell
+
+    def compose_frame(torso_dy, leg_sx, leg_shear, mirror_legs, leg_dy, leg_shade, split_lr=False):
+        frame = np.zeros_like(seed_cell)
+        if split_lr:
+            left_half = _warp_cell_region_nearest(
+                seed_cell, y_split, y1, x_center, sx=1.0, dx_shear=-leg_shear, dy_offset=leg_dy, mirror_x=False, shade=1.0
+            )
+            right_half = _warp_cell_region_nearest(
+                seed_cell, y_split, y1, x_center, sx=1.0, dx_shear=+leg_shear, dy_offset=-leg_dy, mirror_x=False, shade=leg_shade
+            )
+            left_mask = (np.arange(w)[None, :] < x_center) & (left_half[:, :, 3] >= 128)
+            right_mask = (np.arange(w)[None, :] >= x_center) & (right_half[:, :, 3] >= 128)
+            frame[left_mask] = left_half[left_mask]
+            frame[right_mask] = right_half[right_mask]
+        else:
+            legs = _warp_cell_region_nearest(
+                seed_cell, y_split, y1, x_center, sx=leg_sx, dx_shear=leg_shear, dy_offset=leg_dy, mirror_x=mirror_legs, shade=leg_shade
+            )
+            fg_l = legs[:, :, 3] >= 128
+            frame[fg_l] = legs[fg_l]
+
+        # Upper 2/3 torso shifted vertically (-2 px peak on Col 0/2, +1 px dip on Col 1/3)
+        torso = _warp_cell_region_nearest(torso_src, 0, y_split + 2, x_center, sx=1.0, dx_shear=0.0, dy_offset=torso_dy)
+        fg_t = torso[:, :, 3] >= 128
+        frame[fg_t] = torso[fg_t]
+        return frame
+
+    col0_idle = compose_frame(torso_dy=-2, leg_sx=0.84, leg_shear=0.0, mirror_legs=False, leg_dy=0, leg_shade=1.0)
+    col1_left = compose_frame(torso_dy=+1, leg_sx=1.06, leg_shear=-base_shear, mirror_legs=False, leg_dy=+2, leg_shade=0.88, split_lr=(row_idx in (0, 1)))
+    col2_pass = compose_frame(torso_dy=-2, leg_sx=0.72, leg_shear=0.0, mirror_legs=True, leg_dy=-1, leg_shade=0.92)
+    col3_right = compose_frame(torso_dy=+1, leg_sx=1.06, leg_shear=+base_shear, mirror_legs=True, leg_dy=-2, leg_shade=0.88, split_lr=(row_idx in (0, 1)))
+    return [col0_idle, col1_left, col2_pass, col3_right]
+
+
+def validate_and_repair_stride(diffuse_image, grid_cols=4, grid_rows=4, repair=False, threshold=0.15):
+    """
+    Validates Col 1 (Full Left Step) vs Col 3 (Full Right Step) lower-third pixel variance
+    across each row of a 4x4 character/zombie sheet. Flags rows < threshold and, when
+    repair=True, synthesizes missing alternating stride columns [0, 1, 2, 3].
+    Returns (possibly_repaired_image, report_list).
+    """
+    if not HAS_PIL_NUMPY or grid_cols < 4:
+        return diffuse_image, []
+
+    arr = np.array(diffuse_image.convert("RGBA")).copy()
+    cell_h = arr.shape[0] // max(grid_rows, 1)
+    cell_w = arr.shape[1] // max(grid_cols, 1)
+    report = []
+
+    for r in range(grid_rows):
+        row_name = ROW_ORIENTATION_NAMES[r] if r < len(ROW_ORIENTATION_NAMES) else f"Row{r}"
+        y0, y1 = r * cell_h, (r + 1) * cell_h
+        c1 = arr[y0:y1, 1 * cell_w:2 * cell_w]
+        c3 = arr[y0:y1, 3 * cell_w:4 * cell_w]
+        metrics = measure_row_stride_variance(c1, c3, variance_threshold=threshold)
+        metrics["row"] = r
+        metrics["orientation"] = row_name
+        metrics["repaired"] = False
+
+        if not metrics["passed"]:
+            print(
+                f"[WARN] Stride check flagged Row {r} ({row_name}): "
+                f"Col1 vs Col3 leg variance={metrics['lower_variance'] * 100.0:.1f}% "
+                f"(< {threshold * 100.0:.0f}%), IoU={metrics['lower_iou']:.3f}, MSE={metrics['lower_mse']:.4f}"
+            )
+            if repair:
+                c0 = arr[y0:y1, 0 * cell_w:1 * cell_w]
+                seed = c1 if _extract_foreground_bbox(c1) is not None else c0
+                repaired_cols = _synthesize_row_strides_from_seed(seed, r)
+                for c_idx, cell_data in enumerate(repaired_cols):
+                    arr[y0:y1, c_idx * cell_w:(c_idx + 1) * cell_w] = cell_data
+                post = measure_row_stride_variance(repaired_cols[1], repaired_cols[3], variance_threshold=threshold)
+                metrics.update({
+                    "repaired": True,
+                    "lower_iou": post["lower_iou"],
+                    "lower_mse": post["lower_mse"],
+                    "lower_variance": post["lower_variance"],
+                    "passed": post["passed"],
+                })
+                print(
+                    f"[FIX] Repaired Row {r} ({row_name}) -> "
+                    f"Col1 vs Col3 leg variance={post['lower_variance'] * 100.0:.1f}% (IoU={post['lower_iou']:.3f})"
+                )
+        else:
+            print(
+                f"[OK] Stride check Row {r} ({row_name}): "
+                f"Col1 vs Col3 leg variance={metrics['lower_variance'] * 100.0:.1f}%, "
+                f"IoU={metrics['lower_iou']:.3f}, MSE={metrics['lower_mse']:.4f}"
+            )
+
+        report.append(metrics)
+
+    return Image.fromarray(arr, "RGBA"), report
 
 
 # -----------------------------------------------------------------------------
@@ -1077,6 +1280,18 @@ def process_pipeline(args):
     # 1. Chroma-keying (#FF00FF -> (0,0,0,0)) & zero-halo neighbor cleanup
     diffuse_img = chroma_key_and_cleanup(raw_img)
 
+    # 1b. Walk-cycle stride validation & optional procedural repair (--validate-stride / --repair-stride)
+    stride_report = None
+    do_validate = getattr(args, "validate_stride", False) or getattr(args, "repair_stride", False)
+    if do_validate and args.grid_cols >= 4:
+        diffuse_img, stride_report = validate_and_repair_stride(
+            diffuse_img,
+            grid_cols=args.grid_cols,
+            grid_rows=args.grid_rows,
+            repair=getattr(args, "repair_stride", False),
+            threshold=getattr(args, "stride_threshold", 0.15),
+        )
+
     # 2. Remix pass (Palette quantization preserving emissive accents + edge beveling)
     if args.remix:
         print("[INFO] Applying dark gothic palette quantization & edge bevel remix...")
@@ -1120,6 +1335,8 @@ def process_pipeline(args):
         grid_cols=args.grid_cols,
         grid_rows=args.grid_rows,
     )
+    if stride_report is not None:
+        atlas_meta["StrideValidation"] = stride_report
     atlas_meta_path = os.path.join(output_dir, "AtlasMetadata.json")
     with open(atlas_meta_path, "w", encoding="utf-8") as f:
         json.dump(atlas_meta, f, indent=2)
@@ -1170,6 +1387,9 @@ def run_self_test():
             directions=4,
             generate_normals=True,
             remix=True,
+            validate_stride=True,
+            repair_stride=False,
+            stride_threshold=0.15,
             synthesize_archetype=arch,
             self_test=False,
             output=os.path.join(test_dir, arch.capitalize()),
@@ -1191,6 +1411,22 @@ def run_self_test():
         with open(files[4], "r", encoding="utf-8") as mf:
             meta = json.load(mf)
             assert len(meta["Cells"]) == 16, f"Expected 16 UV cells, got {len(meta['Cells'])}"
+            assert "StrideValidation" in meta and len(meta["StrideValidation"]) == 4
+            assert all(entry["passed"] for entry in meta["StrideValidation"]), f"Stride check failed for {arch}: {meta['StrideValidation']}"
+
+    # Verify --repair-stride recovers a duplicated-column broken sprite sheet
+    print("\n--- Testing Stride Validator & Repair on Duplicated Columns ---")
+    hero_broken = np.array(Image.open(os.path.join(test_dir, "Hero", "Rig_Hero_D.png")).convert("RGBA"))
+    cw, ch = hero_broken.shape[1] // 4, hero_broken.shape[0] // 4
+    for r in range(4):
+        src_col1 = hero_broken[r * ch:(r + 1) * ch, cw:2 * cw].copy()
+        for c in range(4):
+            hero_broken[r * ch:(r + 1) * ch, c * cw:(c + 1) * cw] = src_col1
+    _, pre_report = validate_and_repair_stride(Image.fromarray(hero_broken, "RGBA"), repair=False, threshold=0.15)
+    assert all(not row["passed"] for row in pre_report), f"Expected all broken rows flagged: {pre_report}"
+    repaired_img, post_report = validate_and_repair_stride(Image.fromarray(hero_broken, "RGBA"), repair=True, threshold=0.15)
+    assert all(row["repaired"] and row["passed"] for row in post_report), f"Expected --repair-stride to fix all rows: {post_report}"
+    assert repaired_img.size == (cw * 4, ch * 4)
 
     # Self-test --mode dungeon (ATLAS_* seamless floors + PROP_* mirror portal masks)
     dungeon_test_dir = os.path.join("Content", "Art", "Dungeon", "SelfTest")
@@ -1262,6 +1498,9 @@ def main():
     parser.add_argument("--directions", type=int, choices=[4, 8], default=4, help="Direction count (4 or 8)")
     parser.add_argument("--generate-normals", action="store_true", default=True, help="Synthesize tangent-space normal maps")
     parser.add_argument("--remix", action="store_true", default=False, help="Apply palette remix and edge beveling")
+    parser.add_argument("--validate-stride", action="store_true", default=False, help="Validate Col 1 (Left Step) vs Col 3 (Right Step) lower-body stride variance across rows")
+    parser.add_argument("--repair-stride", action="store_true", default=False, help="Automatically synthesize missing alternating stride poses when Col 1 vs Col 3 variance < 15%%")
+    parser.add_argument("--stride-threshold", type=float, default=0.15, help="Minimum lower-third leg pixel variance threshold (default: 0.15)")
     parser.add_argument("--synthesize-archetype", type=str, choices=["hero", "exploder", "thrower"], help="Synthesize archetype sheet")
     parser.add_argument("--self-test", action="store_true", help="Execute self-test suite")
     parser.add_argument("--output", type=str, default="", help="Output directory")

@@ -108,7 +108,7 @@ private:
 	float WalkCycleDistanceUU = 0.0f;
 	int32 StepSequenceCounter = 0;
 	int32 ActiveDirectionalRow = -1;
-	int32 ActiveWalkFrameColumn = 1;
+	int32 ActiveWalkFrameColumn = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	bool bTexturedVisualsApplied = false;
 };

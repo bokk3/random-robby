@@ -101,7 +101,7 @@ void AZombieBase::EnsureVisualMeshInitialized()
 
 					bTexturedVisualsApplied = true;
 					ActiveDirectionalRow = -1;
-					ActiveWalkFrameColumn = 1;
+					ActiveWalkFrameColumn = 0;
 					ActiveDirectionalCellIndex = -1;
 					UpdateZombieDirectionalVisual(CurrentHeadingOctant, ActiveWalkFrameColumn);
 					return;
@@ -133,13 +133,12 @@ void AZombieBase::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsM
 	{
 		WalkCycleDistanceUU += ClampedDist;
 		const float FullStrideCycleUU = FMath::Max(StepCycleDistanceUU * 2.0f, 40.0f);
-		const float RawPhase = WalkCycleDistanceUU / FullStrideCycleUU;
-		const float PhaseFrac = FMath::Clamp(RawPhase - FMath::FloorToFloat(RawPhase), 0.0f, 0.99999f);
-		ActiveWalkFrameColumn = FMath::Clamp(FMath::FloorToInt(PhaseFrac * 4.0f), 0, 3);
+		ActiveWalkFrameColumn = FMath::FloorToInt((WalkCycleDistanceUU / FullStrideCycleUU) * 4.0f) & 3;
 	}
 	else
 	{
-		ActiveWalkFrameColumn = 1;
+		// Lock to Column 0 (Contact / Idle Pose A) when stationary
+		ActiveWalkFrameColumn = 0;
 	}
 }
 

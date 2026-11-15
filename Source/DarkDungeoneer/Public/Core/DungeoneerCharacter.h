@@ -189,7 +189,7 @@ private:
 	float TimeSinceMouseMoved = 10.0f;
 	float WalkDistanceAccumulatorUU = 0.0f;
 	int32 ActiveDirectionalRow = -1;
-	int32 ActiveWalkFrameColumn = 1;
+	int32 ActiveWalkFrameColumn = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	bool bHasMouseSample = false;
 	bool bHasPreviousWalkLocation = false;

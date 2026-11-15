@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.6` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.7` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -26,6 +26,7 @@
 | `v0.9.4` | Camera-Relative 2.5D Facing & Integrated-GPU Dynamic Lighting | Done | `OctantToScreenDirectionalRow`, 4-row `Hero`/`Exploder`/`Thrower` extraction, masked 2-sided `Plane.Plane` cutouts, idle-mouse arbitration, Lumen/VSM/TSR removal preserving dynamic flashlight & Volumetric Fog, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.5` | Cutout Silhouette `OpacityMask` Fix & Billboard Front-Fill Lighting | Done | `SpriteMaskTextures` transient silhouette extraction (`GetSpriteMaskTexture`), `OpacityMask` parameter binding on `M_Shader_SimpleMaskedTwoSided` / `M_ES_Phong_Masked_Master_2sided`, `45°` plane tilt, `SetCastShadow(false)` & front-positioned fill lights, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.6` | Alternating 4-Frame Walk Cycles & Distance-Locked 16-Cell Flipbook | Done | Articulated 4x4 walk cycles (`Hero`, `Exploder`, `Thrower`), 136 extracted cells & masks (`ExtractDefaultSingleCellTiles`), pre-allocated 16 MIDs driven by `AdvanceWalkFlipbookByDistance`, 8 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
+| `v0.9.7` | Standardized 16-Cell Kinematics, Stride Validator & `U25DAnimOrchestratorComponent` Footstep Sync | Done | `SKILL.md` / `TO_GENERATE.md` 4x4 spec + prompt template, `slice_normal_rig.py --validate-stride --repair-stride`, `EFoot::Left/Right` `OnFootstepContact` on Col 1/3, Idle Col 0 lock, 8 UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 
 ---
 
@@ -125,6 +126,12 @@
 - [x] **`TASK-912` — 4x4 Alternating Stride Sheets & Runtime 16-Frame Flipbook Stepping**
   - **Files**: `Content/Art/Rigs/{DungeoneerHero,ZombieExploder,ZombieFastThrower}/*`, `Content/AssetManifest.json`, `Source/DarkDungeoneer/Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Source/DarkDungeoneer/Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
   - **Scope**: Rebuild `Hero`, `Exploder`, and `Thrower` 4x4 sheets with unmistakable alternating `Contact-L -> Passing-A -> Contact-R -> Passing-B` footsteps (including true South/North cardinal rows and halo cleanup on `FastThrower`), re-slice normal/emissive/ORM atlases with updated SHA-256 manifest hashes, extract all `16` walk cells + silhouette masks (`136` total cache keys), pre-allocate `16` MIDs per character/zombie, and step `Row * 4 + Col` deterministically via XY distance traveled (`AdvanceWalkFlipbookByDistance`).
+
+### Milestone `v0.9.7` — Standardized 16-Cell Kinematics, Stride Validator & Footstep Sync (`TASK-913`)
+
+- [x] **`TASK-913` — 4x4 Kinematic Specification, `--validate-stride`/`--repair-stride` & `U25DAnimOrchestratorComponent` Footstep Sync**
+  - **Files**: `.agents/skills/sprite-sheet-25d-cutter/SKILL.md`, `docs/TO_GENERATE.md`, `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`, `Content/Art/Rigs/{DungeoneerHero,ZombieExploder,ZombieFastThrower,Hero,Exploder,Thrower}/*`, `Content/AssetManifest.json`, `Source/DarkDungeoneer/Public/Rendering/25DAnimOrchestratorComponent.h`, `Private/Rendering/25DAnimOrchestratorComponent.cpp`, `Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Lock strict `Col 0: Contact/Idle A (+1..+2 px) -> Col 1: Full Left Step (-1..-2 px) -> Col 2: Passing B (+1..+2 px) -> Col 3: Full Right Step (-1..-2 px)` matrix across docs, prompt templates, slicer synthesis, `--validate-stride`/`--repair-stride`, re-sliced atlases, `Velocity.IsNearlyZero()` -> Col 0 locking, and `OnFootstepContact(EFoot::Left / EFoot::Right)` on Col 1 and Col 3.
 
 ---
 

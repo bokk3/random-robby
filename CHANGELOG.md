@@ -11,6 +11,29 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.7] - 2026-11-15
+
+### Added
+- **Standardized 4x4 (16-Cell) Walk-Cycle Kinematic Spec & Prompt Template (`.agents/skills/sprite-sheet-25d-cutter/SKILL.md`, `docs/TO_GENERATE.md`)**:
+  - Embedded strict 4-Row (`0: South/SE`, `1: North/SW`, `2: East/NE`, `3: West/NW`) x 4-Column (`0: Contact / Idle Pose A`, `1: Full Left Step`, `2: Passing Pose B`, `3: Full Right Step`) specification and reusable generation prompt template so future sprite sheets never duplicate legs across columns.
+- **Automated Stride Validation & Procedural Repair (`slice_normal_rig.py`)**:
+  - Added `--validate-stride`, `--repair-stride`, and `--stride-threshold` (`0.15` default) CLI flags measuring lower-third leg bounding-box IoU, MSE, and foreground pixel variance between Column 1 (`Full Left Step`) and Column 3 (`Full Right Step`), recording `StrideValidation` metrics inside `AtlasMetadata.json`.
+  - When a row fails with `< 15%` lower-body pixel variance and `--repair-stride` is enabled, automatically synthesizes alternating `[Col 0 Idle/Contact A, Col 1 Left Step, Col 2 Passing B, Col 3 Right Step]` poses via upper/lower-third splitting, horizontal/depth leg shear, torso height bobbing, and lower-body mirror warping while preserving asymmetrical upper-body props.
+  - Added `EFoot::Left` / `EFoot::Right` and `OnFootstepContact` multicast delegate on `U25DAnimOrchestratorComponent` alongside `F25DStepContactEvent::Foot`.
+
+### Changed
+- **Re-Indexed `4x4` Sprite Atlases & Synchronized C++20 Runtime Column Playback**:
+  - Re-ordered all 6 character/zombie sheets (`DungeoneerHero`, `ZombieExploder`, `ZombieFastThrower`, `Hero`, `Exploder`, `Thrower`) into `[Col 0 Contact/Idle A, Col 1 Full Left Step, Col 2 Passing B, Col 3 Full Right Step]`, re-sliced `_D`/`_N`/`_E`/`_ORM`/`AtlasMetadata.json`/`Content/AssetManifest.json`, and verified all rows pass `--validate-stride` (`22.4%–84.5%` lower-body variance).
+  - Updated `U25DAnimOrchestratorComponent::AdvanceWalkDistance`, `ADungeoneerCharacter::AdvanceWalkFlipbookByDistance`, and `AZombieBase::AdvanceWalkFlipbookByDistance` to lock to **Column 0** when `Velocity.IsNearlyZero()` (idle), advance via `FMath::FloorToInt((AccumulatedDistance / StrideLength) * 4.0f) & 3` while moving, and trigger `OnFootstepContact(EFoot::Left)` on **Column 1** and `OnFootstepContact(EFoot::Right)` on **Column 3** + Acute Hearing fog ripples.
+
+### Verified
+- `python .agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --self-test` passed Rig, Stride Validator/Repair (`0.0% -> 50.3%–69.4%`), and Dungeon modes.
+- `python scripts/verify_architecture_invariants.py` passed (`85` files, `AssetManifest.json` SHA-256 valid).
+- Updated `DungeoneerVerificationSpecs.cpp` (`HUDAndTradeModalAndAssetBootstrap` and `25DAnimOrchestratorAndAtlasMetadata`) to validate `Col 0` idle locking and alternating `EFoot::Left` (`Col 1`) -> `EFoot::Right` (`Col 3`) step events.
+- `DarkDungeoneerEditor Win64 Development` (`8` actions) and `DarkDungeoneer Win64 Development` (`7` actions) compiled cleanly; all `8` headless UE `5.8.2` automation tests passed (`UE_TEST_EXIT=0`).
+
+---
+
 ## [0.9.6] - 2026-11-15
 
 ### Fixed

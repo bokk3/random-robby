@@ -4,7 +4,7 @@
   "TexelDensityStandard": "64 px / 100 UU",
   "Assets": {
     "ATLAS_Dungeon_Floors_4x4": {
-      "Timestamp": "2026-11-15T08:23:17.984205+00:00",
+      "Timestamp": "2026-11-15T13:02:20.252319+00:00",
       "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -31,7 +31,7 @@
       }
     },
     "PROP_Mirror_Palace_Maze_4x4": {
-      "Timestamp": "2026-11-15T08:23:18.316668+00:00",
+      "Timestamp": "2026-11-15T13:02:20.509828+00:00",
       "Provenance": "ProceduralSynthesis-PROP_Mirror_Palace_Maze_4x4-v1",
       "ComplianceVerified": true,
       "Files": {

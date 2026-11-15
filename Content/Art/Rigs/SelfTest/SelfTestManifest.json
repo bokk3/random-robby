@@ -4,29 +4,29 @@
   "TexelDensityStandard": "64 px / 100 UU",
   "Assets": {
     "Rig_Hero": {
-      "Timestamp": "2026-11-15T08:23:17.537334+00:00",
+      "Timestamp": "2026-11-15T13:02:19.799156+00:00",
       "Provenance": "ProceduralSynthesis-hero-v2",
       "ComplianceVerified": true,
       "Files": {
         "Hero/Rig_Hero_D.png": {
-          "SHA256": "73b0820ae0cc8bb483eaa2d40e76f8f64605e9ca9e7241dcaaf315b1fcf77f8c",
-          "Bytes": 2994
+          "SHA256": "6c4b96150215c9056c633a4951592ce80145118d55bde0e8e27545ca5bb52e05",
+          "Bytes": 3128
         },
         "Hero/Rig_Hero_N.png": {
-          "SHA256": "1748e781aab6283a61d5bfbb32d5c99590962f6c49842fe981f1ef683b52ef9f",
-          "Bytes": 10329
+          "SHA256": "89f9127fe2372f11ffc08d6b0c09587c242415d7ea8e19b179e2ceed176c5dea",
+          "Bytes": 10222
         },
         "Hero/Rig_Hero_E.png": {
-          "SHA256": "dc6d3242f6143e177e58d0d0c41cd353e5e70c59d026e2061299a20d0dbc1df0",
-          "Bytes": 436
+          "SHA256": "c42563ce831675478c7df5f300a0bc66d51309c6e9af629c22d433c626ccfc4c",
+          "Bytes": 443
         },
         "Hero/Rig_Hero_ORM.png": {
-          "SHA256": "2d3e2ae9e7d6788ed76671d9eb901f616a1498dbb8a6b333ba5031d1a954e0c5",
-          "Bytes": 2761
+          "SHA256": "c7fd822bc0a43e3844e4905fee8df3007685cee7cab2e1df1be740ba96c9e34c",
+          "Bytes": 2949
         },
         "Hero/AtlasMetadata.json": {
-          "SHA256": "d492112adf4a55646d71c9b10852eab2b00d2dcee9b4cb9f1a0fecec5a7ffcde",
-          "Bytes": 8252
+          "SHA256": "8d2721a2eba04b5a96737ebc54fc86a872f30ad34ddfb5158a51dbe1262e79ba",
+          "Bytes": 9088
         },
         "Hero/rig_sockets.json": {
           "SHA256": "28686bbe6cac98875999996f2366ec309baeb4f637d22c7fc6985b414f76872a",
@@ -35,29 +35,29 @@
       }
     },
     "Rig_Exploder": {
-      "Timestamp": "2026-11-15T08:23:17.676015+00:00",
+      "Timestamp": "2026-11-15T13:02:19.936284+00:00",
       "Provenance": "ProceduralSynthesis-exploder-v2",
       "ComplianceVerified": true,
       "Files": {
         "Exploder/Rig_Exploder_D.png": {
-          "SHA256": "e16e74031b87477fcb6f138d7674d9b39335b18bf48b8589055755a973875675",
+          "SHA256": "4c85f42a38789338875c931455cd3c98b0fd9adb5f52517157e66383b1fd3b82",
           "Bytes": 3981
         },
         "Exploder/Rig_Exploder_N.png": {
-          "SHA256": "3cd05785bb955394d229cb53115306812d1f3377466e956b953937ac85d47dbc",
-          "Bytes": 14952
+          "SHA256": "57398de8f6ac5e9b4a9269ff50af3026d162f596f87432c2791c8bb0d6815bdd",
+          "Bytes": 14231
         },
         "Exploder/Rig_Exploder_E.png": {
-          "SHA256": "2ca3998b115a67521db7f14f620c7e8e575c0cc839c39240d6b675c06ea08d64",
-          "Bytes": 1492
+          "SHA256": "e116e1f2a7d8b7765b4166e4cab999fabc0b795eb48ba75c91072714a61b566c",
+          "Bytes": 1695
         },
         "Exploder/Rig_Exploder_ORM.png": {
-          "SHA256": "d607bf05d83ed87b4c6d95443de1c1d96043d52aa9eccd86b4d8b5dabe497d43",
-          "Bytes": 3804
+          "SHA256": "f32e84a8da714a5643664ce6c0124f593aaabb4fa82d5160c3558c176eb89481",
+          "Bytes": 3978
         },
         "Exploder/AtlasMetadata.json": {
-          "SHA256": "5bb75f635a81e3c1390e3541c27eb9b08922bcea5b56d5df8946d62f378e173e",
-          "Bytes": 8256
+          "SHA256": "fbacd7eafa73ac5f0d11aa303f8843f0e430ecfe2e4fb506bc64272df6d4613c",
+          "Bytes": 9100
         },
         "Exploder/rig_sockets.json": {
           "SHA256": "6aa4e65349ee8585c5bec03285fe38d6f6c04df7148d746361d687be10237c7d",
@@ -66,29 +66,29 @@
       }
     },
     "Rig_Thrower": {
-      "Timestamp": "2026-11-15T08:23:17.806884+00:00",
+      "Timestamp": "2026-11-15T13:02:20.067059+00:00",
       "Provenance": "ProceduralSynthesis-thrower-v2",
       "ComplianceVerified": true,
       "Files": {
         "Thrower/Rig_Thrower_D.png": {
-          "SHA256": "b82dccc49a6c6ba2c7b90f3d5a5a24b9ff2645e4e91212db132528ac6da5f52a",
-          "Bytes": 3069
+          "SHA256": "d203d1743d99c8bf4ac96b5c55381cc8109c8da7d1f6cda056d770a78b34bcbc",
+          "Bytes": 3306
         },
         "Thrower/Rig_Thrower_N.png": {
-          "SHA256": "9d6052b3898abce4510f911ecfdb9306e2a79c14ea42d8c7789d9ab380c648e5",
-          "Bytes": 9906
+          "SHA256": "ec1a7772b5e43cff1f92be4438364bd2c18511944c2967910c5ac5aedd27f63e",
+          "Bytes": 10961
         },
         "Thrower/Rig_Thrower_E.png": {
-          "SHA256": "cfe6712095e32b2ac1e92e19380d0f181cc00eb6bfc10bddf030db800079e9ee",
-          "Bytes": 884
+          "SHA256": "80c9790a6d57b7cd9844d02b9f32991df6b5b4dfeef0a6ec3b44a7c41ec0eca1",
+          "Bytes": 846
         },
         "Thrower/Rig_Thrower_ORM.png": {
-          "SHA256": "153c81e026fdf93b7c7e338e0456a4ab18d9717cd34fa841a0f25d78e9fa2767",
-          "Bytes": 3140
+          "SHA256": "3bf062ad6b07e700acc18b3bcfead10b8465bd44ff91381b249294017060c210",
+          "Bytes": 3258
         },
         "Thrower/AtlasMetadata.json": {
-          "SHA256": "9a2950c6de30057442ce9a04c5354ac3f7adba81e69cf2b53e188a5c8e93d2d9",
-          "Bytes": 8255
+          "SHA256": "bf38628bdb276e347b9a85946e115596a47f3a688ef3423db097bba9b1f8554d",
+          "Bytes": 9091
         },
         "Thrower/rig_sockets.json": {
           "SHA256": "9397dabceafee0cec5611ae4c0584d915dbc9e95c8f2c761322e4be478a9454a",

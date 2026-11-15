@@ -481,5 +481,43 @@
         1017.0
       ]
     }
+  ],
+  "StrideValidation": [
+    {
+      "lower_iou": 0.5768,
+      "lower_mse": 0.08694,
+      "lower_variance": 0.7568,
+      "passed": true,
+      "row": 0,
+      "orientation": "South/SE",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.5734,
+      "lower_mse": 0.09028,
+      "lower_variance": 0.744,
+      "passed": true,
+      "row": 1,
+      "orientation": "North/SW",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.4867,
+      "lower_mse": 0.09154,
+      "lower_variance": 0.7264,
+      "passed": true,
+      "row": 2,
+      "orientation": "East/NE",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.4631,
+      "lower_mse": 0.09487,
+      "lower_variance": 0.764,
+      "passed": true,
+      "row": 3,
+      "orientation": "West/NW",
+      "repaired": false
+    }
   ]
 }

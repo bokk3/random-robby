@@ -10,6 +10,33 @@
   - `_E` (Emissive Mask): Extracted from high-saturation luminance keys (Lantern `#FFCC00`, Magma `#FF5500`, Alchemical Flask `#00FFFF`).
 - **World Scale**: 64 texels = 100 Unreal Units (1 meter).
 
+## 16-Cell (4x4) Walk-Cycle Kinematic Specification
+All walking character, zombie, and humanoid NPC `4x4` sheets MUST strictly conform to this Row/Column layout (verified with `slice_normal_rig.py --validate-stride --repair-stride` and consumed directly by `U25DAnimOrchestratorComponent`):
+
+- **Rows (4 Orientations)**:
+  - **Row 0 (Top)**: South (Front view, walking toward camera) — or SE on diagonal sheets.
+  - **Row 1**: North (Back view, walking away from camera) — or SW on diagonal sheets.
+  - **Row 2**: East (Right side profile, walking right) — or NE on diagonal sheets.
+  - **Row 3 (Bottom)**: West (Left side profile, walking left) — or NW on diagonal sheets.
+
+- **Columns (4 Alternating Stride Phases per Row)**:
+  - **Column 0 (Frame 0 — Contact / Idle Pose A)**: Both feet planted close together directly beneath hips as weight transfers; torso and head at peak height (`+1 to +2 px`). Default standing Idle frame when `Velocity.IsNearlyZero()`.
+  - **Column 1 (Frame 1 — Full Left Step)**: Left leg extended forward, right leg pushing off behind; torso dips (`-1 to -2 px`). Fires `OnFootstepContact(EFoot::Left)`. South view: left foot lower and slightly larger; North view: right heel lifts; East/West side profiles: open scissor stance with left leg forward.
+  - **Column 2 (Frame 2 — Passing Pose B)**: Mid-stride weight transfer with legs crossing directly under the center of gravity; silhouette narrows and torso rises back to peak height (`+1 to +2 px`).
+  - **Column 3 (Frame 3 — Full Right Step)**: Exact opposite of Column 1. Right leg extended forward, left leg pushing off behind; torso dips (`-1 to -2 px`). Fires `OnFootstepContact(EFoot::Right)`. South view: right foot lower; East/West side profiles: opposite scissor stance with right leg forward.
+
+### Reusable Character / Zombie Generation Prompt Template
+```text
+Strict 4x4 grid (16 equal cells, zero borders or cell outlines), semi-pixelated dark-gothic 2.5D character sprite sheet on a solid flat magenta (#FF00FF) background with zero anti-aliasing.
+Rows: Row 0 = South (front), Row 1 = North (back), Row 2 = East (right side), Row 3 = West (left side). (Or Row 0 SE, Row 1 SW, Row 2 NE, Row 3 NW for diagonal sheets.)
+Columns (alternating stride legs per row):
+- Col 0: Contact / Idle Pose A — both feet planted together beneath hips, torso/head at peak (+1 to +2 px).
+- Col 1: Full Left Step — left leg forward, right leg pushing off behind, torso dipped (-1 to -2 px), clear asymmetric leg separation.
+- Col 2: Passing Pose B — legs crossing beneath center of gravity, narrower stance, torso back at peak height (+1 to +2 px).
+- Col 3: Full Right Step — opposite of Col 1 (right leg forward, left leg behind, torso dipped -1 to -2 px).
+Keep bottom-center foot baseline locked at consistent Y across all 16 cells and preserve crisp key emissives (#FFCC00 lantern, #FF5500 magma, #00FFFF flask).
+```
+
 ## Phase 0: Baseline Assets (Completed & Ready for Slicing)
 - [x] `CH_Player_Cardinal_Walk_4x4.png`: Hooded dungeoneer with lantern (Row 1: S, Row 2: N, Row 3: E, Row 4: W).
 - [x] `CH_Zombie_Exploder_Walk_4x4.png`: Shackled bloated zombie with glowing magma belly (Row 1: S, Row 2: N, Row 3: E, Row 4: W).

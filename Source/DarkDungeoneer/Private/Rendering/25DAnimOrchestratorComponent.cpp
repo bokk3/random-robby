@@ -124,9 +124,15 @@ void U25DAnimOrchestratorComponent::SetDirectionFromOctant(ECompassOctant Octant
 void U25DAnimOrchestratorComponent::AdvanceWalkDistance(float DeltaDistanceUU, const FVector& CurrentVelocityXY, float DeltaTime)
 {
 	const float ClampedDist = FMath::Max(DeltaDistanceUU, 0.0f);
-	const bool bHasMovement = (ClampedDist > 0.05f) || (CurrentVelocityXY.SizeSquared2D() > 25.0);
+	const bool bVelocityIdle = CurrentVelocityXY.IsNearlyZero(1.0f);
+	const bool bHasMovement = !bVelocityIdle || (ClampedDist > 0.05f);
 
-	if (ClampedDist > KINDA_SMALL_NUMBER)
+	if (bVelocityIdle)
+	{
+		// Lock UV selection strictly to Column 0 (Contact / Idle Pose A) when standing still
+		CurrentFrameColumn = 0;
+	}
+	else if (ClampedDist > KINDA_SMALL_NUMBER)
 	{
 		AccumulatedDistanceUU += ClampedDist;
 		const float SafeStride = FMath::Max(StrideLengthUU, 1.0f);
@@ -134,11 +140,13 @@ void U25DAnimOrchestratorComponent::AdvanceWalkDistance(float DeltaDistanceUU, c
 		NormalizedWalkPhase = FMath::Clamp(RawCycles - FMath::FloorToFloat(RawCycles), 0.0f, 0.99999f);
 
 		const int32 SafeCols = FMath::Max(GridColumns, 1);
-		const int32 NewColumn = FMath::Clamp(FMath::FloorToInt(NormalizedWalkPhase * static_cast<float>(SafeCols)), 0, SafeCols - 1);
+		const int32 NewColumn = (SafeCols == 4)
+			? (FMath::FloorToInt(RawCycles * 4.0f) & 3)
+			: FMath::Clamp(FMath::FloorToInt(NormalizedWalkPhase * static_cast<float>(SafeCols)), 0, SafeCols - 1);
 		if (NewColumn != CurrentFrameColumn)
 		{
 			CurrentFrameColumn = NewColumn;
-			if (CurrentFrameColumn == 0 || CurrentFrameColumn == 2)
+			if (CurrentFrameColumn == 1 || CurrentFrameColumn == 3)
 			{
 				DispatchStepContact(CurrentFrameColumn);
 			}
@@ -296,7 +304,10 @@ void U25DAnimOrchestratorComponent::DispatchStepContact(int32 FrameCol) noexcept
 {
 	++StepContactCount;
 
+	const EFoot ContactFoot = (FrameCol == 3) ? EFoot::Right : EFoot::Left;
+
 	F25DStepContactEvent Event;
+	Event.Foot = ContactFoot;
 	Event.FrameIndex = FrameCol;
 	Event.CellIndex = GetUVCellIndex();
 	Event.AudioLoudness = BaseStepAudioLoudness;
@@ -332,5 +343,6 @@ void U25DAnimOrchestratorComponent::DispatchStepContact(int32 FrameCol) noexcept
 		}
 	}
 
+	OnFootstepContact.Broadcast(ContactFoot);
 	OnStepContact.Broadcast(Event);
 }

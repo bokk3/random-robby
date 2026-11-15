@@ -39,11 +39,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.222656
+        0.21875
       ],
       "FootPivotPx": [
         32.0,
-        57.0
+        56.0
       ]
     },
     {
@@ -68,11 +68,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.222656
+        0.226562
       ],
       "FootPivotPx": [
         96.0,
-        57.0
+        58.0
       ]
     },
     {
@@ -97,11 +97,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.222656
+        0.21875
       ],
       "FootPivotPx": [
         160.0,
-        57.0
+        56.0
       ]
     },
     {
@@ -126,11 +126,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.222656
+        0.226562
       ],
       "FootPivotPx": [
         224.0,
-        57.0
+        58.0
       ]
     },
     {
@@ -155,11 +155,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.472656
+        0.46875
       ],
       "FootPivotPx": [
         32.0,
-        121.0
+        120.0
       ]
     },
     {
@@ -184,11 +184,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.472656
+        0.476562
       ],
       "FootPivotPx": [
         96.0,
-        121.0
+        122.0
       ]
     },
     {
@@ -213,11 +213,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.472656
+        0.46875
       ],
       "FootPivotPx": [
         160.0,
-        121.0
+        120.0
       ]
     },
     {
@@ -242,11 +242,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.472656
+        0.476562
       ],
       "FootPivotPx": [
         224.0,
-        121.0
+        122.0
       ]
     },
     {
@@ -271,11 +271,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.722656
+        0.71875
       ],
       "FootPivotPx": [
         32.0,
-        185.0
+        184.0
       ]
     },
     {
@@ -300,11 +300,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.722656
+        0.726562
       ],
       "FootPivotPx": [
         96.0,
-        185.0
+        186.0
       ]
     },
     {
@@ -329,11 +329,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.722656
+        0.71875
       ],
       "FootPivotPx": [
         160.0,
-        185.0
+        184.0
       ]
     },
     {
@@ -358,11 +358,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.722656
+        0.726562
       ],
       "FootPivotPx": [
         224.0,
-        185.0
+        186.0
       ]
     },
     {
@@ -387,11 +387,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.972656
+        0.96875
       ],
       "FootPivotPx": [
         32.0,
-        249.0
+        248.0
       ]
     },
     {
@@ -416,11 +416,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.972656
+        0.976562
       ],
       "FootPivotPx": [
         96.0,
-        249.0
+        250.0
       ]
     },
     {
@@ -445,11 +445,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.972656
+        0.96875
       ],
       "FootPivotPx": [
         160.0,
-        249.0
+        248.0
       ]
     },
     {
@@ -474,12 +474,50 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.972656
+        0.976562
       ],
       "FootPivotPx": [
         224.0,
-        249.0
+        250.0
       ]
+    }
+  ],
+  "StrideValidation": [
+    {
+      "lower_iou": 0.7756,
+      "lower_mse": 0.04659,
+      "lower_variance": 0.2244,
+      "passed": true,
+      "row": 0,
+      "orientation": "South/SE",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.7756,
+      "lower_mse": 0.04659,
+      "lower_variance": 0.2244,
+      "passed": true,
+      "row": 1,
+      "orientation": "North/SW",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.7756,
+      "lower_mse": 0.04016,
+      "lower_variance": 0.2244,
+      "passed": true,
+      "row": 2,
+      "orientation": "East/NE",
+      "repaired": false
+    },
+    {
+      "lower_iou": 0.7756,
+      "lower_mse": 0.04016,
+      "lower_variance": 0.2244,
+      "passed": true,
+      "row": 3,
+      "orientation": "West/NW",
+      "repaired": false
     }
   ]
 }

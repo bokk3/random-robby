@@ -4,8 +4,9 @@
  * 25DAnimOrchestratorComponent.h
  *
  * Zero-allocation 2.5D Hybrid Animation Orchestrator for UE 5.8 C++20.
- * - Distance-driven 4-frame walk phase (zero foot-sliding under Chrono-Leech speed shifts).
- * - Deterministic OnStepContact multicast triggers on foot-plant frames 0 and 2 with
+ * - Distance-driven 4-frame walk phase (Col 0 Idle/Contact A -> Col 1 Left Step -> Col 2 Passing B -> Col 3 Right Step).
+ * - Velocity.IsNearlyZero() locks UV selection to Column 0 (Contact / Idle Pose A) of the active facing octant.
+ * - Deterministic OnFootstepContact(EFoot::Left / EFoot::Right) and OnStepContact triggers on frames 1 and 3 with
  *   PhysicalMaterial surface resolution and Acute Hearing sensory ripple forwarding.
  * - 120Hz procedural sub-frame springs (stride hop, directional velocity lean, belly-swell).
  * - Per-instance Custom Primitive Data slots [0..4] (zero per-actor MID allocations) and
@@ -20,6 +21,13 @@
 #include "25DAnimOrchestratorComponent.generated.h"
 
 class UPrimitiveComponent;
+
+UENUM(BlueprintType)
+enum class EFoot : uint8
+{
+	Left  = 0 UMETA(DisplayName = "Left Foot"),
+	Right = 1 UMETA(DisplayName = "Right Foot")
+};
 
 namespace E25DAnimCPD
 {
@@ -37,7 +45,10 @@ struct DARKDUNGEONEER_API F25DStepContactEvent
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "2.5D Animation")
-	int32 FrameIndex = 0;
+	EFoot Foot = EFoot::Left;
+
+	UPROPERTY(BlueprintReadOnly, Category = "2.5D Animation")
+	int32 FrameIndex = 1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "2.5D Animation")
 	int32 CellIndex = 0;
@@ -56,6 +67,7 @@ struct DARKDUNGEONEER_API F25DStepContactEvent
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOn25DStepContactSignature, const F25DStepContactEvent&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOn25DFootstepContactSignature, EFoot);
 
 /**
  * Drives 4x4 sprite-sheet cutouts with distance-locked walk cycles, 120Hz springs,
@@ -86,8 +98,8 @@ public:
 
 	/**
 	 * Advances the walk phase strictly by XY distance traveled (zero foot-sliding under
-	 * Chrono-Leech speed shifts), triggers OnStepContact on frames 0 and 2, evaluates 120Hz
-	 * procedural springs, and pushes CustomData[0..4].
+	 * Chrono-Leech speed shifts), locks to Column 0 when idle, triggers OnFootstepContact
+	 * and OnStepContact on frames 1 (Left) and 3 (Right), evaluates 120Hz springs, and pushes CPD.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "2.5D Animation")
 	void AdvanceWalkDistance(float DeltaDistanceUU, const FVector& CurrentVelocityXY, float DeltaTime);
@@ -139,6 +151,7 @@ public:
 	int32 GetStepContactCount() const noexcept { return StepContactCount; }
 
 	FOn25DStepContactSignature OnStepContact;
+	FOn25DFootstepContactSignature OnFootstepContact;
 
 protected:
 	void EvaluateSubFrameSprings(float DeltaTime, const FVector& VelocityXY, bool bHasMovement) noexcept;

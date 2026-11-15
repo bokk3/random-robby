@@ -471,23 +471,23 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 	if (ADungeoneerCharacter* HeroProbe = TestWorld->SpawnActor<ADungeoneerCharacter>())
 	{
 		HeroProbe->AdvanceWalkFlipbookByDistance(10.0f, true);
-		TestEqual(TEXT("Hero walk col 0 on stride start [0..35 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 0);
+		TestEqual(TEXT("Hero walk col 0 on Contact/Idle start [0..35 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 0);
 		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
-		TestEqual(TEXT("Hero walk col 1 on passing phase [35..70 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 1);
+		TestEqual(TEXT("Hero walk col 1 on Full Left Step [35..70 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 1);
 		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
-		TestEqual(TEXT("Hero walk col 2 on opposite contact [70..105 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 2);
+		TestEqual(TEXT("Hero walk col 2 on Passing Pose B [70..105 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 2);
 		HeroProbe->AdvanceWalkFlipbookByDistance(35.0f, true);
-		TestEqual(TEXT("Hero walk col 3 on second passing phase [105..140 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 3);
+		TestEqual(TEXT("Hero walk col 3 on Full Right Step [105..140 UU)"), HeroProbe->GetActiveWalkFrameColumn(), 3);
 		HeroProbe->AdvanceWalkFlipbookByDistance(0.0f, false);
-		TestEqual(TEXT("Hero snaps cleanly to upright neutral Col 1 when idle"), HeroProbe->GetActiveWalkFrameColumn(), 1);
+		TestEqual(TEXT("Hero locks cleanly to Contact/Idle Col 0 when idle"), HeroProbe->GetActiveWalkFrameColumn(), 0);
 	}
 
 	if (AZombieFastThrower* ThrowerProbe = TestWorld->SpawnActor<AZombieFastThrower>())
 	{
-		ThrowerProbe->AdvanceWalkFlipbookByDistance(10.0f, true);
-		TestEqual(TEXT("Thrower sprint col 0 on contact start"), ThrowerProbe->GetActiveWalkFrameColumn(), 0);
+		ThrowerProbe->AdvanceWalkFlipbookByDistance(60.0f, true);
+		TestEqual(TEXT("Thrower sprint col 1 on Left Step contact"), ThrowerProbe->GetActiveWalkFrameColumn(), 1);
 		ThrowerProbe->AdvanceWalkFlipbookByDistance(110.0f, true);
-		TestEqual(TEXT("Thrower sprint col 2 on opposite half-stride contact"), ThrowerProbe->GetActiveWalkFrameColumn(), 2);
+		TestEqual(TEXT("Thrower sprint col 3 on Right Step contact"), ThrowerProbe->GetActiveWalkFrameColumn(), 3);
 	}
 
 	TestWorld->DestroyWorld(false);
@@ -524,32 +524,48 @@ bool FDungeoneer25DAnimOrchestratorTest::RunTest(const FString& Parameters)
 
 	int32 CapturedContacts = 0;
 	int32 LastContactFrame = -1;
+	EFoot LastContactFoot = EFoot::Right;
+	TArray<EFoot> FootSequence;
 	Orchestrator->OnStepContact.AddLambda([&CapturedContacts, &LastContactFrame](const F25DStepContactEvent& Evt)
 	{
 		++CapturedContacts;
 		LastContactFrame = Evt.FrameIndex;
 	});
+	Orchestrator->OnFootstepContact.AddLambda([&FootSequence, &LastContactFoot](EFoot Foot)
+	{
+		FootSequence.Add(Foot);
+		LastContactFoot = Foot;
+	});
 
-	// Default StrideLengthUU = 140.0f -> columns step every 35 UU (cols 0, 1, 2, 3)
+	// Default StrideLengthUU = 140.0f -> Col 0 [0..35), Col 1 Left Step [35..70), Col 2 Passing B [70..105), Col 3 Right Step [105..140)
 	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
-	TestEqual(TEXT("Walk distance 40 UU advances to frame col 1"), Orchestrator->GetCurrentFrameColumn(), 1);
-	TestEqual(TEXT("No step contact fired on passing frame 1"), CapturedContacts, 0);
+	TestEqual(TEXT("Walk distance 40 UU advances to frame col 1 (Left Step)"), Orchestrator->GetCurrentFrameColumn(), 1);
+	TestEqual(TEXT("Step contact fired deterministically on Left Step col 1"), CapturedContacts, 1);
+	TestEqual(TEXT("Last contact frame is 1"), LastContactFrame, 1);
+	TestEqual(TEXT("OnFootstepContact fired EFoot::Left on col 1"), LastContactFoot, EFoot::Left);
 	TestTrue(TEXT("120Hz stride hop lifted plane smoothly"), Orchestrator->GetCurrentStrideHopZ() > 0.0f);
 	TestTrue(TEXT("120Hz directional velocity lean engaged"), FMath::Abs(Orchestrator->GetCurrentVelocityLeanDeg().X) > 0.0f);
 
 	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
-	TestEqual(TEXT("Walk distance 80 UU advances to frame col 2"), Orchestrator->GetCurrentFrameColumn(), 2);
-	TestEqual(TEXT("Step contact fired deterministically on frame 2"), CapturedContacts, 1);
-	TestEqual(TEXT("Last contact frame is 2"), LastContactFrame, 2);
+	TestEqual(TEXT("Walk distance 80 UU advances to frame col 2 (Passing B)"), Orchestrator->GetCurrentFrameColumn(), 2);
+	TestEqual(TEXT("No step contact fired on passing frame 2"), CapturedContacts, 1);
 
 	Orchestrator->AdvanceWalkDistance(40.0f, FVector(300.0, 0.0, 0.0), 0.016f);
-	TestEqual(TEXT("Walk distance 120 UU advances to frame col 3"), Orchestrator->GetCurrentFrameColumn(), 3);
-	TestEqual(TEXT("No step contact fired on passing frame 3"), CapturedContacts, 1);
+	TestEqual(TEXT("Walk distance 120 UU advances to frame col 3 (Right Step)"), Orchestrator->GetCurrentFrameColumn(), 3);
+	TestEqual(TEXT("Step contact fired deterministically on Right Step col 3"), CapturedContacts, 2);
+	TestEqual(TEXT("Last contact frame is 3"), LastContactFrame, 3);
+	TestEqual(TEXT("OnFootstepContact fired EFoot::Right on col 3"), LastContactFoot, EFoot::Right);
+	TestEqual(TEXT("Alternating Left -> Right foot sequence captured"), FootSequence.Num(), 2);
 
 	Orchestrator->AdvanceWalkDistance(25.0f, FVector(300.0, 0.0, 0.0), 0.016f);
-	TestEqual(TEXT("Walk distance 145 UU wraps cleanly to frame col 0"), Orchestrator->GetCurrentFrameColumn(), 0);
-	TestEqual(TEXT("Step contact fired deterministically on frame 0"), CapturedContacts, 2);
-	TestEqual(TEXT("Last contact frame is 0"), LastContactFrame, 0);
+	TestEqual(TEXT("Walk distance 145 UU wraps cleanly to frame col 0 (Contact A)"), Orchestrator->GetCurrentFrameColumn(), 0);
+	TestEqual(TEXT("No duplicate step contact fired on Contact/Idle wrap col 0"), CapturedContacts, 2);
+
+	// Advance back into Col 1 then verify Velocity.IsNearlyZero() locks back to Col 0 Idle
+	Orchestrator->AdvanceWalkDistance(35.0f, FVector(300.0, 0.0, 0.0), 0.016f);
+	TestEqual(TEXT("Walk distance 180 UU steps cleanly into Left Step col 1"), Orchestrator->GetCurrentFrameColumn(), 1);
+	Orchestrator->AdvanceWalkDistance(0.0f, FVector::ZeroVector, 0.016f);
+	TestEqual(TEXT("Velocity.IsNearlyZero() locks UV selection cleanly to Idle Col 0"), Orchestrator->GetCurrentFrameColumn(), 0);
 
 	// Directional octant -> CustomData[0] = Row * 4 + Col (West row = 3, col = 0 => cell 12)
 	Orchestrator->SetDirectionFromOctant(ECompassOctant::W, false);

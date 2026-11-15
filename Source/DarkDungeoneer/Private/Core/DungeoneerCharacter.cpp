@@ -142,7 +142,7 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 
 					bTexturedVisualsApplied = true;
 					ActiveDirectionalRow = -1;
-					ActiveWalkFrameColumn = 1;
+					ActiveWalkFrameColumn = 0;
 					ActiveDirectionalCellIndex = -1;
 					const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
 					const ECompassOctant InitialFacing = MoveComp ? MoveComp->GetAimOctant() : ReplicatedAimOctant;
@@ -177,14 +177,12 @@ void ADungeoneerCharacter::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, 
 	{
 		WalkDistanceAccumulatorUU += ClampedDist;
 		const float SafeStride = FMath::Max(WalkCycleStrideUU, 20.0f);
-		const float RawPhase = WalkDistanceAccumulatorUU / SafeStride;
-		const float PhaseFrac = FMath::Clamp(RawPhase - FMath::FloorToFloat(RawPhase), 0.0f, 0.99999f);
-		ActiveWalkFrameColumn = FMath::Clamp(FMath::FloorToInt(PhaseFrac * 4.0f), 0, 3);
+		ActiveWalkFrameColumn = FMath::FloorToInt((WalkDistanceAccumulatorUU / SafeStride) * 4.0f) & 3;
 	}
 	else
 	{
-		// Stand upright (Col 1 passing/neutral stance) when idle instead of frozen mid-stride
-		ActiveWalkFrameColumn = 1;
+		// Lock to Column 0 (Contact / Idle Pose A) when standing still
+		ActiveWalkFrameColumn = 0;
 	}
 }
 
