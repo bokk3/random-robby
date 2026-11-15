@@ -9,6 +9,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 
 namespace TileMapDetail
 {
@@ -138,6 +140,20 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 	UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
 	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	UStaticMesh* BoxFallback = CubeMesh ? CubeMesh : PlaneMesh;
+	UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+
+	auto AssignDefaultColorMaterial = [this, BaseShapeMat](UHierarchicalInstancedStaticMeshComponent* Comp, const FLinearColor& TintColor, const float RoughnessVal)
+	{
+		if (Comp && BaseShapeMat && !Comp->GetMaterial(0))
+		{
+			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
+			{
+				MID->SetVectorParameterValue(FName(TEXT("Color")), TintColor);
+				MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+				Comp->SetMaterial(0, MID);
+			}
+		}
+	};
 
 	if (FloorHISM)
 	{
@@ -146,9 +162,14 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 		{
 			FloorHISM->SetStaticMesh(PlaneMesh ? PlaneMesh : BoxFallback);
 		}
+		AssignDefaultColorMaterial(FloorHISM.Get(), FLinearColor(0.13f, 0.15f, 0.22f), 0.72f);
 	}
 
-	auto ConfigureBoxHISM = [BoxFallback](UHierarchicalInstancedStaticMeshComponent* Comp, const bool bShadow)
+	auto ConfigureBoxHISM = [BoxFallback, &AssignDefaultColorMaterial](
+		UHierarchicalInstancedStaticMeshComponent* Comp,
+		const bool bShadow,
+		const FLinearColor& TintColor,
+		const float RoughnessVal)
 	{
 		if (Comp)
 		{
@@ -158,12 +179,13 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 			{
 				Comp->SetStaticMesh(BoxFallback);
 			}
+			AssignDefaultColorMaterial(Comp, TintColor, RoughnessVal);
 		}
 	};
 
-	ConfigureBoxHISM(WallHISM.Get(), true);
-	ConfigureBoxHISM(MirrorHISM.Get(), true);
-	ConfigureBoxHISM(BreakableHISM.Get(), true);
+	ConfigureBoxHISM(WallHISM.Get(), true, FLinearColor(0.25f, 0.23f, 0.30f), 0.65f);
+	ConfigureBoxHISM(MirrorHISM.Get(), true, FLinearColor(0.38f, 0.88f, 0.98f), 0.08f);
+	ConfigureBoxHISM(BreakableHISM.Get(), true, FLinearColor(0.68f, 0.40f, 0.15f), 0.50f);
 }
 
 void ADungeoneerTileMapInstancer::ClearAllInstances()

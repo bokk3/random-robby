@@ -10,12 +10,18 @@
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "InputCoreTypes.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 
 ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -40,32 +46,86 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	TopDownCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	TopDownCamera->bUsePawnControlRotation = false;
 	TopDownCamera->FieldOfView = 42.0f; // Orthographic-feel perspective foreshortening
+	TopDownCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+	TopDownCamera->PostProcessSettings.AutoExposureMinBrightness = 0.25f;
+	TopDownCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+	TopDownCamera->PostProcessSettings.AutoExposureMaxBrightness = 2.0f;
 
 	FlashlightComponent = CreateDefaultSubobject<USpotLightComponent>(TEXT("FlashlightComponent"));
 	FlashlightComponent->SetupAttachment(RootComponent);
 	FlashlightComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 55.0f));
-	FlashlightComponent->SetIntensity(12000.0f);
+	FlashlightComponent->SetIntensity(26000.0f);
 	FlashlightComponent->SetLightColor(FLinearColor(1.0f, 0.94f, 0.82f));
 	FlashlightComponent->SetInnerConeAngle(12.0f);
-	FlashlightComponent->SetOuterConeAngle(22.5f);
-	FlashlightComponent->SetAttenuationRadius(1800.0f);
+	FlashlightComponent->SetOuterConeAngle(28.0f);
+	FlashlightComponent->SetAttenuationRadius(2200.0f);
 	FlashlightComponent->bUseInverseSquaredFalloff = true;
 	FlashlightComponent->VolumetricScatteringIntensity = 2.5f;
 	FlashlightComponent->CastShadows = true;
+
+	HeroLanternFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("HeroLanternFillLight"));
+	HeroLanternFillLight->SetupAttachment(RootComponent);
+	HeroLanternFillLight->SetRelativeLocation(FVector(0.0f, 0.0f, 95.0f));
+	HeroLanternFillLight->SetIntensity(4800.0f);
+	HeroLanternFillLight->SetAttenuationRadius(1100.0f);
+	HeroLanternFillLight->SetLightColor(FLinearColor(1.0f, 0.84f, 0.55f));
+	HeroLanternFillLight->CastShadows = false;
 
 	SensoryPerkComponent = CreateDefaultSubobject<USensoryPerkComponent>(TEXT("SensoryPerkComponent"));
 
 	DirectionalRigComponent = CreateDefaultSubobject<U25DDirectionalRigComponent>(TEXT("DirectionalRigComponent"));
 	DirectionalRigComponent->SetupAttachment(RootComponent);
 
+	HeroVisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroVisualMesh"));
+	HeroVisualMesh->SetupAttachment(RootComponent);
+	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -5.0f));
+	HeroVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
 }
 
+void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
+{
+	if (!HeroVisualMesh)
+	{
+		return;
+	}
+
+	if (!HeroVisualMesh->GetStaticMesh())
+	{
+		if (UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			HeroVisualMesh->SetStaticMesh(CylinderMesh);
+			HeroVisualMesh->SetRelativeScale3D(FVector(0.85, 0.85, 1.65));
+		}
+	}
+
+	if (!HeroVisualMesh->GetMaterial(0))
+	{
+		if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+		{
+			if (UMaterialInstanceDynamic* HeroMID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
+			{
+				HeroMID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(0.95f, 0.78f, 0.28f));
+				HeroMID->SetScalarParameterValue(FName(TEXT("Roughness")), 0.45f);
+				HeroVisualMesh->SetMaterial(0, HeroMID);
+			}
+		}
+	}
+
+	if (DirectionalRigComponent)
+	{
+		DirectionalRigComponent->RegisterSocketPrimitive(E25DRigSocket::Torso, HeroVisualMesh.Get());
+	}
+}
+
 void ADungeoneerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	EnsureDefaultVisualsInitialized();
 
 	if (const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
 	{
@@ -215,9 +275,59 @@ void ADungeoneerCharacter::HandleAimInput(const FInputActionValue& Value)
 	}
 }
 
+void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback() noexcept
+{
+	APlayerController* PC = GetController<APlayerController>();
+	UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+	if (!PC || !MoveComp)
+	{
+		return;
+	}
+
+	double MoveX = 0.0;
+	double MoveY = 0.0;
+	if (PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up))    { MoveX += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down))  { MoveX -= 1.0; }
+	if (PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Right)) { MoveY += 1.0; }
+	if (PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Left))  { MoveY -= 1.0; }
+
+	const FVector2D MoveVec(MoveX, MoveY);
+	MoveComp->SetMoveInputVector(MoveVec);
+	if (MoveComp->HasActiveMoveInput())
+	{
+		const FVector MoveDir = UDungeoneerMovementComponent::GetUnitDirectionForOctant(MoveComp->GetMoveOctant());
+		AddMovementInput(MoveDir, 1.0f);
+	}
+
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	int32 ViewW = 0;
+	int32 ViewH = 0;
+	if (PC->GetMousePosition(MouseX, MouseY))
+	{
+		PC->GetViewportSize(ViewW, ViewH);
+		if (ViewW > 0 && ViewH > 0)
+		{
+			const float CenterX = static_cast<float>(ViewW) * 0.5f;
+			const float CenterY = static_cast<float>(ViewH) * 0.5f;
+			const FVector2D AimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
+			MoveComp->SetAimInputVector(AimVec);
+		}
+	}
+	else if (MoveComp->HasActiveMoveInput())
+	{
+		MoveComp->SetAimInputVector(MoveVec);
+	}
+}
+
 void ADungeoneerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (IsLocallyControlled() && !DefaultMappingContext)
+	{
+		PollDirectKeyboardAndMouseFallback();
+	}
 
 	SyncFlashlightTransform(DeltaSeconds);
 

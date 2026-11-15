@@ -11,6 +11,25 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.2] - 2026-11-15
+
+### Fixed
+- **Startup Black Screen on Launch (`DefaultEngine.ini`, `AMenuDioramaStageActor`, `ADungeoneerTileMapInstancer`)**:
+  - Switched `GameDefaultMap` and `EditorStartupMap` in `Config/DefaultEngine.ini` from `/Engine/Maps/Templates/OpenWorld` to `/Engine/Maps/Entry`, eliminating the 4+ minute WorldPartition / 528-texture streaming stall and 50 PSO hitches observed on integrated GPUs (`Intel HD Graphics 520`).
+  - Populated `AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()` (invoked in `OnConstruction` and `BeginPlay`) with `/Engine/BasicShapes` meshes (`Plane`, `Cylinder`, `Cube`) and `BasicShapeMaterial` colored MIDs (`Color` + `Roughness`) across `ShowcaseFloorMesh`, `ExploderShowcaseProxy`, `FastThrowerShowcaseProxy`, `PhantasmMirrorShowcaseProxy`, and `DecoyProjectionProxy`, paired with `DioramaAmbientFillLight` (`4500.0f`), boosted `HeroFlashlightSpot` (`24000.0f`), and auto-exposure bounds (`[0.25f, 2.0f]`).
+  - Added default colored `BasicShapeMaterial` MIDs for `FloorHISM`, `WallHISM`, `MirrorHISM`, and `BreakableHISM` inside `ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()`.
+  - Disabled `OwningPC->bAutoManageActiveCameraTarget` inside `ADungeoneerGameMode::StartPlay()` and spawned `ADungeoneerTileMapInstancer` + `AMenuDioramaStageActor` inside the Floor 1 Entry room so possession never clobbers the Main Menu diorama camera into unlit void.
+- **In-Place Dungeon Transition & Playable C++ Input Fallback (`ADungeoneerGameMode`, `UDungeoneerMainMenuWidget`, `ADungeoneerCharacter`)**:
+  - Added `ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction)` and updated `UDungeoneerMainMenuWidget::ActivateSpecificAction` to transition players seamlessly into the procedural `ADungeoneerTileMapInstancer` rooms (`Entry`, `Combat`, `MirrorPalaceMaze`, `RestingGround`/`Vendor`) when `.umap` level assets do not yet exist on disk.
+  - Added default `HeroVisualMesh` (`Cylinder`), `HeroLanternFillLight` (`4800.0f`), boosted `FlashlightComponent` (`26000.0f`), camera exposure bounds on `ADungeoneerCharacter`, and a zero-allocation `PollDirectKeyboardAndMouseFallback()` loop (WASD/Arrow movement + mouse viewport 8-compass flashlight aiming when `DefaultMappingContext` is unassigned).
+
+### Verified
+- Extended `DarkDungeoneer.UI.MenuNavigationAndFloorSeedDeterminism` in `DungeoneerVerificationSpecs.cpp` to assert non-null `AMenuDioramaStageActor` showcase meshes and `ADungeoneerGameMode::EnterLiveDungeonFromMenu` HISM room construction.
+- Passed `scripts/verify_architecture_invariants.py` (`85` tracked files verified, zero `Tick` allocations, zero banned symbols).
+- Compiled both `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings/errors, passing all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
+
+---
+
 ## [0.9.1] - 2026-11-15
 
 ### Added

@@ -7,6 +7,7 @@
 #include "MenuDioramaStageActor.generated.h"
 
 class UCameraComponent;
+class UPointLightComponent;
 class USpotLightComponent;
 class UStaticMeshComponent;
 
@@ -25,8 +26,13 @@ class DARKDUNGEONEER_API AMenuDioramaStageActor : public AActor
 public:
 	AMenuDioramaStageActor();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** Ensures static meshes, materials, and fill lighting are initialized on the diorama stage. */
+	UFUNCTION(BlueprintCallable, Category = "UI|Diorama")
+	void EnsureShowcaseMeshesInitialized();
 
 	/** Steers the diorama showcase flashlight and spotlight highlight based on hovered menu item. */
 	UFUNCTION(BlueprintCallable, Category = "UI|Diorama")
@@ -48,6 +54,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
 	int32 GetEmittedSonarPulseCount() const noexcept { return EmittedSonarPulseCount; }
 
+	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
+	UStaticMeshComponent* GetShowcaseFloorMesh() const noexcept { return ShowcaseFloorMesh.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
+	UStaticMeshComponent* GetExploderShowcaseProxy() const noexcept { return ExploderShowcaseProxy.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
+	UStaticMeshComponent* GetFastThrowerShowcaseProxy() const noexcept { return FastThrowerShowcaseProxy.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
+	UStaticMeshComponent* GetPhantasmMirrorShowcaseProxy() const noexcept { return PhantasmMirrorShowcaseProxy.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Diorama")
+	UStaticMeshComponent* GetDecoyProjectionProxy() const noexcept { return DecoyProjectionProxy.Get(); }
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diorama")
 	TObjectPtr<USceneComponent> StageRoot;
@@ -57,6 +78,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diorama|Lighting")
 	TObjectPtr<USpotLightComponent> HeroFlashlightSpot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diorama|Lighting")
+	TObjectPtr<UPointLightComponent> DioramaAmbientFillLight;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diorama|Meshes")
 	TObjectPtr<UStaticMeshComponent> ShowcaseFloorMesh;

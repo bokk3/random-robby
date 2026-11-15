@@ -101,3 +101,20 @@ With those fixes, `DarkDungeoneerEditor (Win64 Development)` compiled cleanly in
 ### Verification (`v0.9.1`)
 - Added `DarkDungeoneer.Dungeon.TileMapInstancerCutawayAndMirrorBounce` to `DungeoneerVerificationSpecs.cpp`, checking 4-axis HISM assembly, `bCastHiddenShadow` retention across cutaway toggles, specular $\mathbf{R}$ vector accuracy + Phantasm seam reveal, and breakable UV swap + `UDungeoneerSensoryWorldSubsystem` ripple emission.
 - Updated `scripts/verify_architecture_invariants.py` (`85` tracked files + dungeon atlas/prop disk checks) and compiled both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development`, passing all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).
+
+---
+
+## Devlog #07 (`v0.9.2`) — Eliminating the Launch Black Screen & Enabling In-Place Catacombs Play
+
+### Root-Cause Diagnosis from `Saved/Logs/DarkDungeoneer.log`
+When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=900`), the window opened black due to five compounding issues:
+1. **`OpenWorld` Default Map Streaming Stall**: `Config/DefaultEngine.ini` pointed `GameDefaultMap` and `EditorStartupMap` to `/Engine/Maps/Templates/OpenWorld`. On the development machine's `Intel(R) HD Graphics 520` (`i5-6300U`), UE 5.8 spent over 4 minutes initializing WorldPartition, waiting on `528` landscape/HLOD textures, and compiling `50` OpenWorld PSOs before bringing the viewport online. Switching both settings to `/Engine/Maps/Entry` eliminates WorldPartition streaming overhead completely.
+2. **Null `StaticMesh` Subobjects on `AMenuDioramaStageActor`**: `ShowcaseFloorMesh`, `ExploderShowcaseProxy`, `FastThrowerShowcaseProxy`, `PhantasmMirrorShowcaseProxy`, and `DecoyProjectionProxy` were allocated without calling `SetStaticMesh(...)`, leaving zero geometry in front of `DioramaCamera` to catch `HeroFlashlightSpot`.
+3. **Unclamped View Target & Unbuilt Floor 1 HISM**: `ADungeoneerGameMode::StartPlay()` neither spawned `ADungeoneerTileMapInstancer` nor disabled `bAutoManageActiveCameraTarget`, allowing pawn possession to override the diorama view target into empty dark space.
+4. **Missing `.umap` Level Targets**: Clicking `"ENTER THE CATACOMBS"` in `UDungeoneerMainMenuWidget` invoked `ServerTravel` to `/Game/Maps/L_DungeonRun` (not yet authored on disk), failing/reloading into emptiness instead of starting in the procedural dungeon.
+5. **No Default Character Visual Mesh or Direct Input Fallback**: `ADungeoneerCharacter` relied solely on unassigned Blueprint `UInputMappingContext` assets and had no default visual geometry or local lantern fill light.
+
+### Fixes & Verification (`v0.9.2`)
+- **Visible Diorama & HISM Dungeon Materials**: `AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()`, `ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()`, and `ADungeoneerCharacter::EnsureDefaultVisualsInitialized()` assign `/Engine/BasicShapes/{Plane,Cylinder,Cube}` meshes plus distinct `UMaterialInstanceDynamic` instances derived from `/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial` (`Color` + `Roughness`), paired with `DioramaAmbientFillLight`, `HeroLanternFillLight`, and `[0.25f, 2.0f]` camera auto-exposure bounds so scenes render clearly across integrated GPUs.
+- **In-Place Dungeon Transition & Zero-Allocation Controls**: `ADungeoneerGameMode::EnterLiveDungeonFromMenu()` collapses menu/lobby/footer widgets cleanly, hides the diorama stage, warps players into the selected procedural `ADungeoneerTileMapInstancer` room node, blends the camera smoothly onto `ADungeoneerCharacter`, and enables direct `WASD`/Arrow + Mouse flashlight aiming (`PollDirectKeyboardAndMouseFallback()`) when Enhanced Input DataAssets are absent.
+- Verified with `scripts/verify_architecture_invariants.py` (`85` tracked files, zero `Tick` allocations, zero banned symbols), rebuilt both `DarkDungeoneerEditor` and standalone `DarkDungeoneer.exe`, and passed all `8` headless UE `5.8.2` automation tests (`EXIT CODE: 0`).

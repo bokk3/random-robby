@@ -8,7 +8,9 @@
 
 class USpringArmComponent;
 class UCameraComponent;
+class UPointLightComponent;
 class USpotLightComponent;
+class UStaticMeshComponent;
 class UInputMappingContext;
 class UInputAction;
 class UDungeoneerMovementComponent;
@@ -46,6 +48,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Lighting")
 	USpotLightComponent* GetFlashlightComponent() const noexcept { return FlashlightComponent.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Lighting")
+	UPointLightComponent* GetHeroLanternFillLight() const noexcept { return HeroLanternFillLight.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Rendering")
+	UStaticMeshComponent* GetHeroVisualMesh() const noexcept { return HeroVisualMesh.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Sensory")
 	USensoryPerkComponent* GetSensoryPerkComponent() const noexcept { return SensoryPerkComponent.Get(); }
@@ -94,6 +102,8 @@ protected:
 	void HandleMoveCompleted(const FInputActionValue& Value);
 	void HandleAimInput(const FInputActionValue& Value);
 	void BindLocalInputContext();
+	void EnsureDefaultVisualsInitialized();
+	void PollDirectKeyboardAndMouseFallback() noexcept;
 	void SyncFlashlightTransform(float DeltaSeconds) noexcept;
 
 	UFUNCTION(Server, Unreliable)
@@ -107,6 +117,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lighting")
 	TObjectPtr<USpotLightComponent> FlashlightComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lighting")
+	TObjectPtr<UPointLightComponent> HeroLanternFillLight;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rendering")
+	TObjectPtr<UStaticMeshComponent> HeroVisualMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sensory")
 	TObjectPtr<USensoryPerkComponent> SensoryPerkComponent;

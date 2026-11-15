@@ -1,5 +1,6 @@
 #include "Misc/AutomationTest.h"
 #include "Core/DungeoneerTypes.h"
+#include "Core/DungeoneerGameMode.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerGameState.h"
 #include "AI/ZombieFastThrower.h"
@@ -24,6 +25,7 @@
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -252,9 +254,29 @@ bool FDungeoneerMenuAndSeedReplicationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Chrono conservation readout matches dPlayer==dThrower"), Footer->GetChronoConservationText().Contains(TEXT("-0.20 == dThrower +0.20")));
 
 	AMenuDioramaStageActor* Stage = TestWorld->SpawnActor<AMenuDioramaStageActor>();
+	Stage->EnsureShowcaseMeshesInitialized();
+	TestNotNull(TEXT("Diorama ShowcaseFloorMesh has non-null StaticMesh"), Stage->GetShowcaseFloorMesh() ? Stage->GetShowcaseFloorMesh()->GetStaticMesh().Get() : nullptr);
+	TestNotNull(TEXT("Diorama ExploderShowcaseProxy has non-null StaticMesh"), Stage->GetExploderShowcaseProxy() ? Stage->GetExploderShowcaseProxy()->GetStaticMesh().Get() : nullptr);
+	TestNotNull(TEXT("Diorama FastThrowerShowcaseProxy has non-null StaticMesh"), Stage->GetFastThrowerShowcaseProxy() ? Stage->GetFastThrowerShowcaseProxy()->GetStaticMesh().Get() : nullptr);
+	TestNotNull(TEXT("Diorama PhantasmMirrorShowcaseProxy has non-null StaticMesh"), Stage->GetPhantasmMirrorShowcaseProxy() ? Stage->GetPhantasmMirrorShowcaseProxy()->GetStaticMesh().Get() : nullptr);
+	TestNotNull(TEXT("Diorama DecoyProjectionProxy has non-null StaticMesh"), Stage->GetDecoyProjectionProxy() ? Stage->GetDecoyProjectionProxy()->GetStaticMesh().Get() : nullptr);
 	Stage->SetShowcaseModePreview(EDungeoneerMenuAction::MirrorTrial);
 	Stage->Tick(0.5f);
 	TestTrue(TEXT("Diorama flashlight sweeps smoothly toward NE"), Stage->GetCurrentFlashlightYawDeg() > 0.0f);
+
+	ADungeoneerGameMode* GM = TestWorld->SpawnActor<ADungeoneerGameMode>();
+	TestNotNull(TEXT("ADungeoneerGameMode spawned for in-place menu transition"), GM);
+	if (GM)
+	{
+		GM->EnterLiveDungeonFromMenu(EDungeoneerMenuAction::MirrorTrial);
+		TestNotNull(TEXT("EnterLiveDungeonFromMenu initialized ActiveTileMapInstancer"), GM->GetActiveTileMapInstancer());
+		if (GM->GetActiveTileMapInstancer())
+		{
+			TestTrue(TEXT("In-place transition built HISM floor and walls"),
+				GM->GetActiveTileMapInstancer()->GetFloorHISM()->GetInstanceCount() >= 9 &&
+				GM->GetActiveTileMapInstancer()->GetWallHISM()->GetInstanceCount() >= 8);
+		}
+	}
 
 	TestWorld->DestroyWorld(false);
 	return true;

@@ -1,4 +1,5 @@
 #include "UI/DungeoneerMainMenuWidget.h"
+#include "Core/DungeoneerGameMode.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/PackageName.h"
 
 UDungeoneerMainMenuWidget::UDungeoneerMainMenuWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -203,6 +205,15 @@ void UDungeoneerMainMenuWidget::ActivateSpecificAction(EDungeoneerMenuAction Act
 	const FName TargetMap = GetTargetTravelMapForAction(Action);
 	if (TargetMap.IsNone())
 	{
+		return;
+	}
+
+	if (!FPackageName::DoesPackageExist(TargetMap.ToString()))
+	{
+		if (ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			GM->EnterLiveDungeonFromMenu(Action);
+		}
 		return;
 	}
 
