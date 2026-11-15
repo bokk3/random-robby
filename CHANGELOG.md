@@ -7,9 +7,29 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- **v0.8.0 (Planned)**: UMG / CommonUI implementation of the Main Menu, live 2.5D Menu Diorama Stage, and Co-Op Lobby (tracked in [docs/TASKS.md](docs/TASKS.md)).
 - **v0.9.0 (Planned)**: In-game per-viewport Split-Screen HUD, 2PC Resting Ground trade modal, and UE material/MetaSound editor wiring.
 - **v1.0.0 (Planned)**: Full multi-floor vertical slice (`Entry -> Combat -> Mirror-Palace -> Resting Ground -> Deep Fog -> Loot Vault`).
+
+---
+
+## [0.8.0] - 2026-11-15
+
+### Added
+- **Main Menu & Co-Op Lobby UI (`TASK-801`–`TASK-804`)**:
+  - `UDungeoneerMainMenuWidget`: 8-entry C++ navigation stack (`EnterCatacombs`, `ContinueExpedition`, `CoopSplitScreen`, `SensoryLoadout`, `MirrorTrial`, `RestingGround`, `Options`, `Quit`) with optional UMG `BindWidgetOptional` hooks and server/client map travel dispatch.
+  - `AMenuDioramaStageActor`: Live `-60°` 2.5D diorama driving narrow-beam `USpotLightComponent` octant sweeps, Exploder CPD fuse pulse, Chrono-Gas haze toggle, Phantasm Mirror (`Stencil 104`), Decoy projection (`Stencil 106`), and deterministic phase-accumulated sonar pulses (`Stencil 105`).
+  - `UDungeoneerCoopLobbyWidget`: 4-slot co-op squad card polling `ULocalPlayer`, `UDungeoneerGameViewportClient`, `UDungeoneerLocalPlayerSubsystem` sensory tiers, and `UDungeoneerSocialSubsystem` friends/parties (zero `GetFirstPlayerController()`).
+  - `UDungeoneerMenuFooterWidget`: Live `0x%08X` replicated floor seed readout, deterministic `[R]` reroll, octant scalar speed telemetry, and Chrono-Leech conservation readout.
+- **Prediction, Shadow Proxy, Portal Budget & Fog Net Relevancy (Rules `05` & `06`)**:
+  - `FSavedMove_Dungeoneer` & `FNetworkPredictionData_Client_Dungeoneer` in `UDungeoneerMovementComponent`: `uint8` quantized `ChronoSlowRatio` client prediction & replay across Slo-Mo Gas boundaries.
+  - `U25DDirectionalRigComponent::ConfigureVolumetricShadowProxy`: Enforces `bRenderInMainPass = false`, `bCastHiddenShadow = true`, `CastShadow = true` on 2.5D shadow proxy primitives.
+  - `UMirrorCaptureBudgetSubsystem`: Round-robin `CaptureSceneDeferred()` mirror portal updates capped at `<= 2` portals/frame and scaled inversely by active local split-screen viewport count.
+  - `ADungeoneerGameState` (`FDungeonFloorSeed`): Replicated LCG floor seed driving client-local `UDungeonGeneratorSubsystem` synthesis, wired into `ADungeoneerGameMode`.
+  - `AZombieBase::IsNetRelevantFor` & `SetNetUpdateFrequency`: Culls fog-occluded zombies outside flashlight cones, `DarkVisionRadius`, and `HearingPulseRadius`, enforces non-replicated mirror decoys, and throttles occluded net frequency (`2.0f` vs `15.0f`).
+- **Verification**:
+  - Added `DarkDungeoneer.Social.TradeTwoPhaseCommitRollbackAndCommit` (`TradeTwoPhaseCommitTest`) and `DarkDungeoneer.UI.MenuNavigationAndFloorSeedDeterminism` in `DungeoneerVerificationSpecs.cpp`.
+  - Expanded `scripts/verify_architecture_invariants.py` (`73` verified files, zero `Tick` allocations, zero banned symbols).
+  - Compiled `DarkDungeoneerEditor (Win64 Development)` on UE `5.8.2` (`V7`) and passed all 5 headless `UnrealEditor-Cmd.exe` specs (`EXIT CODE: 0`).
 
 ---
 

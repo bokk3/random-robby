@@ -45,3 +45,22 @@ With those fixes, `DarkDungeoneerEditor (Win64 Development)` compiled cleanly in
 ### Main Menu Visual Direction (`v0.7.1` -> Next: `v0.8.0`)
 - To establish a concrete UI target before building CommonUI/UMG blueprints, we designed [`MENU_MOCKUP.md`](MENU_MOCKUP.md) (`docs/assets/dark_dungeoneer_menu_concept.png`) using our actual Pro-generated sprites under directional flashlight + Chrono-Gas lighting, paired with an interactive multi-tab prototype (`docs/assets/dark_dungeoneer_menu_mockup.html`).
 - Next step (`v0.8.0`): implement `TASK-801` through `TASK-804` (`UDungeoneerMainMenuWidget`, `AMenuDioramaStageActor`, `UDungeoneerCoopLobbyWidget`, `UDungeoneerMenuFooterWidget`) and extend automated tests to cover `TradeTwoPhaseCommitTest`.
+
+---
+
+## Devlog #04 (`v0.8.0`) — Main Menu, Live 2.5D Diorama, Prediction & Seed-Only Replication
+
+### Turning `MENU_MOCKUP.md` into C++20 UI Modules (`TASK-801` – `TASK-804`)
+- Implemented all four `v0.8.0` UI classes purely in C++ (`Source/DarkDungeoneer/{Public,Private}/UI/`) using `BindWidgetOptional` fields so future data-only UMG Blueprint shells can style buttons and typography without placing gameplay logic in Blueprint graphs.
+- `AMenuDioramaStageActor` reuses the `-60°` pitched dungeon camera, Hero narrow-cone `USpotLightComponent` interpolation across compass octants, Exploder CPD ignition pulses, Chrono-Gas mist toggles, `Stencil 104` Phantasm / `Stencil 106` Decoy cutouts, and deterministic phase-accumulated `Stencil 105` sonar bursts without `FTimerHandle` or `GetAllActorsOfClass`.
+- `UDungeoneerCoopLobbyWidget` strictly reads `UGameInstance::GetLocalPlayers()`, `UDungeoneerLocalPlayerSubsystem`, `UDungeoneerGameViewportClient`, and `UDungeoneerSocialSubsystem`, ensuring multi-viewport sensory badges (`Dark Vision`, `Acute Hearing`, `Scent / Thermal`) stay isolated per split-screen pane.
+
+### Multiplayer Prediction, Portal Budgeting & Fog Net Culling (Rules `05` & `06`)
+- Added `FSavedMove_Dungeoneer` + `FNetworkPredictionData_Client_Dungeoneer` packing a quantized `uint8` `ChronoSlowRatio` (`0–255` over `[0, MaxChronoSlowRatio]`) into `FSavedMove_Character` moves so clients stepping across `AHazardZone_ChronoGas` boundaries replay movement deterministically without rubber-banding.
+- Added `U25DDirectionalRigComponent::ConfigureVolumetricShadowProxy` to standardize hidden shadow-casting primitives (`bRenderInMainPass = false`, `bCastHiddenShadow = true`, `CastShadow = true`) under flashlight lighting.
+- Added `UMirrorCaptureBudgetSubsystem` (`UTickableWorldSubsystem`) managing `AMirrorWall_Phantasm` reflection captures round-robin via `CaptureSceneDeferred()`, capped at `<= 2` portals per frame and inversely scaled when `2P–4P` local split-screen viewports are active.
+- Replicated dungeon seeds cleanly through `ADungeoneerGameState` (`FDungeonFloorSeed` + LCG `[R]` rerolls) rather than replicating individual dungeon geometry, and overrode `AZombieBase::IsNetRelevantFor` + dynamic `SetNetUpdateFrequency(15.0f` vs `2.0f)` so zombies shrouded in darkness outside flashlight cones, `DarkVisionRadius`, and active acoustic pulses are culled from unnecessary replication while `AMirrorDecoyNode` clones remain strictly client-side.
+
+### Verification (`v0.8.0`)
+- Added `DarkDungeoneer.Social.TradeTwoPhaseCommitRollbackAndCommit` verifying insufficient-gold rollback (unlocking both parties' items with zero duplication) alongside atomic swap commit, plus `DarkDungeoneer.UI.MenuNavigationAndFloorSeedDeterminism` covering `FSavedMove_Dungeoneer` byte quantization, menu navigation wrap-around, LCG seed determinism, portal capture budgeting, and diorama spotlight interpolation.
+- Rebuilt `DarkDungeoneerEditor (Win64 Development)` on UE `5.8.2` (`BuildSettingsVersion.V7`), passed `scripts/verify_architecture_invariants.py` (`73` files verified), and passed all 5 headless automation specs in `UnrealEditor-Cmd.exe` (`EXIT CODE: 0`).
