@@ -407,10 +407,20 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 			TestEqual(TEXT("Extracted Floor_Tile0_D configured to TEXTUREGROUP_Pixels2D"), static_cast<TextureGroup>(FloorTileTex->LODGroup), TEXTUREGROUP_Pixels2D);
 		}
 		TestNotNull(TEXT("Extracted Hero_Cell0_D cached"), Bootstrap->GetExtractedCellTexture(FName(TEXT("Hero_Cell0_D"))));
+		UTexture2D* HeroCell0Mask = Bootstrap->GetSpriteMaskTexture(FName(TEXT("Hero_Cell0_D")));
+		TestNotNull(TEXT("Hero_Cell0_D silhouette mask cached"), HeroCell0Mask);
+		UTexture2D* HeroRow1Mask = Bootstrap->GetSpriteMaskTexture(FName(TEXT("Hero_Row1_D")));
+		TestNotNull(TEXT("Hero_Row1_D silhouette mask cached"), HeroRow1Mask);
 		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds HISM textured material"),
 			Bootstrap->CreateDungeonOrRigMaterial(Bootstrap, FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor::White, 0.72f, true));
-		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds masked two-sided Hero sprite material"),
-			Bootstrap->CreateDungeonOrRigMaterial(Bootstrap, FName(TEXT("Hero_Row1_D")), FName(TEXT("Hero_Row1_N")), FLinearColor::White, 0.45f, false, true));
+		UMaterialInstanceDynamic* HeroMaskedMID = Bootstrap->CreateDungeonOrRigMaterial(
+			Bootstrap, FName(TEXT("Hero_Row1_D")), FName(TEXT("Hero_Row1_N")), FLinearColor::White, 0.45f, false, true);
+		TestNotNull(TEXT("CreateDungeonOrRigMaterial builds masked two-sided Hero sprite material"), HeroMaskedMID);
+		if (HeroMaskedMID && HeroRow1Mask)
+		{
+			TestTrue(TEXT("Masked Hero sprite binds silhouette mask texture to OpacityMask parameter"),
+				HeroMaskedMID->K2_GetTextureParameterValue(FName(TEXT("OpacityMask"))) == HeroRow1Mask);
+		}
 
 		UTexture2D* HeroDiffuse = Bootstrap->GetLoadedRigTexture(FName(TEXT("Hero_D")));
 		TestNotNull(TEXT("Hero_D texture present in cache"), HeroDiffuse);

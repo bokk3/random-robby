@@ -72,6 +72,7 @@ void UDungeoneerAssetBootstrapSubsystem::Deinitialize()
 	LoadedRigTextures.Reset();
 	LoadedDungeonTextures.Reset();
 	ExtractedCellTextures.Reset();
+	SpriteMaskTextures.Reset();
 	LoadedVoiceStems.Reset();
 	SensoryMPC = nullptr;
 	MaterialConfigAsset = nullptr;
@@ -261,12 +262,12 @@ void UDungeoneerAssetBootstrapSubsystem::ComputeSpritePlaneOrientation() const n
 	const FVector Nrm = LocalNormal.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 0.0, 1.0));
 	const FVector E2 = FVector::CrossProduct(Nrm, E1).GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 1.0, 0.0));
 
-	// Desired world frame for -60 deg pitched camera looking along +X:
-	// - Sprite head (V=0) above boots (V=1): WorldUp = (0.5, 0.0, 0.8660254)
-	// - Plane front (+Z) tilted toward camera:   WorldNormal = (-0.8660254, 0.0, 0.5)
+	// Desired world frame for 45 deg 2.5D billboard tilt toward the -60 deg camera looking along +X:
+	// - Sprite head (V=0) above boots (V=1): WorldUp = (0.7071068, 0.0, 0.7071068)
+	// - Plane front (+Z) tilted toward camera:   WorldNormal = (-0.7071068, 0.0, 0.7071068)
 	// - Cross(WorldNormal, WorldUp) = (0, +1, 0) = Screen Right (+Y)
-	const FVector WorldUp = FVector(0.5, 0.0, 0.8660254037844386).GetSafeNormal();
-	const FVector WorldNormal = FVector(-0.8660254037844386, 0.0, 0.5).GetSafeNormal();
+	const FVector WorldUp = FVector(0.7071067811865475, 0.0, 0.7071067811865475).GetSafeNormal();
+	const FVector WorldNormal = FVector(-0.7071067811865475, 0.0, 0.7071067811865475).GetSafeNormal();
 	const FVector WorldRight = FVector::CrossProduct(WorldNormal, WorldUp).GetSafeNormal();
 
 	FMatrix SrcMat = FMatrix::Identity;
@@ -375,6 +376,10 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		if (TObjectPtr<UTexture2D>* Src = ExtractedCellTextures.Find(FName(SourceKey)))
 		{
 			ExtractedCellTextures.Add(FName(AliasKey), *Src);
+		}
+		if (TObjectPtr<UTexture2D>* SrcMask = SpriteMaskTextures.Find(FName(SourceKey)))
+		{
+			SpriteMaskTextures.Add(FName(AliasKey), *SrcMask);
 		}
 	};
 	AliasCellKey(TEXT("Hero_Cell0_D"),     TEXT("Hero_Row0_D"));
@@ -494,6 +499,44 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::ExtractAtlasCellTexture(
 
 	FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(CellTex, bIsNormalMap, bSRGB);
 	ExtractedCellTextures.Add(CacheKey, CellTex);
+
+	if (bIsCharacterSprite && !bIsNormalMap)
+	{
+		if (UTexture2D* MaskTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8))
+		{
+			FTexturePlatformData* MaskPlatformData = MaskTex->GetPlatformData();
+			if (MaskPlatformData && MaskPlatformData->Mips.Num() > 0)
+			{
+				FTexture2DMipMap& MaskMip = MaskPlatformData->Mips[0];
+				if (uint8* MaskBytes = static_cast<uint8*>(MaskMip.BulkData.Lock(LOCK_READ_WRITE)))
+				{
+					for (int32 RowY = 0; RowY < CellHeight; ++RowY)
+					{
+						const uint8* SrcRow = SrcBase + static_cast<int64>(StartY + RowY) * SrcStride + static_cast<int64>(StartX) * 4;
+						uint8* MaskRow = MaskBytes + static_cast<int64>(RowY) * DestStride;
+						for (int32 ColX = 0; ColX < CellWidth; ++ColX)
+						{
+							const int32 SrcCol = bMirrorHorizontal ? (CellWidth - 1 - ColX) : ColX;
+							const uint8 AlphaByte = SrcRow[SrcCol * 4 + 3];
+							const uint8 MaskVal = (AlphaByte >= 64) ? 255 : 0;
+							MaskRow[ColX * 4 + 0] = MaskVal;
+							MaskRow[ColX * 4 + 1] = MaskVal;
+							MaskRow[ColX * 4 + 2] = MaskVal;
+							MaskRow[ColX * 4 + 3] = MaskVal;
+						}
+					}
+					MaskMip.BulkData.Unlock();
+					FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(MaskTex, false, false);
+					SpriteMaskTextures.Add(CacheKey, MaskTex);
+				}
+				else
+				{
+					MaskMip.BulkData.Unlock();
+				}
+			}
+		}
+	}
+
 	return CellTex;
 }
 
@@ -541,23 +584,10 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 	{
 		if (bUseMaskedCutout && !bForHISM)
 		{
-			if (UMaterialInterface* MaskedPhongMat = LoadObject<UMaterialInterface>(
-				nullptr, TEXT("/Engine/Engine_MI_Shaders/M_ES_Phong_Masked_Master_2sided.M_ES_Phong_Masked_Master_2sided")))
+			UTexture2D* MaskTex = GetSpriteMaskTexture(DiffuseKey);
+			if (!MaskTex)
 			{
-				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedPhongMat, EffectiveOuter))
-				{
-					MID->SetTextureParameterValue(FName(TEXT("Diffuse_01")), DiffuseTex);
-					if (NormalTex)
-					{
-						MID->SetTextureParameterValue(FName(TEXT("Normal_01")), NormalTex);
-					}
-					if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse_01"))) == DiffuseTex)
-					{
-						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
-						MID->SetVectorParameterValue(FName(TEXT("Diffuse_01_Color")), SubtleTint);
-						return MID;
-					}
-				}
+				MaskTex = DiffuseTex;
 			}
 
 			if (UMaterialInterface* MaskedSimpleMat = LoadObject<UMaterialInterface>(
@@ -566,6 +596,7 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedSimpleMat, EffectiveOuter))
 				{
 					MID->SetTextureParameterValue(FName(TEXT("Diffuse")), DiffuseTex);
+					MID->SetTextureParameterValue(FName(TEXT("OpacityMask")), MaskTex);
 					if (NormalTex)
 					{
 						MID->SetTextureParameterValue(FName(TEXT("Normal")), NormalTex);
@@ -575,6 +606,26 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
 						MID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), SubtleTint);
 						MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+						return MID;
+					}
+				}
+			}
+
+			if (UMaterialInterface* MaskedPhongMat = LoadObject<UMaterialInterface>(
+				nullptr, TEXT("/Engine/Engine_MI_Shaders/M_ES_Phong_Masked_Master_2sided.M_ES_Phong_Masked_Master_2sided")))
+			{
+				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedPhongMat, EffectiveOuter))
+				{
+					MID->SetTextureParameterValue(FName(TEXT("Diffuse_01")), DiffuseTex);
+					MID->SetTextureParameterValue(FName(TEXT("OpacityMask")), MaskTex);
+					if (NormalTex)
+					{
+						MID->SetTextureParameterValue(FName(TEXT("Normal_01")), NormalTex);
+					}
+					if (MID->K2_GetTextureParameterValue(FName(TEXT("Diffuse_01"))) == DiffuseTex)
+					{
+						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
+						MID->SetVectorParameterValue(FName(TEXT("Diffuse_01_Color")), SubtleTint);
 						return MID;
 					}
 				}
@@ -792,6 +843,12 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetLoadedDungeonTexture(FName Ke
 UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetExtractedCellTexture(FName Key) const noexcept
 {
 	const TObjectPtr<UTexture2D>* Found = ExtractedCellTextures.Find(Key);
+	return Found ? Found->Get() : nullptr;
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetSpriteMaskTexture(FName DiffuseKey) const noexcept
+{
+	const TObjectPtr<UTexture2D>* Found = SpriteMaskTextures.Find(DiffuseKey);
 	return Found ? Found->Get() : nullptr;
 }
 

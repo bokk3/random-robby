@@ -68,7 +68,7 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 
 	HeroLanternFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("HeroLanternFillLight"));
 	HeroLanternFillLight->SetupAttachment(RootComponent);
-	HeroLanternFillLight->SetRelativeLocation(FVector(0.0f, 0.0f, 95.0f));
+	HeroLanternFillLight->SetRelativeLocation(FVector(-65.0f, 0.0f, 110.0f));
 	HeroLanternFillLight->SetIntensity(4800.0f);
 	HeroLanternFillLight->SetAttenuationRadius(1100.0f);
 	HeroLanternFillLight->SetLightColor(FLinearColor(1.0f, 0.84f, 0.55f));
@@ -84,6 +84,7 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
 	HeroVisualMesh->SetRelativeScale3D(FVector(1.65, 1.65, 1.65));
 	HeroVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HeroVisualMesh->SetCastShadow(false);
 
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
@@ -108,6 +109,7 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 	}
 	HeroVisualMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
 	HeroVisualMesh->SetRelativeScale3D(FVector(1.65, 1.65, 1.65));
+	HeroVisualMesh->SetCastShadow(false);
 
 	if (!bTexturedVisualsApplied)
 	{

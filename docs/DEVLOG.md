@@ -163,3 +163,16 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
 - Compiled `DarkDungeoneerEditor Win64 Development` (`15` actions, exit code `0`) and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`, `14` actions, exit code `0`) cleanly.
 - Verified `python scripts/verify_architecture_invariants.py` (`ALL CHECKS PASSED: 85 core/subsystem/tool files verified`).
 - Verified all `8` headless UE `5.8.2` automation tests passed (`EXIT CODE: 0`), including updated `40`-cell bootstrap checks, `OctantToScreenDirectionalRow`, all 12 `*_Row{0..3}_D` textures, plane normal orientation, and masked 2-sided Hero `MID` verification.
+
+---
+
+## Devlog #10 — Solving Invisible Masked Cutout Sprites via `OpacityMask` Synthesis (`v0.9.5`)
+
+### Root Cause Diagnosis
+- After `v0.9.4`, characters and zombies disappeared entirely because switching `CreateDungeonOrRigMaterial` to UE 5.8's built-in masked two-sided shaders (`M_ES_Phong_Masked_Master_2sided` and `M_Shader_SimpleMaskedTwoSided`) left their `OpacityMask` parameter unbound.
+- Inspecting the `.uasset` expression wiring showed both shaders read `OpacityMask` from a dedicated `TextureSampleParameter2D` (`ParameterName = OpacityMask`, `Opacity Mask Channel` defaulting to Red) whose default asset is black `/Engine/Engine_MI_Shaders/T_Emissive` rather than `Diffuse.Alpha`, discarding every fragment against `OpacityMaskClipValue`.
+
+### Implementation & Verification
+- **Silhouette Mask Generation (`DungeoneerAssetBootstrapSubsystem`)**: Added `SpriteMaskTextures` (`UPROPERTY(Transient)`) and `GetSpriteMaskTexture(DiffuseKey)` so every extracted character diffuse cell (`bIsCharacterSprite && !bIsNormalMap`, honoring `bMirrorHorizontal` and `*_Cell0_D` aliases) produces a crisp nearest-filtered `TC_Masks` silhouette texture (`255` where `Alpha >= 64`, `0` otherwise).
+- **Masked Shader Binding & Billboard Lighting**: Updated `CreateDungeonOrRigMaterial` to prefer `M_Shader_SimpleMaskedTwoSided` and bind `OpacityMask` alongside `Diffuse`/`Normal`, tilted `ComputeSpritePlaneOrientation` to a `45°` billboard (`WorldUp = (0.7071, 0, 0.7071)`, `WorldNormal = (-0.7071, 0, 0.7071)`), set `SetCastShadow(false)` on `HeroVisualMesh` and `ZombieVisualMesh` to eliminate self-shadowing against local lights, and shifted `HeroLanternFillLight` (`(-65, 0, 110)`) and `ZombieEmissiveLight` (`(-45, 0, 65)`) in front of the billboards.
+- **Verification**: Expanded `DungeoneerVerificationSpecs.cpp` (`HUDAndTradeModalAndAssetBootstrap`) to verify cached `Hero_Cell0_D`/`Hero_Row1_D` masks and exact `OpacityMask` binding (`K2_GetTextureParameterValue`); rebuilt `DarkDungeoneerEditor` (`10` actions) and `DarkDungeoneer` (`9` actions) with exit code `0`, passed `verify_architecture_invariants.py` (`85` files), and passed all `8` headless UE `5.8.2` specs (`EXIT CODE: 0`).

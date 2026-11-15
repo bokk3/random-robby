@@ -93,6 +93,9 @@ public:
 	UTexture2D* GetExtractedCellTexture(FName Key) const noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	UTexture2D* GetSpriteMaskTexture(FName DiffuseKey) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
 	USoundWave* GetLoadedVoiceStem(FName Key) const noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
@@ -132,6 +135,9 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UTexture2D>> ExtractedCellTextures;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> SpriteMaskTextures;
 
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<USoundWave>> LoadedVoiceStems;

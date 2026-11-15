@@ -27,10 +27,11 @@ AZombieBase::AZombieBase()
 	ZombieVisualMesh->SetupAttachment(RootComponent);
 	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, 8.0));
 	ZombieVisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ZombieVisualMesh->SetCastShadow(false);
 
 	ZombieEmissiveLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ZombieEmissiveLight"));
 	ZombieEmissiveLight->SetupAttachment(RootComponent);
-	ZombieEmissiveLight->SetRelativeLocation(FVector(0.0, 0.0, 50.0));
+	ZombieEmissiveLight->SetRelativeLocation(FVector(-45.0, 0.0, 65.0));
 	ZombieEmissiveLight->SetIntensity(1100.0f);
 	ZombieEmissiveLight->SetAttenuationRadius(360.0f);
 	ZombieEmissiveLight->CastShadows = false;
@@ -60,6 +61,7 @@ void AZombieBase::EnsureVisualMeshInitialized()
 	}
 	ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, 8.0));
 	ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale());
+	ZombieVisualMesh->SetCastShadow(false);
 
 	const FLinearColor Tint = GetArchetypeVisualTint();
 	if (ZombieEmissiveLight)

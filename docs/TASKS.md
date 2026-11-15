@@ -1,6 +1,6 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `0.9.4` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `0.9.5` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
@@ -24,6 +24,7 @@
 | `v0.9.2` | Startup Black-Screen Fix, Visible Diorama/HISM Materials & In-Place Dungeon Play | Done | `/Engine/Maps/Entry`, `AMenuDioramaStageActor` meshes/fill light, `ADungeoneerCharacter` hero mesh + WASD/mouse fallback, `ADungeoneerGameMode::EnterLiveDungeonFromMenu`, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.3` | Dungeon Texture Bootstrap, 4-Axis Corridor Carving & Live Room Encounters | Done | `UDungeoneerAssetBootstrapSubsystem` single-cell extraction + textured HISM/rig materials, carved doorways, deduplicated corridors, `AZombieBase`/encounter visuals & spawner, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v0.9.4` | Camera-Relative 2.5D Facing & Integrated-GPU Dynamic Lighting | Done | `OctantToScreenDirectionalRow`, 4-row `Hero`/`Exploder`/`Thrower` extraction, masked 2-sided `Plane.Plane` cutouts, idle-mouse arbitration, Lumen/VSM/TSR removal preserving dynamic flashlight & Volumetric Fog, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
+| `v0.9.5` | Cutout Silhouette `OpacityMask` Fix & Billboard Front-Fill Lighting | Done | `SpriteMaskTextures` transient silhouette extraction (`GetSpriteMaskTexture`), `OpacityMask` parameter binding on `M_Shader_SimpleMaskedTwoSided` / `M_ES_Phong_Masked_Master_2sided`, `45°` plane tilt, `SetCastShadow(false)` & front-positioned fill lights, 8 UE 5.8.2 specs (`EXIT CODE: 0`) |
 
 ---
 
@@ -111,6 +112,12 @@
 - [x] **`TASK-910` — Integrated-GPU (`Intel HD 520`) Rendering Optimization Preserving Dynamic Lighting**
   - **Files**: `Config/DefaultEngine.ini`, `Source/DarkDungeoneer/Private/Core/DungeoneerGameMode.cpp`, `Private/Dungeon/DungeonEncounterActors.cpp`, `Private/UI/MenuDioramaStageActor.cpp`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Launch-DarkDungeoneer.bat`
   - **Scope**: Disable Lumen GI/reflections, Virtual Shadow Maps, DistanceField AO/Shadowing, Capsule Shadows, and TSR in INI and via `ADungeoneerGameMode::ApplyLowSpecDynamicLightingCVars` (`ECVF_SetByCode`), preserve dynamic flashlight shadows & Volumetric Fog with lighter froxel budgets (`GridPixelSize=16`, `GridSizeZ=64`, `HistoryMissSupersampleCount=1`), FXAA, `r.ScreenPercentage=75`, `t.MaxFPS=60`, `1280x720` launcher resolution, disable shadows on `CampfireLight` and diorama fill spot, and cull HISM instances (`SetCullDistances(0, 3800)`).
+
+### Milestone `v0.9.5` — Cutout Silhouette `OpacityMask` Fix & Billboard Front-Fill Lighting
+
+- [x] **`TASK-911` — Silhouette Mask Texture Synthesis, `OpacityMask` Shader Binding & Cutout Lighting**
+  - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerAssetBootstrapSubsystem.h`, `Private/Core/DungeoneerAssetBootstrapSubsystem.cpp`, `Private/Core/DungeoneerCharacter.cpp`, `Private/AI/ZombieBase.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
+  - **Scope**: Add `SpriteMaskTextures` / `GetSpriteMaskTexture` in `UDungeoneerAssetBootstrapSubsystem` generating crisp binary alpha silhouette masks for extracted character rows (including mirrored cells and `Cell0` aliases), prefer `/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided` and bind `OpacityMask` across both masked two-sided engine shaders so sprite cutouts no longer clip against black `T_Emissive`, tilt cutout planes to `45°`, set `SetCastShadow(false)` on hero/zombie cutout meshes, shift `HeroLanternFillLight` (`(-65, 0, 110)`) and `ZombieEmissiveLight` (`(-45, 0, 65)`) in front of billboards, and verify `OpacityMask` binding in `DungeoneerVerificationSpecs.cpp`.
 
 ---
 

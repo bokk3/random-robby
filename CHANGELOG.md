@@ -11,6 +11,21 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ---
 
+## [0.9.5] - 2026-11-15
+
+### Fixed
+- **Visible Character & Zombie 2.5D Cutout Sprites (`OpacityMask` Texture Extraction & Binding)**:
+  - Diagnosed invisible `HeroVisualMesh` / `ZombieVisualMesh` cutouts from `v0.9.4`: both `/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided` and `/Engine/Engine_MI_Shaders/M_ES_Phong_Masked_Master_2sided` drive `OpacityMask` from a separate `MaterialExpressionTextureSampleParameter2D` named `OpacityMask` (defaulting to solid black `/Engine/Engine_MI_Shaders/T_Emissive`), causing every masked pixel to evaluate `0.0 < OpacityMaskClipValue` and clip.
+  - Added `UDungeoneerAssetBootstrapSubsystem::SpriteMaskTextures` and `GetSpriteMaskTexture(FName DiffuseKey)` in `DungeoneerAssetBootstrapSubsystem.h/.cpp`; `ExtractAtlasCellTexture` now synthesizes transient silhouette mask textures (`B = G = R = A = (Alpha >= 64) ? 255 : 0`) matching each extracted character row (including `bMirrorHorizontal` and `*_Cell0_D` aliases).
+  - Updated `UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRigMaterial` to prefer `/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided` first and bind `OpacityMask` to `MaskTex` across both masked two-sided engine shaders.
+  - Updated `ComputeSpritePlaneOrientation` to tilt cutout planes at `45°` (`WorldUp = (0.7071, 0, 0.7071)`, `WorldNormal = (-0.7071, 0, 0.7071)`), disabled shadow casting on `HeroVisualMesh` (`ADungeoneerCharacter`) and `ZombieVisualMesh` (`AZombieBase`) to prevent plane self-shadowing, and positioned `HeroLanternFillLight` (`(-65, 0, 110)`) and `ZombieEmissiveLight` (`(-45, 0, 65)`) in front of the camera-facing side of the cutout billboards.
+
+### Verified
+- Added assertions in `DungeoneerVerificationSpecs.cpp` (`HUDAndTradeModalAndAssetBootstrap`) verifying non-null `Hero_Cell0_D` and `Hero_Row1_D` silhouette masks and confirming `HeroMaskedMID->K2_GetTextureParameterValue(TEXT("OpacityMask"))` matches `HeroRow1Mask`.
+- `DarkDungeoneerEditor Win64 Development` (`10` actions) and `DarkDungeoneer Win64 Development` (`9` actions) compiled cleanly, `python scripts/verify_architecture_invariants.py` exited `0` (`85` files verified), and all `8` headless UE `5.8.2` automation tests passed (`EXIT CODE: 0`).
+
+---
+
 ## [0.9.4] - 2026-11-15
 
 ### Fixed
