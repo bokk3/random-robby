@@ -4,7 +4,7 @@ A top-down **2.5D cooperative dark dungeon crawler** built in **Unreal Engine 5.
 
 Players navigate pitch-black procedural multi-floor dungeons armed with a directional flashlight cone, sensory upgrades, 8-compass 2.5D sprite animation, and mirror-bouncing light mechanics while surviving proximity-exploding and elemental-throwing undead.
 
-> **Current Version:** `1.3.0` (Tactical Depth, Relics, Crypt Guardians & Gothic UI Release)
+> **Current Version:** `1.4.0` (2P Split-Screen Co-Op, P2P 2PC Trading, Meta-Ledger Save & Shipping Release)
 
 ---
 
@@ -46,12 +46,15 @@ Players navigate pitch-black procedural multi-floor dungeons armed with a direct
 
 ## Controls
 
-| Action | Keys / Input |
-| :--- | :--- |
-| **Move (8-Compass)** | `W A S D` or Arrow Keys |
-| **Lantern Blade Cleave** | `Left Mouse Button`, `Space`, or `J` |
-| **Dodge Dash (i-frames)** | `Left/Right Shift`, `K`, or `Right Mouse Button` |
-| **Interact / Buy / Descend** | `F` or `E` |
+| Action | Player 1 | Player 2 (Split-Screen) |
+| :--- | :--- | :--- |
+| **Move (8-Compass)** | `W A S D` | `Up Down Left Right` Arrows |
+| **Lantern Blade Combo** | `Left Mouse Button`, `Space`, or `J` | `Right Ctrl`, `Enter`, or `NumPad 0` |
+| **Charged Lantern Flare** | `R` | `Right Bracket` (`]`) or `NumPad 4` |
+| **Dodge Dash (i-frames)** | `Left Shift`, `K`, or `Right Mouse` | `Right Shift` or `NumPad 1` |
+| **Interact / Revive / Buy / Descend** | `F` or `E` | `Backslash` (`\`) or `NumPad 2` |
+| **Quick Oil / Antidote** | `Q` / `1` &bull; `C` / `2` | — |
+| **Co-Op P2P Swap / 2P Drop-In** | `T` (Swap) &bull; `F2` (Join P2) | `P` or `NumPad 3` |
 
 ---
 

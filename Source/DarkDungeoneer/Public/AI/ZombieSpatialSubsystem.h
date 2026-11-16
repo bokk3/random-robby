@@ -69,6 +69,11 @@ public:
 		return (Index >= 0 && Index < NumTrackedPlayers) ? TrackedPlayers[Index].Get() : nullptr;
 	}
 
+	/** Co-Op helpers over tracked players (zero heap allocations). */
+	int32 GetAliveOtherPlayerCount(const ADungeoneerCharacter* ExcludePlayer) const noexcept;
+	ADungeoneerCharacter* FindNearestDownedAlly(const ADungeoneerCharacter* QueryPlayer, float MaxRangeUU) const noexcept;
+	ADungeoneerCharacter* FindNearestLivingAlly(const ADungeoneerCharacter* QueryPlayer, float MaxRangeUU) const noexcept;
+
 	/** Zero-allocation read-only accessors over registered zombies for melee/AOE hit resolution. */
 	int32 GetTrackedZombieCount() const noexcept { return NumTrackedZombies; }
 	AZombieBase* GetTrackedZombieAt(int32 Index) const noexcept

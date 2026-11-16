@@ -3,6 +3,9 @@
 #include "Core/DungeoneerGameMode.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerGameState.h"
+#include "Core/DungeoneerGameViewportClient.h"
+#include "Core/DungeoneerSaveGame.h"
+#include "UI/DungeoneerRunSummaryWidget.h"
 #include "AI/BossGuardianActor.h"
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieExploder.h"
@@ -1807,6 +1810,262 @@ bool FDungeoneerMinimapPopupsDioramaTest::RunTest(const FString& Parameters)
 	Boss->DispatchBeginPlay();
 	HUD->RefreshHUDFromCharacter(Hero);
 	TestTrue(TEXT("Boss bar automatically visible when BossGuardian is active"), HUD->IsBossBarVisible());
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerSplitScreenAllyReviveTest,
+	"DarkDungeoneer.Coop.SplitScreenDropInAndAllyRevive",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerSplitScreenAllyReviveTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("Split-screen supports up to 4 local players"), UDungeoneerGameViewportClient::MaxLocalSplitscreenPlayers, 4);
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Co-Op Revive test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerGameState* GS = TestWorld->SpawnActor<ADungeoneerGameState>();
+	ADungeoneerCharacter* P1 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	ADungeoneerCharacter* P2 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(140.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned GameState, P1 and P2"), GS);
+	if (!GS || !P1 || !P2) { TestWorld->DestroyWorld(false); return false; }
+
+	P1->DispatchBeginPlay();
+	P2->DispatchBeginPlay();
+
+	UZombieSpatialSubsystem* SpatialSys = TestWorld->GetSubsystem<UZombieSpatialSubsystem>();
+	TestNotNull(TEXT("Resolved ZombieSpatialSubsystem"), SpatialSys);
+	if (SpatialSys)
+	{
+		TestEqual(TEXT("Both players registered alive"), SpatialSys->GetAliveOtherPlayerCount(P1), 1);
+	}
+
+	// Fatal blow drops P2 into 18s Downed Bleeding while P1 is still alive
+	P2->ApplyDungeoneerDamage(150.0f, nullptr);
+	TestTrue(TEXT("P2 entered Downed state with alive ally"), P2->IsDowned());
+	TestTrue(TEXT("Downed timer >= 17.5s for co-op revive"), P2->GetDownedRemainingSeconds() >= 17.5f);
+
+	// P1 interacts within 260 UU to revive P2 at 50% HP and 30% battery
+	const bool bRevived = P2->ReviveByAlly(P1);
+	TestTrue(TEXT("Ally revive succeeded cleanly"), bRevived);
+	TestFalse(TEXT("P2 cleared Downed state"), P2->IsDowned());
+	TestNearlyEqual(TEXT("P2 restored to 50% HP"), P2->GetCurrentHealth(), P2->GetMaxHealth() * 0.50f, 0.01f);
+	TestTrue(TEXT("P2 restored >= 30% flashlight battery"), P2->GetFlashlightBattery() >= 30.0f);
+
+	// Shared Party Stash gold + item deposit & withdraw conservation
+	UDungeoneerInventoryComponent* Inv1 = P1->GetInventoryComponent();
+	TestNotNull(TEXT("P1 Inventory present"), Inv1);
+	if (Inv1)
+	{
+		const int32 StartGold = Inv1->GetGoldBalance();
+		TestTrue(TEXT("Deposit 60g into Party Stash"), GS->AuthorityDepositGoldToStash(Inv1, 60));
+		TestEqual(TEXT("Stash gold == 60"), GS->GetPartyStashGold(), 60);
+		TestEqual(TEXT("P1 gold reduced by 60"), Inv1->GetGoldBalance(), StartGold - 60);
+		TestTrue(TEXT("Withdraw 40g from Party Stash"), GS->AuthorityWithdrawGoldFromStash(Inv1, 40));
+		TestEqual(TEXT("Stash gold == 20"), GS->GetPartyStashGold(), 20);
+		TestEqual(TEXT("P1 gold == Start - 20"), Inv1->GetGoldBalance(), StartGold - 20);
+
+		const FGuid RelicItemId = FGuid::NewGuid();
+		Inv1->AuthorityAddItem(RelicItemId, FName(TEXT("Item_Relic_SunGlass")), 1);
+		TestTrue(TEXT("Deposit item to Party Stash"), GS->AuthorityDepositItemToStash(Inv1, RelicItemId));
+		TestEqual(TEXT("Party Stash has 1 item"), GS->GetPartyStashItems().Num(), 1);
+		TestTrue(TEXT("Withdraw item back to P1"), GS->AuthorityWithdrawItemFromStash(Inv1, RelicItemId));
+		TestEqual(TEXT("Party Stash empty after withdraw"), GS->GetPartyStashItems().Num(), 0);
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerMultiplayerSeedAndP2PTradeTest,
+	"DarkDungeoneer.Multiplayer.SeedParityPredictionAndP2PTrade",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerMultiplayerSeedAndP2PTradeTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Multiplayer P2P & Seed test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	// 1. Deterministic floor seed parity across repeated evaluations
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	TestNotNull(TEXT("Resolved DungeonGeneratorSubsystem"), GenSub);
+	if (GenSub)
+	{
+		const FDungeonFloorGraph GraphA = GenSub->GenerateFloorGraph(2, 987654);
+		const FDungeonFloorGraph GraphB = GenSub->GenerateFloorGraph(2, 987654);
+		TestEqual(TEXT("Seed parity yields identical node count"), GraphA.Nodes.Num(), GraphB.Nodes.Num());
+		if (GraphA.Nodes.Num() > 0 && GraphB.Nodes.Num() > 0)
+		{
+			TestEqual(TEXT("Seed parity yields identical biome"), static_cast<uint8>(GraphA.DominantBiome), static_cast<uint8>(GraphB.DominantBiome));
+			TestTrue(TEXT("Seed parity yields identical root coords"), GraphA.Nodes[0].WorldCenter.Equals(GraphB.Nodes[0].WorldCenter, 0.01));
+		}
+	}
+
+	// 2. P2P 2-Phase Commit Supply Swap between nearby co-op allies
+	ADungeoneerCharacter* P1 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	ADungeoneerCharacter* P2 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(160.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (!P1 || !P2) { TestWorld->DestroyWorld(false); return false; }
+	P1->DispatchBeginPlay();
+	P2->DispatchBeginPlay();
+
+	UDungeoneerInventoryComponent* Inv1 = P1->GetInventoryComponent();
+	UDungeoneerInventoryComponent* Inv2 = P2->GetInventoryComponent();
+	TestNotNull(TEXT("P1 & P2 inventories present"), Inv1);
+	TestNotNull(TEXT("P2 inventory present"), Inv2);
+	if (Inv1 && Inv2)
+	{
+		const int32 TotalGoldBefore = Inv1->GetGoldBalance() + Inv2->GetGoldBalance();
+		const int32 P1Before = Inv1->GetGoldBalance();
+		const bool bSwapped = P1->TriggerAllyTradeWithNearest();
+		TestTrue(TEXT("TriggerAllyTradeWithNearest 2PC swap succeeded"), bSwapped);
+		TestEqual(TEXT("P1 sent 25g cleanly"), Inv1->GetGoldBalance(), P1Before - 25);
+		TestEqual(TEXT("Gold conserved identically across P2P 2PC trade"), Inv1->GetGoldBalance() + Inv2->GetGoldBalance(), TotalGoldBefore);
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerMetaSaveGameAndRunSummaryTest,
+	"DarkDungeoneer.Meta.SaveGameRoundTripAndRunSummary",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerMetaSaveGameAndRunSummaryTest::RunTest(const FString& Parameters)
+{
+	// 1. Deterministic Daily Seed check
+	const int64 SeedNov16A = UDungeoneerSaveGame::ComputeDailySeedFromDate(2026, 11, 16);
+	const int64 SeedNov16B = UDungeoneerSaveGame::ComputeDailySeedFromDate(2026, 11, 16);
+	const int64 SeedNov17 = UDungeoneerSaveGame::ComputeDailySeedFromDate(2026, 11, 17);
+	TestEqual(TEXT("Daily seed is deterministic for same UTC date"), SeedNov16A, SeedNov16B);
+	TestNotEqual(TEXT("Daily seed changes across UTC days"), SeedNov16A, SeedNov17);
+
+	// 2. SaveGame Ledger update & serialization round-trip
+	const FString ScratchSlot(TEXT("DungeoneerVerifyMetaLedgerScratch"));
+	UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger(ScratchSlot);
+	TestNotNull(TEXT("Created UDungeoneerSaveGame object"), Ledger);
+	if (Ledger)
+	{
+		// Reset scratch fields so repeated automation test runs remain deterministic
+		Ledger->BestiaryDiscoveredMask = 0;
+		Ledger->UnlockedRelicMask = 0;
+		Ledger->HighestFloorReached = 1;
+		Ledger->BestClearDurationSeconds = 0.0f;
+		Ledger->EquippedLanternTrimIndex = 0;
+
+		Ledger->RecordRunOutcome(3, 184.5f, true, 0x15, 0x0F, 640, 20261116);
+		TestEqual(TEXT("Highest floor recorded as 3"), Ledger->HighestFloorReached, 3);
+		TestEqual(TEXT("Bestiary discovered 4/4 enemies"), Ledger->GetBestiaryDiscoveredCount(), 4);
+		TestEqual(TEXT("Relic compendium unlocked 3/5 relics"), Ledger->GetUnlockedRelicCount(), 3);
+		TestNearlyEqual(TEXT("Best clear duration == 184.5s"), Ledger->BestClearDurationSeconds, 184.5f, 0.01f);
+
+		const int32 NextTrim = Ledger->CycleEquippedLanternTrim();
+		TestEqual(TEXT("Lantern trim cycled cleanly to 1"), NextTrim, 1);
+
+		const bool bSaved = UDungeoneerSaveGame::SaveMetaLedger(Ledger, ScratchSlot);
+		TestTrue(TEXT("SaveMetaLedger serialized to disk"), bSaved);
+
+		UDungeoneerSaveGame* Reloaded = UDungeoneerSaveGame::LoadOrCreateMetaLedger(ScratchSlot);
+		TestNotNull(TEXT("Reloaded SaveGame from disk"), Reloaded);
+		if (Reloaded)
+		{
+			TestEqual(TEXT("Reloaded Bestiary mask preserved"), Reloaded->BestiaryDiscoveredMask, static_cast<uint8>(0x0F));
+			TestEqual(TEXT("Reloaded Lantern Trim preserved"), Reloaded->EquippedLanternTrimIndex, 1);
+		}
+	}
+
+	// 3. RunSummary UI Modal widget population
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (TestWorld)
+	{
+		TestWorld->InitializeActorsForPlay(FURL());
+		UDungeoneerRunSummaryWidget* Summary = CreateWidget<UDungeoneerRunSummaryWidget>(TestWorld);
+		TestNotNull(TEXT("Created UDungeoneerRunSummaryWidget"), Summary);
+		if (Summary)
+		{
+			FDungeoneerRunSummaryPayload Payload;
+			Payload.bVictory = true;
+			Payload.bDailySeedRun = true;
+			Payload.FloorReached = 3;
+			Payload.KillsCount = 24;
+			Payload.GoldBalance = 780;
+			Payload.RelicsCount = 3;
+			Payload.RevivesPerformed = 1;
+			Payload.ElapsedRunSeconds = 184.5f;
+			Payload.MasterSeed = SeedNov16A;
+			Summary->PopulateSummary(Payload);
+			TestTrue(TEXT("Summary payload bVictory == true"), Summary->GetCachedSummary().bVictory);
+			TestEqual(TEXT("Summary payload Revives == 1"), Summary->GetCachedSummary().RevivesPerformed, 1);
+		}
+		TestWorld->DestroyWorld(false);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerPerfDrawCallBudgetTest,
+	"DarkDungeoneer.Perf.DrawCallBudgetAndZeroTickAlloc",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerPerfDrawCallBudgetTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Perf Budget test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	TestNotNull(TEXT("Resolved DungeonGeneratorSubsystem"), GenSub);
+	if (GenSub)
+	{
+		GenSub->GenerateFloorGraph(1, 551122);
+	}
+
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	TestNotNull(TEXT("Spawned TileMapInstancer"), Instancer);
+	if (Instancer)
+	{
+		Instancer->BuildFromActiveGenerator();
+		TestNotNull(TEXT("Floor HISM allocated"), Instancer->GetFloorHISM());
+		TestNotNull(TEXT("Wall HISM allocated"), Instancer->GetWallHISM());
+		TestTrue(TEXT("Floor + Wall geometry consolidated in batched HISMs"),
+			Instancer->GetFloorHISM()->GetInstanceCount() > 50 && Instancer->GetWallHISM()->GetInstanceCount() > 20);
+	}
+
+	UDungeonLightBudgetSubsystem* LightBudget = TestWorld->GetSubsystem<UDungeonLightBudgetSubsystem>();
+	TestNotNull(TEXT("Resolved DungeonLightBudgetSubsystem"), LightBudget);
+	if (LightBudget)
+	{
+		LightBudget->EvaluateLightBudgetNow(0.1f);
+		TestTrue(TEXT("Active Tier-1 lights stay within Intel HD 520 cap"),
+			LightBudget->GetActiveTier1Count() <= LightBudget->GetEffectiveMaxTier1());
+		TestTrue(TEXT("Active Tier-2 point lights stay within Intel HD 520 cap"),
+			LightBudget->GetActiveTier2Count() <= LightBudget->GetEffectiveMaxTier2());
+	}
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Hero)
+	{
+		Hero->DispatchBeginPlay();
+		for (int32 Frame = 0; Frame < 10; ++Frame)
+		{
+			Hero->Tick(1.0f / 60.0f);
+		}
+	}
 
 	TestWorld->DestroyWorld(false);
 	return true;

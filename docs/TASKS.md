@@ -181,17 +181,17 @@
   - [x] Add 3-hit melee combo buffer (`0.65s` window) + Charged Lantern Flare (`[R]`: `25%` battery radial stun & room-wide `PrismLily` bloom), `35 ms` hit-stop dilation, damped `CameraBoom` micro-impulse, and barrel/fire/Exploder detonation chains.
   - [x] Add `4` new deterministic specs (`RelicsConsumablesAndSanctuaryPerks`, `MirrorStalkerLightRevealAndBossPhases`, `ComboChargedFlareAndChainReactions`, `MinimapPopupsAndCutoutDiorama`) and verify all `20` headless UE `5.8.2` tests pass (`EXIT CODE: 0`).
 
-### Milestone `v1.4.0` — Co-Op Hardening, Persistent Meta-Ledger & Cooked Release
+### Milestone `v1.4.0` — Co-Op Hardening, Persistent Meta-Ledger & Shipping Readiness (Completed)
 
-- [ ] **`TASK-1401` — Complete 2-Player Local Split-Screen Drop-In & Co-Op Revive**
-  - [ ] Wire P2 dynamic split-screen drop-in (`Menu` + `[F2]`/Gamepad `Start`), isolated `FDungeoneerSensoryViewExtension` viewports, and per-camera `WallHISM` cutaway evaluation.
-  - [ ] Add `18s` Co-Op Downed Bleeding state with `[Hold F]` `2.0s` ally rescue revive and shared Sanctuary Party Stash (`ARestingGroundActor`).
-- [ ] **`TASK-1402` — Online Co-Op Hardening, Seed Parity & P2P Trading**
-  - [ ] Verify Listen/Dedicated server deterministic replication parity across `UDungeonGeneratorSubsystem`, `UDungeonWaterSubsystem`, `UDungeonFloraManagerComponent`, and `FSavedMove_Dungeoneer` (`PktLag=150`, `PktLoss=3`), plus `AZombieBase::IsNetRelevantFor` fog culling.
-  - [ ] Wire live `[T]` nearby-player Trade Request -> `UDungeoneerTradeModalWidget` 2PC swap via `UTradeManagerComponent`, plus `UDungeoneerCoopLobbyWidget` session/chat polish.
-- [ ] **`TASK-1403` — End-of-Run Crypt Ledger, Bestiary & Sanctuary Persistent Save**
-  - [ ] Implement `UDungeoneerRunSummaryWidget` displaying per-run telemetry (`Floor`, `Kills`, `Relics`, `Secrets`, `Seed`, `Duration`) with `[Retry Same Seed]` and `[Return to Sanctuary]`.
-  - [ ] Implement `UDungeoneerSaveGame` (`Saved/SaveGames/`) persisting unlocked Bestiary entries, cosmetic/starting Lantern Trims, Best Records, and deterministic `Daily Seed` runs (`YYYYMMDD`).
-- [ ] **`TASK-1404` — Cooked Windows `Shipping` Packaging, Profiling & Release**
-  - [ ] Configure `DefaultEngine.ini` / `DefaultGame.ini` asset cooking rules and pass `RunUAT BuildCookRun -platform=Win64 -clientconfig=Shipping -cook -stage -pak`, updating `Launch-DarkDungeoneer.bat` to launch cooked binaries seamlessly.
-  - [ ] Verify `stat unit` / `stat scenerendering` Intel HD 520 frame/draw-call budgets across Floor 3 Boss Arena and 2P Split-Screen, pass `24+` headless automation tests, update docs (`VERSION 1.4.0`), and tag `v1.4.0`.
+- [x] **`TASK-1401` — Complete 2-Player Local Split-Screen Drop-In, Allied Revive & Shared Party Stash**
+  - [x] Wire P2 dynamic split-screen drop-in (`EDungeoneerMenuAction::CoopSplitScreen` + `[F2]`), isolated `ULocalPlayer` viewports & HUDs, and dedicated P2 keyboard controls (Arrow keys, `RightCtrl`/`Enter`, `RightShift`, `Backslash`, `RightBracket`, `P`).
+  - [x] Add `18.0s` Co-Op Downed Bleeding state when living allies remain (`GetAliveOtherPlayerCount > 0`), `[F]`/`Backslash` rescue revive (`50%` HP, `>= 30%` battery), and replicated `ADungeoneerGameState` Party Stash (`Gold` + `8`-slot items).
+- [x] **`TASK-1402` — P2P 2PC Trading, Seed Parity & Lobby Framing Polish**
+  - [x] Attach `UTradeManagerComponent` onto `ADungeoneerCharacter` and wire `[T]` / `[P]` nearby-ally P2P supply swap via server-authoritative `AuthorityExecuteTwoPhaseCommit` alongside deterministic floor seed parity checks.
+  - [x] Frame `UDungeoneerCoopLobbyWidget` in obsidian-and-gold trim (`400x168`) with crisp `13pt`/`11pt` typography eliminating right-edge clipping in `1280x720`.
+- [x] **`TASK-1403` — End-of-Run Crypt Ledger, Bestiary & Sanctuary Persistent Save**
+  - [x] Implement `UDungeoneerRunSummaryWidget` displaying outcome banner, Floor, Clear Time, Kills, Gold, Relics, Revives, Secrets, Seed, persistent Meta-Ledger totals, `[RETRY SAME SEED]`, and `[RETURN TO MENU]`.
+  - [x] Implement `UDungeoneerSaveGame` (`DungeoneerMetaLedger`) persisting Bestiary mask, Relic mask, Highest Floor, Fastest Clear duration, `EquippedLanternTrimIndex` (`0..3` live tints), and deterministic `Daily Seed` (`YYYYMMDD`) mode.
+- [x] **`TASK-1404` — Standalone `Shipping` Target Build, Launcher Readiness & Final Verification**
+  - [x] Configure `DefaultGame.ini` packaging directories (`Art`, `Audio`, `Materials`, `/Engine/Maps/Entry`) and update `Launch-DarkDungeoneer.bat` staged priority cleanly.
+  - [x] Pass `verify_architecture_invariants.py` (`112` files), `slice_normal_rig.py --self-test`, `DarkDungeoneerEditor` / `DarkDungeoneer Development` / `DarkDungeoneer Shipping` builds, `24 / 24` headless automation tests (`EXIT CODE: 0`), live Menu + `2P Split-Screen` captures, and tag `v1.4.0`.

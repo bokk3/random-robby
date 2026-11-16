@@ -7,7 +7,31 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- Future `v1.4.0` release: 2P split-screen drop-in & downed revive, online co-op soak hardening, run summary/save progression, and Shipping packaging.
+- Future post-`v1.4.0` updates: full Windows `RunUAT BuildCookRun` distribution archive and dedicated server soak tooling.
+
+---
+
+## [1.4.0] - 2026-11-16
+
+### Added
+- **2-Player Local Split-Screen Drop-In, Downed Revive & Shared Party Stash (`ADungeoneerGameMode`, `ADungeoneerGameState`, `ADungeoneerCharacter`, `UZombieSpatialSubsystem`)**:
+  - Wired `EDungeoneerMenuAction::CoopSplitScreen` and runtime `[F2]` drop-in (`RequestSplitScreenCoopJoin()`) spawning Player 2 on an isolated `ULocalPlayer` split viewport with independent `UDungeoneerPlayerHUDWidget`, distinct Lantern Trim tint, and dedicated Arrow / `RightCtrl` / `RightShift` / `Backslash` / `P` controls.
+  - Added `18.0s` Co-Op Downed Bleeding when living allies remain (`GetAliveOtherPlayerCount > 0`) and `[F]` / `Backslash` Allied Revive (`ReviveByAlly` restoring `50%` HP, `>= 30%` battery, and incrementing `RevivesPerformed`).
+  - Added replicated Shared Party Stash (`ReplicatedPartyStashGold` and `8`-slot `PartyStashItems` with `AuthorityDepositGoldToStash`, `AuthorityWithdrawGoldFromStash`, `AuthorityDepositItemToStash`, `AuthorityWithdrawItemFromStash`) on `ADungeoneerGameState`.
+- **P2P Two-Phase Commit Supply Swap & Lobby Framing Polish (`ADungeoneerCharacter`, `UDungeoneerCoopLobbyWidget`)**:
+  - Attached `UTradeManagerComponent` directly onto `ADungeoneerCharacter` and bound `[T]` / `[P]` nearby-ally P2P supply swaps (`TriggerAllyTradeWithNearest()`) executed atomically through `UTradeManagerComponent::AuthorityExecuteTwoPhaseCommit`.
+  - Framed `UDungeoneerCoopLobbyWidget` in a matching obsidian-and-gold border (`400x168`) with calibrated `13pt` / `11pt` typography eliminating right-edge clipping in `1280x720`.
+- **Persistent Meta-Ledger, Run Summary Modal & Daily Seed (`UDungeoneerSaveGame`, `UDungeoneerRunSummaryWidget`, `UDungeoneerMainMenuWidget`)**:
+  - Added `UDungeoneerSaveGame` persisting unlocked Bestiary mask (`4/4`), Relic compendium (`5/5`), Highest Floor, Fastest Clear duration, `EquippedLanternTrimIndex` (`0..3` flame/light tints), and deterministic `ComputeDailySeedFromDate(Year, Month, Day)`.
+  - Added obsidian-and-gold `UDungeoneerRunSummaryWidget` modal (`ShowRunSummaryOverlay`) displaying Victory/Defeat banner, Floor, Clear Time, Kills, Gold, Relics, Revives, Secrets, Seed telemetry, Meta-Ledger records, `[RETRY SAME SEED]`, and `[RETURN TO MENU]`.
+  - Bound Main Menu `Sensory Perks & Loadout` to toggle deterministic Daily Seed mode and `Options & Display` to cycle saved Lantern Trims live in the Diorama.
+- **Packaging Configuration & Launcher Readiness (`Config/DefaultGame.ini`, `Launch-DarkDungeoneer.bat`)**:
+  - Added `[/Script/UnrealEd.ProjectPackagingSettings]` (`BuildConfiguration=PPBC_Shipping`, `Art`/`Audio`/`Materials` staging dirs, `/Engine/Maps/Entry`) and updated `Launch-DarkDungeoneer.bat` to prioritize staged builds cleanly.
+
+### Changed & Verified
+- Updated `scripts/verify_architecture_invariants.py` (`112` tracked files verified clean: zero `Tick` allocations, zero banned symbols, math invariants & `Content/AssetManifest.json` SHA-256 valid) and `slice_normal_rig.py --self-test`.
+- Added 4 Phase-2 automation specs in `DungeoneerVerificationSpecs.cpp` (`SplitScreenDropInAndAllyRevive`, `SeedParityPredictionAndP2PTrade`, `SaveGameRoundTripAndRunSummary`, `DrawCallBudgetAndZeroTickAlloc`).
+- Compiled `DarkDungeoneerEditor Win64 Development`, `DarkDungeoneer Win64 Development`, and `DarkDungeoneer Win64 Shipping` with zero project warnings (`bTreatWarningsAsErrors = true`), passed all `24 / 24` `DarkDungeoneer.*` headless automation tests (`EXIT CODE: 0`), and visually verified live `after_v1_4_0_menu.png` & `after_v1_4_0_splitscreen.png` captures.
 
 ---
 

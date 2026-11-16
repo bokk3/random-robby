@@ -1,7 +1,10 @@
 #include "Core/DungeoneerGameMode.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerGameState.h"
+#include "Core/DungeoneerGameViewportClient.h"
+#include "Core/DungeoneerSaveGame.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Social/DungeoneerInventoryComponent.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
@@ -10,6 +13,7 @@
 #include "UI/DungeoneerCoopLobbyWidget.h"
 #include "UI/DungeoneerMenuFooterWidget.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
+#include "UI/DungeoneerRunSummaryWidget.h"
 #include "UI/MenuDioramaStageActor.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/Engine.h"
@@ -82,6 +86,16 @@ void ADungeoneerGameMode::StartPlay()
 	if (!IsRunningCommandlet() && World->IsGameWorld())
 	{
 		DungeoneerGameModePrivate::ApplyLowSpecDynamicLightingCVars();
+		if (const UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger())
+		{
+			EquippedLanternTrimIndex = Ledger->EquippedLanternTrimIndex;
+		}
+	}
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("DailySeed")))
+	{
+		bDailySeedModeActive = true;
+		InitialFloorSeed = static_cast<int32>(UDungeoneerSaveGame::GetTodaysDeterministicDailySeed(ActiveDailySeedDayKey) & 0x7FFFFFFFLL);
 	}
 
 	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
@@ -94,6 +108,7 @@ void ADungeoneerGameMode::StartPlay()
 		CurrentFloorIndex = 1;
 		if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
 		{
+			DungeoneerState->AuthorityResetRunLedger(bDailySeedModeActive, ActiveDailySeedDayKey);
 			DungeoneerState->AuthoritySetFloorSeed(1, InitialFloorSeed, 0);
 		}
 		else if (UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
@@ -217,7 +232,10 @@ void ADungeoneerGameMode::StartPlay()
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo")))
 	{
-		EnterLiveDungeonFromMenu(EDungeoneerMenuAction::EnterCatacombs);
+		const EDungeoneerMenuAction AutoAction = FParse::Param(FCommandLine::Get(), TEXT("AutoSplitScreen"))
+			? EDungeoneerMenuAction::CoopSplitScreen
+			: EDungeoneerMenuAction::EnterCatacombs;
+		EnterLiveDungeonFromMenu(AutoAction);
 	}
 
 	float ShotDelaySec = 0.0f;
@@ -231,6 +249,14 @@ void ADungeoneerGameMode::StartPlay()
 void ADungeoneerGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (HasAuthority() && !IsActiveRunMainMenu())
+	{
+		if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
+		{
+			DungeoneerState->AuthorityAdvanceRunClock(DeltaSeconds);
+		}
+	}
 
 	if (bPendingAutoShot)
 	{
@@ -293,8 +319,20 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 	if (ActiveMainMenuWidget)   { ActiveMainMenuWidget->SetVisibility(ESlateVisibility::Collapsed); }
 	if (ActiveCoopLobbyWidget)  { ActiveCoopLobbyWidget->SetVisibility(ESlateVisibility::Collapsed); }
 	if (ActiveFooterWidget)     { ActiveFooterWidget->SetVisibility(ESlateVisibility::Collapsed); }
+	if (ActiveRunSummaryWidget) { ActiveRunSummaryWidget->SetVisibility(ESlateVisibility::Collapsed); }
 
-	const bool bAutoPlaySolo = FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo"));
+	if (HasAuthority())
+	{
+		if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
+		{
+			DungeoneerState->AuthorityResetRunLedger(bDailySeedModeActive, ActiveDailySeedDayKey);
+		}
+	}
+
+	const bool bAutoPlaySolo = FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo"))
+		|| Action == EDungeoneerMenuAction::CoopSplitScreen;
+	const bool bForceSplitScreen = (Action == EDungeoneerMenuAction::CoopSplitScreen)
+		|| FParse::Param(FCommandLine::Get(), TEXT("AutoSplitScreen"));
 	if (ActiveDioramaStage)
 	{
 		if (bAutoPlaySolo)
@@ -341,16 +379,20 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 
 	if (UGameInstance* GI = World->GetGameInstance())
 	{
-		for (ULocalPlayer* LP : GI->GetLocalPlayers())
+		const int32 PlayerCount = GI->GetNumLocalPlayers();
+		for (int32 LPIdx = 0; LPIdx < PlayerCount; ++LPIdx)
 		{
+			ULocalPlayer* LP = GI->GetLocalPlayers()[LPIdx];
 			if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
 			{
-				PC->bShowMouseCursor = true;
+				PC->bShowMouseCursor = (LPIdx == 0);
 				PC->SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
 
 				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
 				{
-					Character->SetActorLocation(TargetRoomCenter + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : FVector(90.0 * static_cast<double>(LPIdx), -90.0 * static_cast<double>(LPIdx), 0.0);
+					Character->SetActorLocation(TargetRoomCenter + OffsetXY + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+					Character->ApplyLanternTrimTint((EquippedLanternTrimIndex + LPIdx) & 3);
 					if (UMirrorLightBounceComponent* BounceComp = Character->GetMirrorBounceComponent())
 					{
 						BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
@@ -387,6 +429,11 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 			}
 		}
 	}
+
+	if (bForceSplitScreen)
+	{
+		RequestSplitScreenCoopJoin();
+	}
 }
 
 int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
@@ -394,6 +441,12 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 	UWorld* World = GetWorld();
 	if (!World || !HasAuthority())
 	{
+		return CurrentFloorIndex;
+	}
+
+	if (CurrentFloorIndex >= 3 && !IsRunningCommandlet())
+	{
+		ShowRunSummaryOverlay(true);
 		return CurrentFloorIndex;
 	}
 
@@ -456,13 +509,16 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 
 	if (UGameInstance* GI = World->GetGameInstance())
 	{
-		for (ULocalPlayer* LP : GI->GetLocalPlayers())
+		const int32 LPCount = GI->GetNumLocalPlayers();
+		for (int32 LPIdx = 0; LPIdx < LPCount; ++LPIdx)
 		{
+			ULocalPlayer* LP = GI->GetLocalPlayers()[LPIdx];
 			if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
 			{
 				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
 				{
-					Character->SetActorLocation(NextEntryCenter + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : FVector(90.0 * static_cast<double>(LPIdx), -90.0 * static_cast<double>(LPIdx), 0.0);
+					Character->SetActorLocation(NextEntryCenter + OffsetXY + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
 					Character->RestoreAtRestingGround(20.0f, 35.0f);
 					if (UMirrorLightBounceComponent* BounceComp = Character->GetMirrorBounceComponent())
 					{
@@ -473,5 +529,378 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 		}
 	}
 
+	if (!IsRunningCommandlet())
+	{
+		if (UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger())
+		{
+			Ledger->HighestFloorReached = FMath::Max(Ledger->HighestFloorReached, CurrentFloorIndex);
+			UDungeoneerSaveGame::SaveMetaLedger(Ledger);
+		}
+	}
+
 	return CurrentFloorIndex;
+}
+
+bool ADungeoneerGameMode::IsActiveRunMainMenu() const noexcept
+{
+	return (ActiveMainMenuWidget && ActiveMainMenuWidget->GetVisibility() != ESlateVisibility::Collapsed)
+		|| (ActiveDioramaStage && !ActiveDioramaStage->IsHidden());
+}
+
+bool ADungeoneerGameMode::RequestSplitScreenCoopJoin()
+{
+	UWorld* World = GetWorld();
+	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	if (!World || !GI)
+	{
+		return false;
+	}
+
+	if (UDungeoneerGameViewportClient* GVC = Cast<UDungeoneerGameViewportClient>(World->GetGameViewport()))
+	{
+		GVC->SetLocalSplitscreenEnabled(true);
+		GVC->TryJoinLocalCoopPlayer(1);
+	}
+	else if (GI->GetNumLocalPlayers() < 2)
+	{
+		FString CreateError;
+		GI->CreateLocalPlayer(1, CreateError, true);
+	}
+
+	const int32 NumLPs = GI->GetNumLocalPlayers();
+	if (NumLPs < 2)
+	{
+		return false;
+	}
+
+	FVector P1Location = EntrySpawnLocation;
+	if (const ULocalPlayer* P1LP = GI->GetLocalPlayers()[0])
+	{
+		if (const APlayerController* P1PC = P1LP->GetPlayerController(World))
+		{
+			if (const APawn* P1Pawn = P1PC->GetPawn())
+			{
+				P1Location = P1Pawn->GetActorLocation();
+			}
+			if (ADungeoneerCharacter* P1Char = Cast<ADungeoneerCharacter>(P1PC->GetPawn()))
+			{
+				P1Char->PushFloatingCombatPopup(P1Location + FVector(0.0, 0.0, 100.0), TEXT("PLAYER 2 JOINED SPLIT-SCREEN!"), EDungeoneerFloatingTextKind::Status);
+			}
+		}
+	}
+
+	ULocalPlayer* P2LP = GI->GetLocalPlayers()[1];
+	APlayerController* P2PC = P2LP ? P2LP->GetPlayerController(World) : nullptr;
+	if (!P2PC)
+	{
+		return false;
+	}
+
+	if (!P2PC->GetPawn())
+	{
+		RestartPlayer(P2PC);
+	}
+
+	if (ADungeoneerCharacter* P2Char = Cast<ADungeoneerCharacter>(P2PC->GetPawn()))
+	{
+		const FVector P2Spawn = P1Location + FVector(92.0, -92.0, 10.0);
+		P2Char->SetActorLocation(P2Spawn, false, nullptr, ETeleportType::TeleportPhysics);
+		P2Char->ApplyLanternTrimTint((EquippedLanternTrimIndex + 1) & 3);
+		if (UMirrorLightBounceComponent* BounceComp = P2Char->GetMirrorBounceComponent())
+		{
+			BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
+		}
+
+		P2PC->bShowMouseCursor = false;
+		P2PC->bAutoManageActiveCameraTarget = true;
+		P2PC->SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
+		P2PC->SetViewTarget(P2Char);
+
+		if (!IsRunningCommandlet() && World->IsGameWorld())
+		{
+			UDungeoneerPlayerHUDWidget* P2HUD = nullptr;
+			for (UDungeoneerPlayerHUDWidget* ExistingHUD : ActivePlayerHUDWidgets)
+			{
+				if (ExistingHUD && ExistingHUD->GetOwningLocalPlayer() == P2LP)
+				{
+					P2HUD = ExistingHUD;
+					break;
+				}
+			}
+			if (!P2HUD)
+			{
+				P2HUD = CreateWidget<UDungeoneerPlayerHUDWidget>(P2PC, UDungeoneerPlayerHUDWidget::StaticClass());
+				if (P2HUD)
+				{
+					P2HUD->AddToPlayerScreen(5);
+					ActivePlayerHUDWidgets.Add(P2HUD);
+				}
+			}
+			if (P2HUD)
+			{
+				P2HUD->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+				P2HUD->RefreshHUDFromCharacter(P2Char);
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+void ADungeoneerGameMode::ShowRunSummaryOverlay(bool bVictory)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FDungeoneerRunSummaryPayload Payload;
+	Payload.bVictory = bVictory;
+	Payload.FloorReached = CurrentFloorIndex;
+	Payload.bDailySeedRun = bDailySeedModeActive;
+
+	int32 TotalKills = 0;
+	int32 TotalGold = 0;
+	int32 TotalRelics = 0;
+	uint8 CombinedRelicMask = 0;
+
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		for (ULocalPlayer* LP : GI->GetLocalPlayers())
+		{
+			if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
+			{
+				if (const ADungeoneerCharacter* Hero = Cast<ADungeoneerCharacter>(PC->GetPawn()))
+				{
+					TotalKills += Hero->GetKillsCount();
+					if (const UDungeoneerInventoryComponent* Inv = Hero->GetInventoryComponent())
+					{
+						TotalGold += Inv->GetGoldBalance();
+						CombinedRelicMask |= Inv->GetRelicBitmask();
+						TotalRelics = FMath::Max(TotalRelics, Inv->GetActiveRelicCount());
+					}
+				}
+			}
+		}
+	}
+
+	uint8 SessionBestiaryMask = 0x01;
+	if (ADungeoneerGameState* GS = GetGameState<ADungeoneerGameState>())
+	{
+		GS->AuthorityMarkRunEnded(bVictory);
+		const FDungeoneerRunLedgerStats& Stats = GS->GetRunLedgerStats();
+		Payload.ElapsedRunSeconds = Stats.ElapsedRunSeconds;
+		Payload.RevivesPerformed = Stats.RevivesPerformed;
+		Payload.SecretsDiscovered = Stats.SecretsDiscovered;
+		Payload.MasterSeed = GS->GetReplicatedFloorSeed().MasterSeed;
+		SessionBestiaryMask |= Stats.SessionBestiaryMask;
+		TotalKills = FMath::Max(TotalKills, Stats.TotalKills);
+		TotalRelics = FMath::Max(TotalRelics, Stats.RelicsCollected);
+	}
+	else
+	{
+		Payload.MasterSeed = InitialFloorSeed;
+	}
+
+	Payload.KillsCount = TotalKills;
+	Payload.GoldBalance = TotalGold;
+	Payload.RelicsCount = TotalRelics;
+
+	if (UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger())
+	{
+		Ledger->RecordRunOutcome(
+			CurrentFloorIndex,
+			Payload.ElapsedRunSeconds,
+			bVictory,
+			CombinedRelicMask,
+			SessionBestiaryMask,
+			TotalGold,
+			bDailySeedModeActive ? ActiveDailySeedDayKey : 0);
+
+		Payload.PersistentBestiaryMask = Ledger->BestiaryDiscoveredMask;
+		Payload.PersistentRelicMask = Ledger->UnlockedRelicMask;
+		Payload.BestFloorRecord = Ledger->HighestFloorReached;
+		Payload.BestClearDurationSeconds = Ledger->BestClearDurationSeconds;
+
+		if (!IsRunningCommandlet())
+		{
+			UDungeoneerSaveGame::SaveMetaLedger(Ledger);
+		}
+	}
+
+	for (UDungeoneerPlayerHUDWidget* HUD : ActivePlayerHUDWidgets)
+	{
+		if (HUD)
+		{
+			HUD->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (!IsRunningCommandlet() && World->IsGameWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance(); GI && GI->GetNumLocalPlayers() > 0)
+		{
+			if (APlayerController* PrimaryPC = GI->GetLocalPlayers()[0]->GetPlayerController(World))
+			{
+				PrimaryPC->bShowMouseCursor = true;
+				PrimaryPC->SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
+
+				if (!ActiveRunSummaryWidget)
+				{
+					ActiveRunSummaryWidget = CreateWidget<UDungeoneerRunSummaryWidget>(PrimaryPC, UDungeoneerRunSummaryWidget::StaticClass());
+					if (ActiveRunSummaryWidget)
+					{
+						ActiveRunSummaryWidget->AddToViewport(20);
+					}
+				}
+				if (ActiveRunSummaryWidget)
+				{
+					ActiveRunSummaryWidget->PopulateSummary(Payload);
+					ActiveRunSummaryWidget->SetVisibility(ESlateVisibility::Visible);
+				}
+			}
+		}
+	}
+}
+
+void ADungeoneerGameMode::RetryCurrentSeedRun()
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasAuthority())
+	{
+		return;
+	}
+
+	CurrentFloorIndex = 1;
+	if (ADungeoneerGameState* GS = GetGameState<ADungeoneerGameState>())
+	{
+		GS->AuthorityResetRunLedger(bDailySeedModeActive, ActiveDailySeedDayKey);
+		GS->AuthoritySetFloorSeed(1, InitialFloorSeed, 0);
+	}
+	if (ActiveTileMapInstancer)
+	{
+		ActiveTileMapInstancer->BuildFromActiveGenerator();
+	}
+	if (ActiveRunSummaryWidget)
+	{
+		ActiveRunSummaryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		for (ULocalPlayer* LP : GI->GetLocalPlayers())
+		{
+			if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
+			{
+				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
+				{
+					Character->RestoreAtRestingGround(100.0f, 100.0f);
+				}
+			}
+		}
+	}
+
+	EnterLiveDungeonFromMenu(EDungeoneerMenuAction::EnterCatacombs);
+}
+
+void ADungeoneerGameMode::ReturnToMainMenuFromSummary()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (ActiveRunSummaryWidget)
+	{
+		ActiveRunSummaryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	for (UDungeoneerPlayerHUDWidget* HUD : ActivePlayerHUDWidgets)
+	{
+		if (HUD)
+		{
+			HUD->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (ActiveDioramaStage)
+	{
+		ActiveDioramaStage->SetActorHiddenInGame(false);
+		ActiveDioramaStage->SetActorTickEnabled(true);
+	}
+	if (ActiveMainMenuWidget)  { ActiveMainMenuWidget->SetVisibility(ESlateVisibility::Visible); }
+	if (ActiveCoopLobbyWidget) { ActiveCoopLobbyWidget->SetVisibility(ESlateVisibility::Visible); }
+	if (ActiveFooterWidget)    { ActiveFooterWidget->SetVisibility(ESlateVisibility::Visible); }
+
+	if (UGameInstance* GI = World->GetGameInstance(); GI && GI->GetNumLocalPlayers() > 0)
+	{
+		if (APlayerController* PrimaryPC = GI->GetLocalPlayers()[0]->GetPlayerController(World))
+		{
+			PrimaryPC->bShowMouseCursor = true;
+			PrimaryPC->SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
+			if (ActiveDioramaStage)
+			{
+				PrimaryPC->SetViewTargetWithBlend(ActiveDioramaStage.Get(), 0.25f);
+			}
+		}
+	}
+}
+
+int32 ADungeoneerGameMode::CycleMenuLanternTrim()
+{
+	EquippedLanternTrimIndex = (EquippedLanternTrimIndex + 1) % UDungeoneerSaveGame::LanternTrimCount;
+	if (UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger())
+	{
+		Ledger->EquippedLanternTrimIndex = EquippedLanternTrimIndex;
+		if (!IsRunningCommandlet())
+		{
+			UDungeoneerSaveGame::SaveMetaLedger(Ledger);
+		}
+	}
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			for (ULocalPlayer* LP : GI->GetLocalPlayers())
+			{
+				if (APlayerController* PC = LP ? LP->GetPlayerController(World) : nullptr)
+				{
+					if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
+					{
+						Character->ApplyLanternTrimTint(EquippedLanternTrimIndex);
+					}
+				}
+			}
+		}
+	}
+	return EquippedLanternTrimIndex;
+}
+
+bool ADungeoneerGameMode::ToggleDailySeedMode()
+{
+	bDailySeedModeActive = !bDailySeedModeActive;
+	if (bDailySeedModeActive)
+	{
+		InitialFloorSeed = static_cast<int32>(UDungeoneerSaveGame::GetTodaysDeterministicDailySeed(ActiveDailySeedDayKey) & 0x7FFFFFFFLL);
+	}
+	else
+	{
+		ActiveDailySeedDayKey = 0;
+		InitialFloorSeed = 133742;
+	}
+
+	if (HasAuthority())
+	{
+		if (ADungeoneerGameState* GS = GetGameState<ADungeoneerGameState>())
+		{
+			GS->AuthorityResetRunLedger(bDailySeedModeActive, ActiveDailySeedDayKey);
+			GS->AuthoritySetFloorSeed(1, InitialFloorSeed, 0);
+		}
+		if (ActiveTileMapInstancer)
+		{
+			ActiveTileMapInstancer->BuildFromActiveGenerator();
+		}
+	}
+	return bDailySeedModeActive;
 }

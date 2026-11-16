@@ -76,6 +76,74 @@ void UZombieSpatialSubsystem::UnregisterPlayer(ADungeoneerCharacter* Player)
 	}
 }
 
+int32 UZombieSpatialSubsystem::GetAliveOtherPlayerCount(const ADungeoneerCharacter* ExcludePlayer) const noexcept
+{
+	int32 AliveCount = 0;
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		const ADungeoneerCharacter* Candidate = TrackedPlayers[i].Get();
+		if (Candidate && Candidate != ExcludePlayer && !Candidate->IsDowned())
+		{
+			++AliveCount;
+		}
+	}
+	return AliveCount;
+}
+
+ADungeoneerCharacter* UZombieSpatialSubsystem::FindNearestDownedAlly(const ADungeoneerCharacter* QueryPlayer, float MaxRangeUU) const noexcept
+{
+	if (!QueryPlayer || MaxRangeUU <= 0.0f)
+	{
+		return nullptr;
+	}
+
+	const FVector QueryOrigin = QueryPlayer->GetActorLocation();
+	double BestDistSq = static_cast<double>(MaxRangeUU) * static_cast<double>(MaxRangeUU);
+	ADungeoneerCharacter* BestAlly = nullptr;
+
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		ADungeoneerCharacter* Candidate = TrackedPlayers[i].Get();
+		if (Candidate && Candidate != QueryPlayer && Candidate->IsDowned())
+		{
+			const double DistSq = FVector::DistSquared2D(QueryOrigin, Candidate->GetActorLocation());
+			if (DistSq <= BestDistSq)
+			{
+				BestDistSq = DistSq;
+				BestAlly = Candidate;
+			}
+		}
+	}
+	return BestAlly;
+}
+
+ADungeoneerCharacter* UZombieSpatialSubsystem::FindNearestLivingAlly(const ADungeoneerCharacter* QueryPlayer, float MaxRangeUU) const noexcept
+{
+	if (!QueryPlayer || MaxRangeUU <= 0.0f)
+	{
+		return nullptr;
+	}
+
+	const FVector QueryOrigin = QueryPlayer->GetActorLocation();
+	double BestDistSq = static_cast<double>(MaxRangeUU) * static_cast<double>(MaxRangeUU);
+	ADungeoneerCharacter* BestAlly = nullptr;
+
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		ADungeoneerCharacter* Candidate = TrackedPlayers[i].Get();
+		if (Candidate && Candidate != QueryPlayer && !Candidate->IsDowned())
+		{
+			const double DistSq = FVector::DistSquared2D(QueryOrigin, Candidate->GetActorLocation());
+			if (DistSq <= BestDistSq)
+			{
+				BestDistSq = DistSq;
+				BestAlly = Candidate;
+			}
+		}
+	}
+	return BestAlly;
+}
+
 void UZombieSpatialSubsystem::RegisterZombie(AZombieBase* Zombie)
 {
 	if (!Zombie)

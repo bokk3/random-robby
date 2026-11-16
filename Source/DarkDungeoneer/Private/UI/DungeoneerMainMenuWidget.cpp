@@ -1,5 +1,6 @@
 #include "UI/DungeoneerMainMenuWidget.h"
 #include "Core/DungeoneerGameMode.h"
+#include "Core/DungeoneerSaveGame.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -52,7 +53,7 @@ TSharedRef<SWidget> UDungeoneerMainMenuWidget::RebuildWidget()
 		MenuStack->AddChildToVerticalBox(TitleText);
 
 		UTextBlock* SubtitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_Subtitle"));
-		SubtitleText->SetText(FText::FromString(TEXT("LIVING ECOSYSTEM  •  v1.3.0")));
+		SubtitleText->SetText(FText::FromString(TEXT("CO-OP & CRYPT LEDGER  •  v1.4.0")));
 		SubtitleText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		SubtitleText->SetColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.82f, 0.90f, 0.90f)));
 		MenuStack->AddChildToVerticalBox(SubtitleText);
@@ -233,6 +234,45 @@ void UDungeoneerMainMenuWidget::ActivateSpecificAction(EDungeoneerMenuAction Act
 	if (Action == EDungeoneerMenuAction::Quit)
 	{
 		UKismetSystemLibrary::QuitGame(World, OwningPC, EQuitPreference::Quit, false);
+		return;
+	}
+
+	if (Action == EDungeoneerMenuAction::SensoryLoadout)
+	{
+		if (ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			const bool bDaily = GM->ToggleDailySeedMode();
+			if (Txt_ActiveActionDescription)
+			{
+				Txt_ActiveActionDescription->SetText(FText::FromString(bDaily
+					? TEXT("DAILY SEED MODE: ACTIVE (UTC DETERMINISTIC)")
+					: TEXT("DAILY SEED MODE: OFF (STANDARD EXPEDITION)")));
+			}
+		}
+		return;
+	}
+
+	if (Action == EDungeoneerMenuAction::Options)
+	{
+		if (ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			const int32 TrimIndex = GM->CycleMenuLanternTrim();
+			if (Txt_ActiveActionDescription)
+			{
+				Txt_ActiveActionDescription->SetText(FText::FromString(FString::Printf(
+					TEXT("LANTERN TRIM EQUIPPED: %s"),
+					UDungeoneerSaveGame::GetLanternTrimDisplayName(TrimIndex))));
+			}
+		}
+		return;
+	}
+
+	if (Action == EDungeoneerMenuAction::CoopSplitScreen)
+	{
+		if (ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			GM->EnterLiveDungeonFromMenu(EDungeoneerMenuAction::CoopSplitScreen);
+		}
 		return;
 	}
 

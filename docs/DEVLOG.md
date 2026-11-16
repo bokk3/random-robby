@@ -288,3 +288,22 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
   - `python .agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --self-test` and `python scripts/verify_architecture_invariants.py` (`108` tracked files) passed cleanly.
   - Built both `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings (`bTreatWarningsAsErrors = true`).
   - Executed all `20 / 20` headless UE `5.8.2` automation tests (`Automation RunTests DarkDungeoneer; Quit`, `EXIT CODE: 0`) and verified live `-CaptureUI` Entry Room HUD & Main Menu Cutout Diorama screenshots (`docs/assets/after_v1_3_0_gameplay_hud.png` and `docs/assets/after_v1_3_0_menu_diorama.png`).
+
+---
+
+## Devlog #18 — 2P Split-Screen Drop-In, Allied Revive, P2P Trading & Meta-Ledger (`v1.4.0`)
+
+### Completing the Co-Op & Meta-Progression Loop
+- **Dynamic 2P Local Split-Screen & Dedicated Controls (`ADungeoneerGameMode`, `ADungeoneerCharacter`)**:
+  - Wired `EDungeoneerMenuAction::CoopSplitScreen`, live `[F2]` runtime drop-in (`RequestSplitScreenCoopJoin()`), and `-AutoSplitScreen` command-line harness to spawn Player 2 with an isolated `ULocalPlayer` viewport, independent `UDungeoneerPlayerHUDWidget`, distinct Lantern Trim tint, and dedicated Arrow / `RightCtrl` / `RightShift` / `Backslash` / `P` controls.
+- **18s Co-Op Downed Bleeding, `[F]` Rescue Revive & Party Stash (`ADungeoneerGameState`, `UZombieSpatialSubsystem`)**:
+  - Updated fatal damage handling so hitting `0` HP with living allies (`GetAliveOtherPlayerCount > 0`) enters an `18.0s` Downed state instead of instant wipe; allies pressing `[F]`/`Backslash` within `260 UU` restore `50%` HP and `30%` battery via `ReviveByAlly()` and increment `RevivesPerformed`.
+  - Added replicated Shared Party Stash (`ReplicatedPartyStashGold` and `8`-slot `PartyStashItems`) onto `ADungeoneerGameState` with authoritative deposit/withdraw transfer methods.
+- **P2P Two-Phase Commit Supply Swap & Persistent Crypt Ledger (`UDungeoneerSaveGame`, `UDungeoneerRunSummaryWidget`, `UDungeoneerCoopLobbyWidget`)**:
+  - Attached `UTradeManagerComponent` to `ADungeoneerCharacter` and bound `[T]` / `[P]` nearby-ally 2PC supply swaps (`TriggerAllyTradeWithNearest()`).
+  - Implemented `UDungeoneerSaveGame` (`DungeoneerMetaLedger`) tracking Bestiary discovery (`0x0F`), Relic compendium (`0x1F`), Highest Floor, Fastest Victory duration, `EquippedLanternTrimIndex` (`0..3` live light tints cycled from Main Menu *Options*), and deterministic `ComputeDailySeedFromDate(Year, Month, Day)`.
+  - Built obsidian-and-gold `UDungeoneerRunSummaryWidget` modal (`ShowRunSummaryOverlay`) triggered on Floor 3 Vault completion or party wipe with `[RETRY SAME SEED]` and `[RETURN TO MENU]` flows, and tightened `UDungeoneerCoopLobbyWidget` typography so zero text clips at `1280x720`.
+- **Verification (`v1.4.0`)**:
+  - `python .agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --self-test` and `python scripts/verify_architecture_invariants.py` (`112` tracked files) passed cleanly.
+  - Compiled `DarkDungeoneerEditor Win64 Development`, `DarkDungeoneer Win64 Development`, and `DarkDungeoneer Win64 Shipping` (`Binaries/Win64/DarkDungeoneer-Win64-Shipping.exe`) with zero project warnings (`bTreatWarningsAsErrors = true`).
+  - Executed all `24 / 24` headless UE `5.8.2` automation tests (`Automation RunTests DarkDungeoneer; Quit`, `EXIT CODE: 0`) and verified live `-CaptureUI` `after_v1_4_0_menu.png` & `after_v1_4_0_splitscreen.png` screenshots.

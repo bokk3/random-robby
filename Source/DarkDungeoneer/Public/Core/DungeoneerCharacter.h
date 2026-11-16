@@ -19,6 +19,7 @@ class USensoryPerkComponent;
 class U25DDirectionalRigComponent;
 class UDungeoneerTimedAudioComponent;
 class UDungeoneerInventoryComponent;
+class UTradeManagerComponent;
 class UMirrorLightBounceComponent;
 class UMaterialInstanceDynamic;
 
@@ -41,7 +42,9 @@ enum class EDungeoneerNearbyInteract : uint8
 	UnlockVault      UMETA(DisplayName = "Unlock Loot Vault"),
 	DescendNextFloor UMETA(DisplayName = "Descend Next Floor"),
 	SensoryAltar     UMETA(DisplayName = "Sanctuary Sensory Altar"),
-	CollectPickup    UMETA(DisplayName = "Collect Dropped Loot")
+	CollectPickup    UMETA(DisplayName = "Collect Dropped Loot"),
+	ReviveAlly       UMETA(DisplayName = "Revive Downed Ally"),
+	AllyTrade        UMETA(DisplayName = "Co-Op P2P Supply Swap")
 };
 
 struct DARKDUNGEONEER_API FDungeoneerFloatingPopup
@@ -99,6 +102,27 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	UDungeoneerInventoryComponent* GetInventoryComponent() const noexcept { return InventoryComponent.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Social|Trading")
+	UTradeManagerComponent* GetTradeManagerComponent() const noexcept { return TradeManagerComponent.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Vitals")
+	bool IsDowned() const noexcept { return CombatActionState == EDungeoneerCombatActionState::Downed || DownedRespawnRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Vitals")
+	float GetDownedRemainingSeconds() const noexcept { return DownedRespawnRemaining; }
+
+	UFUNCTION(BlueprintCallable, Category = "CoOp|Revive")
+	bool ReviveByAlly(ADungeoneerCharacter* Rescuer);
+
+	UFUNCTION(BlueprintCallable, Category = "Social|Trading")
+	bool TriggerAllyTradeWithNearest();
+
+	UFUNCTION(BlueprintCallable, Category = "Rendering|Cosmetics")
+	void ApplyLanternTrimTint(int32 TrimIndex) noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Rendering|Cosmetics")
+	int32 GetEquippedLanternTrimIndex() const noexcept { return EquippedLanternTrimIndex; }
 
 	UFUNCTION(BlueprintPure, Category = "Mirror|LightBounce")
 	UMirrorLightBounceComponent* GetMirrorBounceComponent() const noexcept { return MirrorBounceComponent.Get(); }
@@ -263,6 +287,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UDungeoneerInventoryComponent> InventoryComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Social|Trading")
+	TObjectPtr<UTradeManagerComponent> TradeManagerComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|LightBounce")
 	TObjectPtr<UMirrorLightBounceComponent> MirrorBounceComponent;
 
@@ -359,6 +386,7 @@ private:
 	int32 WalkStepSequenceCount = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	int32 LastAttackHitsCount = 0;
+	int32 EquippedLanternTrimIndex = 0;
 	bool bAttackDamageApplied = false;
 	bool bPrevAttackKeyDown = false;
 	bool bPrevFlareKeyDown = false;
@@ -366,6 +394,9 @@ private:
 	bool bPrevAntidoteKeyDown = false;
 	bool bPrevDodgeKeyDown = false;
 	bool bPrevInteractKeyDown = false;
+	bool bPrevTradeKeyDown = false;
+	bool bPrevCoopDropInKeyDown = false;
+	bool bWasDownedWithAliveAllies = false;
 	bool bHasMouseSample = false;
 	bool bHasPreviousWalkLocation = false;
 	bool bTexturedVisualsApplied = false;

@@ -562,7 +562,9 @@ void UDungeoneerPlayerHUDWidget::RefreshHUDFromCharacter(const ADungeoneerCharac
 	case EDungeoneerNearbyInteract::DescendNextFloor: CachedInteractHint = TEXT("[F] DESCEND TO NEXT FLOOR"); break;
 	case EDungeoneerNearbyInteract::SensoryAltar:     CachedInteractHint = TEXT("[F] SANCTUARY ALTAR: AWAKEN SENSE (90g)"); break;
 	case EDungeoneerNearbyInteract::CollectPickup:    CachedInteractHint = TEXT("[F] COLLECT DROPPED LOOT"); break;
-	default:                                          CachedInteractHint = TEXT("LMB: COMBO | R: FLARE | Q/C: SUPPLIES | SHIFT: DODGE"); break;
+	case EDungeoneerNearbyInteract::ReviveAlly:       CachedInteractHint = TEXT("[F] REVIVE DOWNED ALLY (50% HP)"); break;
+	case EDungeoneerNearbyInteract::AllyTrade:        CachedInteractHint = TEXT("[T] CO-OP P2P SUPPLY SWAP (2PC)  |  [F2] SPLIT-SCREEN"); break;
+	default:                                          CachedInteractHint = TEXT("LMB: COMBO | R: FLARE | Q/C: SUPPLIES | SHIFT: DODGE | F2: 2P CO-OP"); break;
 	}
 
 	RefreshMinimapFromWorld(Character);

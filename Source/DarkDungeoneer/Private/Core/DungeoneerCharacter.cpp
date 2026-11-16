@@ -4,12 +4,14 @@
 #include "Core/DungeoneerGameState.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerMovementConfig.h"
+#include "Core/DungeoneerSaveGame.h"
 #include "Rendering/SensoryPerkComponent.h"
 #include "Rendering/25DDirectionalRigComponent.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Audio/DungeonAcousticSubsystem.h"
 #include "Audio/DungeoneerTimedAudioComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
+#include "Social/TradeManagerComponent.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
@@ -117,6 +119,7 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 
 	TimedAudioComponent = CreateDefaultSubobject<UDungeoneerTimedAudioComponent>(TEXT("TimedAudioComponent"));
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
+	TradeManagerComponent = CreateDefaultSubobject<UTradeManagerComponent>(TEXT("TradeManagerComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
 
 	DirectionalHeroMIDs.Reserve(16);
@@ -317,6 +320,14 @@ void ADungeoneerCharacter::BeginPlay()
 	}
 
 	BindLocalInputContext();
+
+	if (!IsRunningCommandlet())
+	{
+		if (const UDungeoneerSaveGame* Ledger = UDungeoneerSaveGame::LoadOrCreateMetaLedger())
+		{
+			ApplyLanternTrimTint(Ledger->EquippedLanternTrimIndex);
+		}
+	}
 
 	if (!IsRunningCommandlet() && GetWorld() && GetWorld()->IsGameWorld() && !GetWorld()->GetAuthGameMode<ADungeoneerGameMode>())
 	{
@@ -684,6 +695,13 @@ void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBatter
 	}
 
 	++KillsCount;
+	if (const UWorld* World = GetWorld())
+	{
+		if (ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
+		{
+			GS->AuthorityRecordKillInLedger(0x03);
+		}
+	}
 	if (InventoryComponent && BonusGold > 0)
 	{
 		InventoryComponent->AuthorityAdjustGold(BonusGold);
@@ -803,8 +821,25 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 {
 	UWorld* World = GetWorld();
 	ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+
+	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+	{
+		if (ADungeoneerCharacter* DownedAlly = SpatialSys->FindNearestDownedAlly(this, 260.0f))
+		{
+			if (DownedAlly->ReviveByAlly(this))
+			{
+				RefreshNearbyInteractCandidate();
+				return;
+			}
+		}
+	}
+
 	ADungeoneerTileMapInstancer* Instancer = GM ? GM->GetActiveTileMapInstancer() : nullptr;
-	if (!World || !GM || !Instancer)
+	if (!GM || !Instancer)
 	{
 		return;
 	}
@@ -953,6 +988,130 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 	}
 }
 
+bool ADungeoneerCharacter::ReviveByAlly(ADungeoneerCharacter* Rescuer)
+{
+	if (!HasAuthority() || !Rescuer || Rescuer == this || Rescuer->IsDowned() || !IsDowned())
+	{
+		return false;
+	}
+
+	CurrentHealth = MaxHealth * 0.50f;
+	FlashlightBattery = FMath::Max(FlashlightBattery, 30.0f);
+	DownedRespawnRemaining = 0.0f;
+	bWasDownedWithAliveAllies = false;
+	CombatActionState = EDungeoneerCombatActionState::None;
+
+	if (UWorld* World = GetWorld())
+	{
+		if (ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
+		{
+			GS->AuthorityRecordRevivePerformed();
+		}
+	}
+
+	PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 96.0), TEXT("REVIVED BY ALLY!"), EDungeoneerFloatingTextKind::Status);
+	Rescuer->PushFloatingCombatPopup(Rescuer->GetActorLocation() + FVector(0.0, 0.0, 96.0), TEXT("+1 ALLY REVIVE"), EDungeoneerFloatingTextKind::Relic);
+	return true;
+}
+
+bool ADungeoneerCharacter::TriggerAllyTradeWithNearest()
+{
+	if (!HasAuthority() || IsDowned() || !InventoryComponent || !TradeManagerComponent)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	UZombieSpatialSubsystem* SpatialSys = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	ADungeoneerCharacter* Partner = SpatialSys ? SpatialSys->FindNearestLivingAlly(this, 340.0f) : nullptr;
+	if (!Partner)
+	{
+		return false;
+	}
+
+	UDungeoneerInventoryComponent* PartnerInv = Partner->GetInventoryComponent();
+	if (!PartnerInv || PartnerInv == InventoryComponent)
+	{
+		return false;
+	}
+
+	const int32 ShareGold = FMath::Min(25, InventoryComponent->GetGoldBalance());
+	FTradeOfferPayload MyOffer;
+	MyOffer.OfferedGold = ShareGold;
+	const TArray<FDungeoneerInventoryItem>& MyItems = InventoryComponent->GetItems();
+	for (const FDungeoneerInventoryItem& Item : MyItems)
+	{
+		if (!Item.bLockedForTrade && Item.ItemGuid.IsValid())
+		{
+			InventoryComponent->AuthoritySetItemTradeLock(Item.ItemGuid, true);
+			MyOffer.OfferedItemGuids.Add(Item.ItemGuid);
+			break;
+		}
+	}
+
+	FTradeOfferPayload PartnerOffer;
+	if (PartnerInv->GetConsumableCount(EDungeoneerConsumableId::LanternOilPhial) > 0)
+	{
+		PartnerInv->AuthorityConsumeQuickItem(EDungeoneerConsumableId::LanternOilPhial);
+		InventoryComponent->AuthorityAddConsumable(EDungeoneerConsumableId::LanternOilPhial, 1);
+	}
+
+	if (ShareGold <= 0 && MyOffer.OfferedItemGuids.Num() == 0)
+	{
+		PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 92.0), TEXT("NO SUPPLIES TO SWAP"), EDungeoneerFloatingTextKind::Status);
+		return false;
+	}
+
+	FTradeTransaction Tx;
+	Tx.TransactionId = FGuid::NewGuid();
+	Tx.bIsVendorTrade = false;
+	Tx.InitiatorInventory = InventoryComponent;
+	Tx.CounterpartyInventory = PartnerInv;
+	Tx.InitiatorOffer = MyOffer;
+	Tx.CounterpartyOffer = PartnerOffer;
+	Tx.bInitiatorConfirmed = true;
+	Tx.bCounterpartyConfirmed = true;
+	Tx.Phase = ETradePhaseState::OfferLocked;
+
+	const bool bCommitted = TradeManagerComponent->AuthorityExecuteTwoPhaseCommit(Tx);
+	if (bCommitted)
+	{
+		PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 94.0), TEXT("P2P SUPPLY SWAP [2PC]"), EDungeoneerFloatingTextKind::Gold);
+		Partner->PushFloatingCombatPopup(Partner->GetActorLocation() + FVector(0.0, 0.0, 94.0), TEXT("RECEIVED CO-OP SUPPLY"), EDungeoneerFloatingTextKind::Gold);
+	}
+	else
+	{
+		for (const FGuid& Id : MyOffer.OfferedItemGuids)
+		{
+			InventoryComponent->AuthoritySetItemTradeLock(Id, false);
+		}
+	}
+	return bCommitted;
+}
+
+void ADungeoneerCharacter::ApplyLanternTrimTint(int32 TrimIndex) noexcept
+{
+	EquippedLanternTrimIndex = FMath::Clamp(TrimIndex, 0, UDungeoneerSaveGame::LanternTrimCount - 1);
+	const FLinearColor TrimTint = UDungeoneerSaveGame::GetLanternTrimTintColor(EquippedLanternTrimIndex);
+
+	if (FlashlightComponent)
+	{
+		const FLinearColor SpotTint(
+			FMath::Clamp(1.0f * TrimTint.R, 0.45f, 1.0f),
+			FMath::Clamp(0.84f * TrimTint.G, 0.45f, 1.0f),
+			FMath::Clamp(0.56f * TrimTint.B, 0.28f, 1.0f));
+		FlashlightComponent->SetLightColor(SpotTint);
+	}
+	if (HeroLanternFillLight)
+	{
+		const FLinearColor FillTint(
+			FMath::Clamp(1.0f * TrimTint.R, 0.45f, 1.0f),
+			FMath::Clamp(0.86f * TrimTint.G, 0.45f, 1.0f),
+			FMath::Clamp(0.62f * TrimTint.B, 0.30f, 1.0f));
+		HeroLanternFillLight->SetLightColor(FillTint);
+	}
+}
+
 void ADungeoneerCharacter::Server_ExecutePrimaryAttack_Implementation()
 {
 	if (CombatActionState != EDungeoneerCombatActionState::LanternSlash)
@@ -1025,12 +1184,23 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 		CombatActionState = EDungeoneerCombatActionState::Downed;
 		if (DownedRespawnRemaining <= 0.0f && HasAuthority())
 		{
-			CurrentHealth = MaxHealth * 0.65f;
-			FlashlightBattery = FMath::Max(FlashlightBattery, 50.0f);
-			CombatActionState = EDungeoneerCombatActionState::None;
-			if (const UWorld* World = GetWorld())
+			const UWorld* World = GetWorld();
+			const UZombieSpatialSubsystem* SpatialSys = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+			const int32 AliveAllies = SpatialSys ? SpatialSys->GetAliveOtherPlayerCount(this) : 0;
+			ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+
+			if (!IsRunningCommandlet() && GM && !GM->IsActiveRunMainMenu() && AliveAllies == 0)
 			{
-				if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+				bWasDownedWithAliveAllies = false;
+				GM->ShowRunSummaryOverlay(false);
+			}
+			else
+			{
+				CurrentHealth = MaxHealth * 0.65f;
+				FlashlightBattery = FMath::Max(FlashlightBattery, 50.0f);
+				CombatActionState = EDungeoneerCombatActionState::None;
+				bWasDownedWithAliveAllies = false;
+				if (GM)
 				{
 					SetActorLocation(GM->GetEntrySpawnLocation() + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
 				}
@@ -1181,10 +1351,21 @@ void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
 {
 	NearbyInteractType = EDungeoneerNearbyInteract::None;
 	const UWorld* World = GetWorld();
+	const UZombieSpatialSubsystem* SpatialSys = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	if (SpatialSys && SpatialSys->FindNearestDownedAlly(this, 260.0f))
+	{
+		NearbyInteractType = EDungeoneerNearbyInteract::ReviveAlly;
+		return;
+	}
+
 	const ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
 	const ADungeoneerTileMapInstancer* Instancer = GM ? GM->GetActiveTileMapInstancer() : nullptr;
 	if (!Instancer)
 	{
+		if (SpatialSys && SpatialSys->FindNearestLivingAlly(this, 340.0f))
+		{
+			NearbyInteractType = EDungeoneerNearbyInteract::AllyTrade;
+		}
 		return;
 	}
 
@@ -1232,6 +1413,11 @@ void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
 			NearbyInteractType = EDungeoneerNearbyInteract::SensoryAltar;
 		}
 	}
+
+	if (NearbyInteractType == EDungeoneerNearbyInteract::None && SpatialSys && SpatialSys->FindNearestLivingAlly(this, 340.0f))
+	{
+		NearbyInteractType = EDungeoneerNearbyInteract::AllyTrade;
+	}
 }
 
 void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept
@@ -1251,12 +1437,29 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 
 	TimeSinceMouseMoved = FMath::Min(TimeSinceMouseMoved + DeltaSeconds, 10.0f);
 
+	const ULocalPlayer* OwningLP = PC->GetLocalPlayer();
+	const int32 ControllerId = OwningLP ? OwningLP->GetControllerId() : 0;
+	const UGameInstance* GI = GetGameInstance();
+	const bool bLocalSplitActive = GI && GI->GetNumLocalPlayers() > 1;
+	ADungeoneerGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+	const bool bMainMenuOpen = GM && GM->GetActiveDioramaStage() && !GM->GetActiveDioramaStage()->IsHidden();
+
 	double MoveX = 0.0;
 	double MoveY = 0.0;
-	if (PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up))    { MoveX += 1.0; }
-	if (PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down))  { MoveX -= 1.0; }
-	if (PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Right)) { MoveY += 1.0; }
-	if (PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Left))  { MoveY -= 1.0; }
+	if (ControllerId == 0)
+	{
+		if (PC->IsInputKeyDown(EKeys::W) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Up)))    { MoveX += 1.0; }
+		if (PC->IsInputKeyDown(EKeys::S) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Down)))  { MoveX -= 1.0; }
+		if (PC->IsInputKeyDown(EKeys::D) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Right))) { MoveY += 1.0; }
+		if (PC->IsInputKeyDown(EKeys::A) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Left)))  { MoveY -= 1.0; }
+	}
+	else
+	{
+		if (PC->IsInputKeyDown(EKeys::Up))    { MoveX += 1.0; }
+		if (PC->IsInputKeyDown(EKeys::Down))  { MoveX -= 1.0; }
+		if (PC->IsInputKeyDown(EKeys::Right)) { MoveY += 1.0; }
+		if (PC->IsInputKeyDown(EKeys::Left))  { MoveY -= 1.0; }
+	}
 
 	const FVector2D MoveVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(FVector2D(MoveX, MoveY), -45.0f);
 	MoveComp->SetMoveInputVector(MoveVec);
@@ -1271,7 +1474,7 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 	int32 ViewW = 0;
 	int32 ViewH = 0;
 	bool bMouseActivelyAiming = false;
-	if (PC->GetMousePosition(MouseX, MouseY))
+	if (ControllerId == 0 && PC->GetMousePosition(MouseX, MouseY))
 	{
 		const FVector2D CurrentMouse(static_cast<double>(MouseX), static_cast<double>(MouseY));
 		if (!bHasMouseSample)
@@ -1305,53 +1508,74 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 		MoveComp->SetAimInputVector(MoveVec);
 	}
 
-	const ADungeoneerGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
-	const bool bMainMenuOpen = GM && GM->GetActiveDioramaStage() && !GM->GetActiveDioramaStage()->IsHidden();
-
-	const bool bAttackKeyDown = !bMainMenuOpen &&
-		(PC->IsInputKeyDown(EKeys::LeftMouseButton) || PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::J));
+	const bool bAttackKeyDown = !bMainMenuOpen && ((ControllerId == 0)
+		? (PC->IsInputKeyDown(EKeys::LeftMouseButton) || PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::J))
+		: (PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::Enter) || PC->IsInputKeyDown(EKeys::NumPadZero)));
 	if (bAttackKeyDown && !bPrevAttackKeyDown)
 	{
 		TriggerPrimaryAttack();
 	}
 	bPrevAttackKeyDown = bAttackKeyDown;
 
-	const bool bDodgeKeyDown = !bMainMenuOpen &&
-		(PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift) || PC->IsInputKeyDown(EKeys::K) || PC->IsInputKeyDown(EKeys::RightMouseButton));
+	const bool bDodgeKeyDown = !bMainMenuOpen && ((ControllerId == 0)
+		? (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::K) || PC->IsInputKeyDown(EKeys::RightMouseButton) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::RightShift)))
+		: (PC->IsInputKeyDown(EKeys::RightShift) || PC->IsInputKeyDown(EKeys::NumPadOne)));
 	if (bDodgeKeyDown && !bPrevDodgeKeyDown)
 	{
 		TriggerDodgeDash();
 	}
 	bPrevDodgeKeyDown = bDodgeKeyDown;
 
-	const bool bInteractKeyDown = !bMainMenuOpen &&
-		(PC->IsInputKeyDown(EKeys::F) || PC->IsInputKeyDown(EKeys::E));
+	const bool bInteractKeyDown = !bMainMenuOpen && ((ControllerId == 0)
+		? (PC->IsInputKeyDown(EKeys::F) || PC->IsInputKeyDown(EKeys::E))
+		: (PC->IsInputKeyDown(EKeys::Backslash) || PC->IsInputKeyDown(EKeys::NumPadTwo)));
 	if (bInteractKeyDown && !bPrevInteractKeyDown)
 	{
 		TriggerInteract();
 	}
 	bPrevInteractKeyDown = bInteractKeyDown;
 
-	const bool bFlareKeyDown = !bMainMenuOpen && PC->IsInputKeyDown(EKeys::R);
+	const bool bFlareKeyDown = !bMainMenuOpen && ((ControllerId == 0)
+		? PC->IsInputKeyDown(EKeys::R)
+		: (PC->IsInputKeyDown(EKeys::RightBracket) || PC->IsInputKeyDown(EKeys::NumPadFour)));
 	if (bFlareKeyDown && !bPrevFlareKeyDown)
 	{
 		TriggerChargedFlare();
 	}
 	bPrevFlareKeyDown = bFlareKeyDown;
 
-	const bool bOilKeyDown = !bMainMenuOpen && (PC->IsInputKeyDown(EKeys::Q) || PC->IsInputKeyDown(EKeys::One));
+	const bool bOilKeyDown = !bMainMenuOpen && (ControllerId == 0) && (PC->IsInputKeyDown(EKeys::Q) || PC->IsInputKeyDown(EKeys::One));
 	if (bOilKeyDown && !bPrevOilKeyDown)
 	{
 		TriggerQuickConsumable(EDungeoneerConsumableId::LanternOilPhial);
 	}
 	bPrevOilKeyDown = bOilKeyDown;
 
-	const bool bAntidoteKeyDown = !bMainMenuOpen && (PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::Two));
+	const bool bAntidoteKeyDown = !bMainMenuOpen && (ControllerId == 0) && (PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::Two));
 	if (bAntidoteKeyDown && !bPrevAntidoteKeyDown)
 	{
 		TriggerQuickConsumable(EDungeoneerConsumableId::AntidoteDraught);
 	}
 	bPrevAntidoteKeyDown = bAntidoteKeyDown;
+
+	const bool bTradeKeyDown = !bMainMenuOpen && ((ControllerId == 0)
+		? PC->IsInputKeyDown(EKeys::T)
+		: (PC->IsInputKeyDown(EKeys::P) || PC->IsInputKeyDown(EKeys::NumPadThree)));
+	if (bTradeKeyDown && !bPrevTradeKeyDown)
+	{
+		TriggerAllyTradeWithNearest();
+	}
+	bPrevTradeKeyDown = bTradeKeyDown;
+
+	if (ControllerId == 0)
+	{
+		const bool bCoopDropInKeyDown = !bMainMenuOpen && PC->IsInputKeyDown(EKeys::F2);
+		if (bCoopDropInKeyDown && !bPrevCoopDropInKeyDown && GM)
+		{
+			GM->RequestSplitScreenCoopJoin();
+		}
+		bPrevCoopDropInKeyDown = bCoopDropInKeyDown;
+	}
 }
 
 void ADungeoneerCharacter::Tick(float DeltaSeconds)
@@ -1469,8 +1693,15 @@ void ADungeoneerCharacter::ApplyDungeoneerDamage(float DamageAmount, AActor* Dam
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - DamageAmount);
 	if (CurrentHealth <= 0.0f)
 	{
+		const UZombieSpatialSubsystem* SpatialSys = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+		const bool bHasAliveAlly = SpatialSys && SpatialSys->GetAliveOtherPlayerCount(this) > 0;
 		CombatActionState = EDungeoneerCombatActionState::Downed;
-		DownedRespawnRemaining = 1.6f;
+		bWasDownedWithAliveAllies = bHasAliveAlly;
+		DownedRespawnRemaining = bHasAliveAlly ? 18.0f : 1.4f;
+		PushFloatingCombatPopup(
+			GetActorLocation() + FVector(0.0, 0.0, 96.0),
+			bHasAliveAlly ? TEXT("DOWNED! 18s [F] REVIVE") : TEXT("FALLEN!"),
+			EDungeoneerFloatingTextKind::Status);
 		return;
 	}
 

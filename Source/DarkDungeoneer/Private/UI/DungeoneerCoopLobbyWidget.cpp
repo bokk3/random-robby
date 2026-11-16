@@ -14,6 +14,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Styling/CoreStyle.h"
 
 UDungeoneerCoopLobbyWidget::UDungeoneerCoopLobbyWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -28,29 +29,36 @@ TSharedRef<SWidget> UDungeoneerCoopLobbyWidget::RebuildWidget()
 		UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("CoopLobbyRootCanvas"));
 		WidgetTree->RootWidget = RootCanvas;
 
-		UBorder* LobbyCard = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CoopSquadCard"));
-		LobbyCard->SetBrushColor(FLinearColor(0.03f, 0.035f, 0.045f, 0.88f));
-		LobbyCard->SetPadding(FMargin(18.0f, 16.0f));
-		if (UCanvasPanelSlot* CardSlot = RootCanvas->AddChildToCanvas(LobbyCard))
+		UBorder* LobbyGoldTrim = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CoopSquadGoldTrim"));
+		LobbyGoldTrim->SetBrushColor(FLinearColor(0.76f, 0.56f, 0.18f, 0.85f));
+		LobbyGoldTrim->SetPadding(FMargin(2.0f));
+		if (UCanvasPanelSlot* CardSlot = RootCanvas->AddChildToCanvas(LobbyGoldTrim))
 		{
 			CardSlot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f));
-			CardSlot->SetPosition(FVector2D(-430.0, 48.0));
-			CardSlot->SetSize(FVector2D(382.0, 210.0));
+			CardSlot->SetPosition(FVector2D(-440.0, 44.0));
+			CardSlot->SetSize(FVector2D(400.0, 168.0));
 		}
+
+		UBorder* LobbyCard = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CoopSquadCard"));
+		LobbyCard->SetBrushColor(FLinearColor(0.022f, 0.026f, 0.042f, 0.92f));
+		LobbyCard->SetPadding(FMargin(18.0f, 14.0f));
+		LobbyGoldTrim->SetContent(LobbyCard);
 
 		UVerticalBox* CardStack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("LobbyStack"));
 		LobbyCard->SetContent(CardStack);
 
 		Txt_SplitscreenBadge = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_SplitscreenBadge"));
 		Txt_SplitscreenBadge->SetText(FText::FromString(GetSplitscreenBadgeText(ActiveSplitscreenMode)));
-		Txt_SplitscreenBadge->SetColorAndOpacity(FSlateColor(FLinearColor(0.92f, 0.72f, 0.32f, 1.0f)));
+		Txt_SplitscreenBadge->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 13));
+		Txt_SplitscreenBadge->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.76f, 0.30f, 1.0f)));
 		CardStack->AddChildToVerticalBox(Txt_SplitscreenBadge);
 
 		ProgrammaticSlotTextBlocks.Reset();
 		for (int32 i = 0; i < MaxSquadSlots; ++i)
 		{
 			UTextBlock* SlotRowText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-			SlotRowText->SetColorAndOpacity(FSlateColor(FLinearColor(0.84f, 0.88f, 0.90f, 1.0f)));
+			SlotRowText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 11));
+			SlotRowText->SetColorAndOpacity(FSlateColor(FLinearColor(0.86f, 0.90f, 0.94f, 1.0f)));
 			CardStack->AddChildToVerticalBox(SlotRowText);
 			ProgrammaticSlotTextBlocks.Add(SlotRowText);
 		}

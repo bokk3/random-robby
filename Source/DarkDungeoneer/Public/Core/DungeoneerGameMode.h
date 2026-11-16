@@ -11,6 +11,7 @@ class AMenuDioramaStageActor;
 class UDungeoneerCoopLobbyWidget;
 class UDungeoneerMenuFooterWidget;
 class UDungeoneerPlayerHUDWidget;
+class UDungeoneerRunSummaryWidget;
 
 /**
  * Primary Cooperative GameMode (`ADungeoneerGameMode`).
@@ -36,6 +37,35 @@ public:
 	/** Advances all co-op players to the next procedural floor (Floor N -> N+1) with deterministic seed. */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Loop")
 	int32 AdvanceToNextDungeonFloor();
+
+	/** TASK-1401: Drops Player 2 into 2-Player Local Split-Screen with dedicated viewport & HUD. */
+	UFUNCTION(BlueprintCallable, Category = "CoOp|SplitScreen")
+	bool RequestSplitScreenCoopJoin();
+
+	/** TASK-1403: Records Meta-Ledger SaveGame outcome and displays the Crypt Ledger Summary modal. */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Ledger")
+	void ShowRunSummaryOverlay(bool bVictory);
+
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Ledger")
+	void RetryCurrentSeedRun();
+
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Ledger")
+	void ReturnToMainMenuFromSummary();
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Cosmetics")
+	int32 CycleMenuLanternTrim();
+
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|DailySeed")
+	bool ToggleDailySeedMode();
+
+	UFUNCTION(BlueprintPure, Category = "Dungeon|DailySeed")
+	bool IsDailySeedModeActive() const noexcept { return bDailySeedModeActive; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Menu")
+	bool IsActiveRunMainMenu() const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "UI|Summary")
+	UDungeoneerRunSummaryWidget* GetActiveRunSummaryWidget() const noexcept { return ActiveRunSummaryWidget.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Dungeon|Loop")
 	int32 GetCurrentFloorIndex() const noexcept { return CurrentFloorIndex; }
@@ -86,9 +116,15 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UDungeoneerPlayerHUDWidget>> ActivePlayerHUDWidgets;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UDungeoneerRunSummaryWidget> ActiveRunSummaryWidget;
+
 private:
 	float AutoShotDelayRemaining = -1.0f;
 	float AutoQuitDelayRemaining = -1.0f;
+	int32 ActiveDailySeedDayKey = 0;
+	int32 EquippedLanternTrimIndex = 0;
+	bool bDailySeedModeActive = false;
 	bool bPendingAutoShot = false;
 	bool bPendingAutoQuit = false;
 };

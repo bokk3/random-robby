@@ -2,6 +2,7 @@
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerGameState.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
@@ -219,6 +220,11 @@ void ABossGuardianActor::OnZombieDied()
 
 	if (UWorld* World = GetWorld())
 	{
+		if (ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
+		{
+			GS->AuthorityRecordKillInLedger(0x08);
+			GS->AuthorityRecordRelicCollected();
+		}
 		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 		{
 			if (SpatialSys->GetActiveBossGuardian() == this)

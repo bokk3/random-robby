@@ -137,6 +137,11 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Public/AI/BossGuardianActor.h",
     "Source/DarkDungeoneer/Private/AI/BossGuardianActor.cpp",
     "scripts/synthesize_v13_art.py",
+    # Task Group 15 (v1.4.0 Co-Op Split-Screen, Meta-Ledger SaveGame & Run Summary)
+    "Source/DarkDungeoneer/Public/Core/DungeoneerSaveGame.h",
+    "Source/DarkDungeoneer/Private/Core/DungeoneerSaveGame.cpp",
+    "Source/DarkDungeoneer/Public/UI/DungeoneerRunSummaryWidget.h",
+    "Source/DarkDungeoneer/Private/UI/DungeoneerRunSummaryWidget.cpp",
 ]
 
 
