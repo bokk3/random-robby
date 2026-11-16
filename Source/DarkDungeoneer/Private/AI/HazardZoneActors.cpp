@@ -128,9 +128,13 @@ AHazardZone_Fire::AHazardZone_Fire()
 	FlickerLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FlickerLight"));
 	FlickerLight->SetupAttachment(RootComponent);
 	FlickerLight->SetLightColor(FLinearColor(1.0f, 0.42f, 0.08f));
-	FlickerLight->SetIntensity(7500.0f);
-	FlickerLight->SetAttenuationRadius(680.0f);
-	FlickerLight->VolumetricScatteringIntensity = 2.0f;
+	FlickerLight->SetUseInverseSquaredFalloff(true);
+	FlickerLight->SetIntensityUnits(ELightUnits::Lumens);
+	FlickerLight->SetSourceRadius(24.0f);
+	FlickerLight->SetSoftSourceRadius(36.0f);
+	FlickerLight->SetIntensity(850.0f);
+	FlickerLight->SetAttenuationRadius(520.0f);
+	FlickerLight->VolumetricScatteringIntensity = 1.2f;
 	FlickerLight->SetVisibility(false);
 }
 
@@ -140,7 +144,7 @@ void AHazardZone_Fire::ApplyHazardTick(float DeltaSeconds)
 	{
 		FlickerLight->SetVisibility(true);
 		FlickerPhase += DeltaSeconds * 16.0f;
-		const float Flicker = 6500.0f + 2200.0f * FMath::Sin(FlickerPhase) * FMath::Cos(FlickerPhase * 0.43f);
+		const float Flicker = 780.0f + 240.0f * FMath::Sin(FlickerPhase) * FMath::Cos(FlickerPhase * 0.43f);
 		FlickerLight->SetIntensity(Flicker);
 	}
 

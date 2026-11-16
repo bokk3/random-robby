@@ -5,6 +5,7 @@
  */
 
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Ecosystem/DungeonEcosystemTypes.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
 #include "Engine/World.h"
@@ -30,6 +31,7 @@ void UDungeoneerSensoryWorldSubsystem::Initialize(FSubsystemCollectionBase& Coll
 
 	NextNoiseIndex = 0;
 	NextScentIndex = 0;
+	NoiseEventSerial = 0;
 
 	for (int32 i = 0; i < MaxNoiseEvents; ++i)
 	{
@@ -56,6 +58,7 @@ void UDungeoneerSensoryWorldSubsystem::BroadcastNoiseEvent(
 {
 	const uint32 Slot = NextNoiseIndex % MaxNoiseEvents;
 	++NextNoiseIndex;
+	++NoiseEventSerial;
 
 	FDungeoneerNoiseEvent& Event = NoiseRingBuffer[Slot];
 	Event.WorldOrigin = Origin;
@@ -167,6 +170,10 @@ void UDungeoneerSensoryWorldSubsystem::PushGlobalSensoryMPCParameters(UMaterialP
 	{
 		MPCInst->SetScalarParameterValue(FName(TEXT("HearingPulseRadius")), 0.0f);
 	}
+
+	MPCInst->SetScalarParameterValue(
+		FName(TEXT("EcoTime")),
+		EcoColors::WrapEcoTime(World->GetTimeSeconds()));
 }
 
 void UDungeoneerSensoryWorldSubsystem::Tick(float DeltaTime)

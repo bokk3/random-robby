@@ -25,7 +25,7 @@ class DARKDUNGEONEER_API UDungeoneerSensoryWorldSubsystem : public UTickableWorl
 	GENERATED_BODY()
 
 public:
-	static constexpr int32 MaxNoiseEvents = 32;
+	static constexpr int32 MaxNoiseEvents = 64;
 	static constexpr int32 MaxScentNodes = 128;
 
 	UDungeoneerSensoryWorldSubsystem();
@@ -79,12 +79,20 @@ public:
 	/** Const-access to active scent nodes for AI hunting or thermal vision rendering. */
 	const TStaticArray<FDungeoneerScentNode, MaxScentNodes>& GetScentTrailRingBuffer() const noexcept { return ScentTrailRingBuffer; }
 
+	/** Const-access to active acoustic noise events for crystal resonance and listener queries. */
+	const TStaticArray<FDungeoneerNoiseEvent, MaxNoiseEvents>& GetNoiseRingBuffer() const noexcept { return NoiseRingBuffer; }
+
+	/** Monotonic counter incremented on every BroadcastNoiseEvent so consumers never re-trigger the same pulse. */
+	UFUNCTION(BlueprintPure, Category = "Sensory")
+	int64 GetNoiseEventSerial() const noexcept { return NoiseEventSerial; }
+
 private:
 	TStaticArray<FDungeoneerNoiseEvent, MaxNoiseEvents> NoiseRingBuffer;
 	TStaticArray<FDungeoneerScentNode, MaxScentNodes> ScentTrailRingBuffer;
 
 	uint32 NextNoiseIndex = 0;
 	uint32 NextScentIndex = 0;
+	int64 NoiseEventSerial = 0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialParameterCollection> GlobalSensoryMPC;

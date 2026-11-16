@@ -1,5 +1,8 @@
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerMovementConfig.h"
+#include "Ecosystem/DungeonEcosystemTypes.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 
 UDungeoneerMovementComponent::UDungeoneerMovementComponent()
@@ -70,8 +73,9 @@ float UDungeoneerMovementComponent::GetMaxChronoSlowConfig() const noexcept
 float UDungeoneerMovementComponent::GetMaxSpeed() const
 {
 	const float BaseSpeed = GetBaseWalkSpeedConfig();
-	// Chrono-Leech conservation law: V_player = V_base * (1.0f - S)
-	return BaseSpeed * FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f);
+	const float WadingMult = bIsWadingInStream ? EcoCells::WadingSpeedScalar : 1.0f;
+	// Chrono-Leech conservation law: V_player = V_base * (1.0f - S) * WadingMult
+	return BaseSpeed * FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * WadingMult;
 }
 
 float UDungeoneerMovementComponent::GetStepPhaseNormalized() const noexcept
@@ -145,6 +149,7 @@ void FSavedMove_Dungeoneer::Clear()
 {
 	Super::Clear();
 	SavedQuantizedChronoSlow = 0;
+	bSavedWading = 0;
 }
 
 bool FSavedMove_Dungeoneer::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
@@ -155,7 +160,8 @@ bool FSavedMove_Dungeoneer::CanCombineWith(const FSavedMovePtr& NewMove, ACharac
 	}
 
 	const FSavedMove_Dungeoneer* OtherDungeoneerMove = static_cast<const FSavedMove_Dungeoneer*>(NewMove.Get());
-	return SavedQuantizedChronoSlow == OtherDungeoneerMove->SavedQuantizedChronoSlow;
+	return SavedQuantizedChronoSlow == OtherDungeoneerMove->SavedQuantizedChronoSlow
+		&& bSavedWading == OtherDungeoneerMove->bSavedWading;
 }
 
 void FSavedMove_Dungeoneer::SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, FNetworkPredictionData_Client_Character& ClientData)
@@ -165,6 +171,7 @@ void FSavedMove_Dungeoneer::SetMoveFor(ACharacter* C, float InDeltaTime, FVector
 	if (const UDungeoneerMovementComponent* MoveComp = C ? Cast<UDungeoneerMovementComponent>(C->GetCharacterMovement()) : nullptr)
 	{
 		SavedQuantizedChronoSlow = QuantizeSlowRatioToByte(MoveComp->GetChronoSlowRatio(), MoveComp->GetMaxChronoSlowConfig());
+		bSavedWading = MoveComp->IsWadingInStream() ? 1 : 0;
 	}
 }
 
@@ -175,6 +182,7 @@ void FSavedMove_Dungeoneer::PrepMoveFor(ACharacter* C)
 	if (UDungeoneerMovementComponent* MoveComp = C ? Cast<UDungeoneerMovementComponent>(C->GetCharacterMovement()) : nullptr)
 	{
 		MoveComp->SetChronoSlowRatio(DequantizeByteToSlowRatio(SavedQuantizedChronoSlow, MoveComp->GetMaxChronoSlowConfig()));
+		MoveComp->SetWadingInStream(bSavedWading != 0);
 	}
 }
 
@@ -197,4 +205,15 @@ void UDungeoneerMovementComponent::OnMovementUpdated(float DeltaSeconds, const F
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
 	ChronoSlowRatio = FMath::Clamp(ChronoSlowRatio, 0.0f, GetMaxChronoSlowConfig());
+
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UDungeonWaterSubsystem* WaterSub = World->GetSubsystem<UDungeonWaterSubsystem>())
+		{
+			if (WaterSub->GetGridWidth() > 0 && UpdatedComponent)
+			{
+				bIsWadingInStream = WaterSub->IsWadingLocation(UpdatedComponent->GetComponentLocation());
+			}
+		}
+	}
 }

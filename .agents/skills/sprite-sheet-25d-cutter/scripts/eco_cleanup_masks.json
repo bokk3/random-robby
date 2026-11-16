@@ -1,0 +1,41 @@
+{
+  "PROP_Magical_Flora_And_Crystals_4x4_interior_key_rows": [1, 2, 3],
+  "PROP_Magical_Flora_And_Crystals_4x4": [
+    {
+      "row": 1,
+      "col": 2,
+      "rects_norm": [
+        [0.745, 0.085, 1.000, 0.290]
+      ],
+      "note": "Erase stray hand+vial stamp in upper-right of Spore-Cap R1C2"
+    }
+  ],
+  "PROP_Water_And_Fauna_4x4_interior_key_rows": [0, 1, 2, 3],
+  "PROP_Water_And_Fauna_4x4": [
+    {
+      "row": 0,
+      "col": 0,
+      "rects_norm": [
+        [0.105, 0.555, 0.388, 0.840]
+      ],
+      "note": "Erase stray boot stamp on left side of Weeping Wall R0C0"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "rects_norm": [
+        [0.025, 0.075, 0.305, 0.280],
+        [0.295, 0.075, 0.342, 0.205]
+      ],
+      "note": "Erase stray hand+vial stamp in upper-left of Weeping Wall R0C2"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "rects_norm": [
+        [0.675, 0.080, 1.000, 0.290]
+      ],
+      "note": "Erase stray hand+vial stamp in upper-right of Puddle-Newt R3C2"
+    }
+  ]
+}

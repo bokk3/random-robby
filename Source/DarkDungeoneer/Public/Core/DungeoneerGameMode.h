@@ -27,6 +27,7 @@ public:
 	ADungeoneerGameMode();
 
 	virtual void StartPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Hides the Main Menu overlay and transitions players in-place into the active procedural dungeon. */
 	UFUNCTION(BlueprintCallable, Category = "Game|Menu")
@@ -84,4 +85,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UDungeoneerPlayerHUDWidget>> ActivePlayerHUDWidgets;
+
+private:
+	float AutoShotDelayRemaining = -1.0f;
+	float AutoQuitDelayRemaining = -1.0f;
+	bool bPendingAutoShot = false;
+	bool bPendingAutoQuit = false;
 };

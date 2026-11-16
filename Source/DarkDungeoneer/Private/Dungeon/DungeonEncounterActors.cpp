@@ -65,9 +65,13 @@ ARestingGroundActor::ARestingGroundActor()
 	CampfireLight->SetupAttachment(RootComponent);
 	CampfireLight->SetRelativeLocation(FVector(0.0, 0.0, 120.0));
 	CampfireLight->SetLightColor(FLinearColor(1.0f, 0.58f, 0.24f));
-	CampfireLight->SetIntensity(9000.0f);
-	CampfireLight->SetAttenuationRadius(1100.0f);
-	CampfireLight->VolumetricScatteringIntensity = 1.6f;
+	CampfireLight->SetUseInverseSquaredFalloff(true);
+	CampfireLight->SetIntensityUnits(ELightUnits::Lumens);
+	CampfireLight->SetSourceRadius(32.0f);
+	CampfireLight->SetSoftSourceRadius(48.0f);
+	CampfireLight->SetIntensity(900.0f);
+	CampfireLight->SetAttenuationRadius(900.0f);
+	CampfireLight->VolumetricScatteringIntensity = 1.1f;
 	CampfireLight->CastShadows = false;
 }
 
@@ -131,7 +135,7 @@ void ARestingGroundActor::Tick(float DeltaSeconds)
 	if (CampfireLight)
 	{
 		CampfirePhase += DeltaSeconds * 7.5f;
-		CampfireLight->SetIntensity(8600.0f + 1100.0f * FMath::Sin(CampfirePhase));
+		CampfireLight->SetIntensity(900.0f + 160.0f * FMath::Sin(CampfirePhase));
 	}
 
 	if (!HasAuthority())
@@ -164,8 +168,12 @@ AVendorActor::AVendorActor()
 	MerchantLanternLight->SetupAttachment(VendorRoot);
 	MerchantLanternLight->SetRelativeLocation(FVector(0.0, 0.0, 175.0));
 	MerchantLanternLight->SetLightColor(FLinearColor(0.22f, 0.88f, 0.96f));
-	MerchantLanternLight->SetIntensity(3600.0f);
-	MerchantLanternLight->SetAttenuationRadius(850.0f);
+	MerchantLanternLight->SetUseInverseSquaredFalloff(true);
+	MerchantLanternLight->SetIntensityUnits(ELightUnits::Lumens);
+	MerchantLanternLight->SetSourceRadius(24.0f);
+	MerchantLanternLight->SetSoftSourceRadius(36.0f);
+	MerchantLanternLight->SetIntensity(680.0f);
+	MerchantLanternLight->SetAttenuationRadius(700.0f);
 	MerchantLanternLight->CastShadows = false;
 }
 
@@ -200,7 +208,7 @@ void AVendorActor::Tick(float DeltaSeconds)
 	{
 		LanternSwayPhase += DeltaSeconds * 3.2f;
 		MerchantLanternLight->SetRelativeLocation(FVector(FMath::Sin(LanternSwayPhase) * 14.0, FMath::Cos(LanternSwayPhase * 0.7f) * 8.0, 175.0));
-		MerchantLanternLight->SetIntensity(3450.0f + 450.0f * FMath::Sin(LanternSwayPhase * 2.1f));
+		MerchantLanternLight->SetIntensity(680.0f + 110.0f * FMath::Sin(LanternSwayPhase * 2.1f));
 	}
 }
 

@@ -68,6 +68,11 @@ public:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnZombieStepTriggered, const FDungeoneerStepEvent&);
 	FOnZombieStepTriggered OnZombieStepTriggered;
 
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnWalkColumnChangedSignature, int32 /*NewColumn*/);
+	FOnWalkColumnChangedSignature OnWalkColumnChanged;
+
+	int32 GetWalkStepSequenceCount() const noexcept { return WalkStepSequenceCount; }
+
 protected:
 	void MoveAlongOctant(ECompassOctant Octant, float Scale = 1.0f) noexcept;
 	void UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, int32 FrameColumn = -1) noexcept;
@@ -125,6 +130,7 @@ private:
 	int32 StepSequenceCounter = 0;
 	int32 ActiveDirectionalRow = -1;
 	int32 ActiveWalkFrameColumn = 0;
+	int32 WalkStepSequenceCount = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	bool bTexturedVisualsApplied = false;
 	bool bKillRewardsGranted = false;

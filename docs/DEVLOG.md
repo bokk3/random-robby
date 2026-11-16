@@ -237,3 +237,37 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
   - Implemented `FDungeoneerTrapVentEntry` (`Steam`, `EmberFire`, `PoisonSpore`, `ChronoGas`, `AcousticChime`) affecting both players and zombies; `EmberFire` floor grates call `AZombieExploder::IgniteOrAccelerateFuse(...)` while shattered breakables (`1.95f` loudness) and chime wires (`2.35f` loudness) lure nearby zombies toward sound origins.
   - Added `64` pre-allocated camera-relative `AmbientMotesHISM` instances, `0.6s` volumetric fog blending in `ADungeonAtmosphereActor`, and subtle `AVendorActor` lantern sway while keeping every `Tick` heap-allocation-free.
 - **Verification**: `verify_architecture_invariants.py` passed (`85` files), `DarkDungeoneerEditor` & `DarkDungeoneer` compiled cleanly, and all `10` headless UE `5.8.2` automation tests (including `DarkDungeoneer.Dungeon.BiomesOctagonalRoomsTrapsAndExploderLure`) passed with `UE_TEST_EXIT=0`.
+
+---
+
+## Devlog #15 — Living Dungeon Ecosystem: 4-Tier Lighting, Hydrology, Flora, Fauna & Surface Acoustics (`v1.2.0`)
+
+### Architecture & Performance Budgets
+- **Packed 8-Float `EEcoCPD` & `FDungeoneerEcoMaterialFactory` (`M_Dungeoneer_EcoInstanced`)**:
+  - Added `FDungeoneerEcoMaterialFactory` to construct and save `/Game/Materials/M_Dungeoneer_EcoInstanced` with full 32-bit float precision (`UnpackRGB24` + squared-distance early-out before channel unpacking), supporting both legacy 4x4 atlas buckets (`bLegacyLayout`) and interactive ecosystem foliage/water/fauna instances without dynamic material proliferation.
+- **4-Tier Light Budget (`UDungeonLightBudgetSubsystem`)**:
+  - Replaced scattered ad-hoc point lights with a deterministic pooled hierarchy across `512` registered candidates: **Tier 0** emissive-only CPD micro-lights (`0` GPU cost), **Tier 1** up to `32` nearest glowing pools packed into `MPC_SensoryState` (`EcoGlow00..31`), **Tier 2** a `16`-slot pool of unshadowed point lights with smooth intensity blending and `15s` bloom leases, and **Tier 3** `2` shadow-casting volumetric hero world lights.
+- **Hydrology, Interactive Flora & SoA Critters (`UDungeonWaterSubsystem`, `UDungeonFloraManagerComponent`, `UDungeonFaunaSubsystem`)**:
+  - Built an `O(1)` `128 UU` surface classification grid (`EDungeonSurfaceKind`) supporting ankle-deep streams (`0.88x` speed modifier preserved across `FSavedMove_Dungeoneer::bSavedWading` prediction), `24` seeded ceiling drips, wet boot footprints, floating petals, weeping wall cascades, and geysers inside a `256`-slot `ISM_WaterFX` pool.
+  - Wired `HISM_MagicalFlora` (`PrismLily` light-cone/mirror blooms, CSR BFS `PulseMoss` ripples, `SporeCap` puffs, serial-gated `EchoCrystal` resonance) and `FFaunaSoA` (`Capacity = 256` `LumenMoth`, `LanternBeetle`, `PuddleNewt`, `CryptCrab` updated at `30 Hz` via `BatchUpdateInstancesTransforms` with zero heap allocations).
+- **Surface-Layered Foley & Game-Thread-Safe Procedural Audio (`UDungeonAcousticSubsystem`, `UDungeoneerPCMSoundWave`)**:
+  - Generated `42` deterministic `22.05 kHz` 16-bit mono WAVs via `scripts/synthesize_ecosystem_foley.py` (logged in `Content/AssetManifest.json`) and synced Layers A/B/C cleanly to `FOnWalkColumnChanged` across up to `64` walkers and `22` pooled voices (`12` one-shots, `6` spatial soundscape loops, `4` local player loops) with round-robin line-trace occlusion LPF.
+  - Resolved an audio worker thread assertion (`Assertion failed: IsInGameThread()` in `SoundWave.cpp`) by streaming deterministic PCM via `UDungeoneerPCMSoundWave`.
+
+---
+
+## Devlog #16 — 2.5D Visual Overhaul, HISM Cluster Builds & Release Integration (`v1.2.1`)
+
+### Closing the Visual Gap Toward `REF_Living_Dungeon_Target.jpg`
+- **Root-Cause Rendering & Shader Fixes (`DungeoneerTileMapInstancer`, `DungeoneerEcoMaterialFactory`)**:
+  - Fixed invisible dungeon geometry in settled renders caused by calling `AddInstance(..., false)` on HISMs without rebuilding cluster trees or updating bounds (`BuildTreeIfOutdated(false, true)`, `UpdateBounds()`, `MarkRenderStateDirty()`).
+  - Replaced geometric placeholder sheets with pixel-art dungeon floor, wall, archway (`PROP_Doors_And_Level_Transitions_4x4`), flora, and water atlases; upgraded `slice_normal_rig.py` + `eco_cleanup_masks.json` flood-fill cleanup to strip white/grey sticker halos around pixel outlines; switched `WallHISM`/`DiagonalWedgeHISM` cubes to opaque slate cobblestone materials so alpha margins no longer punch holes in 3D geometry.
+  - Upgraded `M_Dungeoneer_EcoInstanced` to `EcoMatRev6` (adding subtle moonlit ambient slate lift so unlit stone remains legible) and rewrote `BuildProceduralWaterAtlas` fallback ripples using layered organic sine currents.
+- **`-45°` Isometric Diorama Camera & Calibrated `ELightUnits::Lumens` Lighting**:
+  - Framed `ADungeoneerCharacter` and `AMenuDioramaStageActor` at `Pitch = -42°, Yaw = -45°, FOV = 35°` with clamped auto-exposure (`0.42f`–`1.40f`, bias `-0.10f`, bloom `0.35f`) and `ELightUnits::Lumens` calibration (`650 lm` flashlight / `120 lm` fill in gameplay; `480 lm` / `95 lm` in `AMenuDioramaStageActor`), eliminating both hero blowout in gameplay and Main Menu exposure washout.
+  - Added deterministic Tick-driven `-CaptureShotAfterSec=<N>` & `-QuitAfterShot` hooks in `ADungeoneerGameMode` (zero `FTimerHandle`) to capture settled live Entry Room and Main Menu verification screenshots after async shader compilation completes.
+- **Verification (`v1.2.1`)**:
+  - `python .agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --self-test` passed (`Rig + Dungeon + Eco modes`).
+  - `python scripts/verify_architecture_invariants.py` passed (`101` tracked files, zero `Tick` allocations, zero banned symbols, math invariants & `Content/AssetManifest.json` SHA-256 hashes valid).
+  - Compiled both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings (`bTreatWarningsAsErrors = true`).
+  - Executed all `16/16` headless UE `5.8.2` automation tests (`Automation RunTests DarkDungeoneer; Quit`), all passing with `EXIT CODE: 0`, and visually verified live Entry Room and Main Menu screenshots in `docs/assets/`.

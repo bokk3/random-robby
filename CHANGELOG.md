@@ -7,7 +7,28 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- Future post-1.1 content expansions (boss arenas, unique relic synergies, and online dedicated server hardening).
+- Future post-1.2 content expansions (boss arenas, unique relic synergies, and online dedicated server hardening).
+
+---
+
+## [1.2.1] - 2026-11-16
+
+### Added
+- **Living Dungeon Ecosystem (`v1.2.0` M1–M3 Architecture)**:
+  - **4-Tier Light Budget & Eco Shader (`UDungeonLightBudgetSubsystem`, `FDungeoneerEcoMaterialFactory`)**: Generated `/Game/Materials/M_Dungeoneer_EcoInstanced` (`EcoMatRev6`) with 8-float `EEcoCPD` per-instance custom data (`UVCell`, `Emissive`, `HueR`, `HueG`, `HueB`, `EventTime`, `ParamA`, `KindFlags`) and 32-bit `UnpackRGB24` shader distance-field glows (`MaxTier1 = 32` in `MPC_SensoryState`, `MaxTier2 = 16` unshadowed pooled lights, `MaxTier3World = 2` shadow-casting world lights, `MaxCandidates = 512`).
+  - **Dungeon Hydrology (`UDungeonWaterSubsystem`)**: Added an `O(1)` `128 UU` surface grid (`EDungeonSurfaceKind`), ankle-deep wading streams (`0.88x` movement speed with `FSavedMove_Dungeoneer::bSavedWading` replication sync and boot occlusion offset), `24` seeded ceiling drips, `256`-slot `ISM_WaterFX` pool (wet footprints, boot/drip ripples, floating petals, weeping wall cascades, geysers), and `HISM_Water`.
+  - **Interactive Flora (`UDungeonFloraManagerComponent`)**: Added `HISM_MagicalFlora` with photosensitive Prism-Lilies (blooming + `15s` Tier 2 light leases under flashlight or mirror-bounced beams), CSR BFS Pulse-Moss waves, Spore-Cap puffs, and serial-gated Echo-Crystal acoustic chords.
+  - **SoA Critter Fauna (`UDungeonFaunaSubsystem`)**: Added pre-allocated `FFaunaSoA` (`Capacity = 256`) supporting `LumenMoth`, `LanternBeetle`, `PuddleNewt`, and `CryptCrab` via `ISM_Fauna` (`30 Hz` batch transform updates, sprint scatter, lantern roosting, and decoy `0.25f` puddle ripples).
+  - **Surface-Layered Acoustics & Foley Pipeline (`UDungeonAcousticSubsystem`, `UDungeoneerPCMSoundWave`, `synthesize_ecosystem_foley.py`)**: Synthesized `42` deterministic `22.05 kHz` 16-bit mono WAV foley stems logged in `Content/AssetManifest.json`, drove Layers A/B/C via `FOnWalkColumnChanged` (`MaxWalkers = 64`, `TotalVoicePoolSize = 22` pooled voices, round-robin occlusion LPF), and implemented `UDungeoneerPCMSoundWave` for game-thread-safe procedural audio without `SoundWave.cpp` off-thread assertions.
+- **2.5D Visual Overhaul & Release Integration (`v1.2.1` M4)**:
+  - **Environment Atlases & De-Haloing (`slice_normal_rig.py`, `Content/Art/`)**: Generated pixel-art dark dungeon cobblestone/wall/archway atlases (`ATLAS_Dungeon_Floors_4x4`, `PROP_Dungeon_Walls_And_Cutaways_4x4`, `PROP_Doors_And_Level_Transitions_4x4`), upgraded `eco_cleanup_masks.json` flood-fill sticker-halo stripping, and replaced blocky procedural water waves with layered sine-ripple indigo streams and upright Entry cascades.
+  - **Isometric `-45°` Diorama Camera, Exposure & Light Calibration (`ADungeoneerCharacter`, `AMenuDioramaStageActor`, `ADungeonAtmosphereActor`)**: Framed gameplay and Menu Diorama cameras at `Pitch = -42°, Yaw = -45°, FOV = 35°` with clamped auto-exposure (`0.42f`–`1.40f`), warm lantern `ELightUnits::Lumens` calibration (`650 lm` flashlight / `120 lm` fill in gameplay; `480 lm` / `95 lm` in `AMenuDioramaStageActor`), and violet-obsidian atmospheric fog.
+  - **HISM Cluster Builds & Deterministic Screenshot Hook (`ADungeoneerTileMapInstancer`, `ADungeoneerGameMode`)**: Rebuilt HISM cluster trees and bounds (`BuildTreeIfOutdated`, `UpdateBounds`, `MarkRenderStateDirty`) across all floor/wall/water buckets, sealed room corners around tightened doorways, and added Tick-based `-CaptureShotAfterSec` / `-QuitAfterShot` capture flags (zero `FTimerHandle`).
+
+### Changed & Verified
+- Updated `scripts/verify_architecture_invariants.py` (`101` core/subsystem/tool files audited; zero `Tick` heap allocations, zero banned symbols, math invariants & SHA-256 `Content/AssetManifest.json` valid).
+- Added 6 ecosystem automation specs in `Source/DarkDungeoneer/Private/Tests/DungeoneerVerificationSpecs.cpp` (`CustomDataPackingAndRGB24`, `LightBudgetTierCaps`, `FloraBloomMossWaveAndCrystalNoFeedback`, `FaunaSoAZeroAllocScatterNewtNoise`, `WaterSurfaceGridAndWadingDeterminism`, `AcousticSurfaceLayers`).
+- Passed `slice_normal_rig.py --self-test`, rebuilt `DarkDungeoneerEditor` and `DarkDungeoneer` (`Win64 Development`, zero project warnings), passed all `16/16` headless UE `5.8.2` `DarkDungeoneer.*` automation tests (`EXIT CODE: 0`), and visually verified live Entry Room & Main Menu screenshots.
 
 ---
 

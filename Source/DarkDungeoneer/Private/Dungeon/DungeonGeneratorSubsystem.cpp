@@ -56,7 +56,7 @@ FDungeonFloorGraph UDungeonGeneratorSubsystem::GenerateFloorGraph(int32 FloorInd
 		Node.WorldCenter = FVector(static_cast<float>(Depth) * RoomPitchX, LateralOffset * RoomPitchY, 0.0f);
 		if (Type == EDungeonRoomType::Entry)
 		{
-			Node.RoomExtents = FVector(1200.0f, 1200.0f, 400.0f);
+			Node.RoomExtents = FVector(640.0f, 640.0f, 400.0f);
 		}
 		else if (Type == EDungeonRoomType::MirrorPalaceMaze)
 		{

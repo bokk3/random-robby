@@ -1197,8 +1197,18 @@ def process_dungeon_sheet(args, sheet_key=None):
             json.dump(atlas_meta, f, indent=2)
         generated_files.append(atlas_meta_path)
     else:
-        # PROP_*: strip #FF00FF magenta background, extract #00FF00 mirror panes -> _ORM Red channel
-        clean_diff = chroma_key_and_cleanup(raw_img)
+        # PROP_*: strip #FF00FF magenta background, extract #00FF00 mirror panes -> _ORM Red channel.
+        # AI-generated JPG/PNG sheets use border flood-fill + exterior halo peeling + interior key-hole clearing.
+        if args.input and not sheet_key:
+            clean_diff = eco_flood_fill_chroma_key(
+                raw_img,
+                grid_cols=args.grid_cols,
+                grid_rows=args.grid_rows,
+                bg_dist_thresh=94.0,
+                interior_key_rows=list(range(args.grid_rows)),
+            )
+        else:
+            clean_diff = chroma_key_and_cleanup(raw_img)
         final_diff, orm_img, portal_mask = generate_prop_orm_with_portal_mask(raw_img, clean_diff)
 
         diffuse_path = os.path.join(output_dir, f"{asset_name}_D.png")
@@ -1245,10 +1255,299 @@ def process_dungeon_sheet(args, sheet_key=None):
     return generated_files
 
 
+# -----------------------------------------------------------------------------
+# Ecosystem Mode Execution (--mode eco: Flood-Fill Key, Cleanup Masks, Strips)
+# -----------------------------------------------------------------------------
+def _connected_components_bool(mask):
+    """Labels 4-connected True regions in a 2D boolean mask (uses scipy if available, else BFS)."""
+    try:
+        from scipy.ndimage import label as scipy_label
+        labeled, num_features = scipy_label(mask)
+        return labeled, int(num_features)
+    except ImportError:
+        from collections import deque
+        h, w = mask.shape
+        labeled = np.zeros((h, w), dtype=np.int32)
+        cur_id = 0
+        for sy in range(h):
+            for sx in range(w):
+                if mask[sy, sx] and labeled[sy, sx] == 0:
+                    cur_id += 1
+                    q = deque([(sy, sx)])
+                    labeled[sy, sx] = cur_id
+                    while q:
+                        cy, cx = q.popleft()
+                        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                            ny, nx = cy + dy, cx + dx
+                            if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and labeled[ny, nx] == 0:
+                                labeled[ny, nx] = cur_id
+                                q.append((ny, nx))
+        return labeled, cur_id
+
+
+def apply_eco_cleanup_masks(raw_rgb_image, asset_name, cleanup_masks_path, grid_cols=4, grid_rows=4):
+    """Fills deterministic stamp-cleanup rectangles per cell and returns (cleaned_img, interior_key_rows)."""
+    if not cleanup_masks_path or not os.path.isfile(cleanup_masks_path):
+        return raw_rgb_image, set()
+
+    with open(cleanup_masks_path, "r", encoding="utf-8") as f:
+        all_masks = json.load(f)
+
+    interior_rows = set(int(r) for r in all_masks.get(f"{asset_name}_interior_key_rows", []))
+    entries = all_masks.get(asset_name)
+    if not entries:
+        return raw_rgb_image, interior_rows
+
+    arr = np.array(raw_rgb_image.convert("RGB")).copy()
+    h, w = arr.shape[:2]
+    cw = w // max(grid_cols, 1)
+    ch = h // max(grid_rows, 1)
+
+    for entry in entries:
+        row = int(entry.get("row", 0))
+        col = int(entry.get("col", 0))
+        x0 = col * cw
+        y0 = row * ch
+        x1 = min(w, (col + 1) * cw)
+        y1 = min(h, (row + 1) * ch)
+        cell = arr[y0:y1, x0:x1]
+        bg = np.median(cell[:min(6, cell.shape[0]), :min(6, cell.shape[1])].reshape(-1, 3), axis=0).astype(np.uint8)
+
+        for rect in entry.get("rects_norm", []):
+            rx0 = int(round(rect[0] * (x1 - x0)))
+            ry0 = int(round(rect[1] * (y1 - y0)))
+            rx1 = int(round(rect[2] * (x1 - x0)))
+            ry1 = int(round(rect[3] * (y1 - y0)))
+            rx0 = max(0, min(x1 - x0, rx0))
+            rx1 = max(rx0, min(x1 - x0, rx1))
+            ry0 = max(0, min(y1 - y0, ry0))
+            ry1 = max(ry0, min(y1 - y0, ry1))
+            cell[ry0:ry1, rx0:rx1] = bg
+
+    return Image.fromarray(arr, "RGB"), interior_rows
+
+
+def eco_flood_fill_chroma_key(image, grid_cols=4, grid_rows=4, bg_dist_thresh=94.0, interior_key_rows=None):
+    """
+    Per-cell border-connected flood-fill keying + optional per-row interior hole clearing + 2px halo decontamination.
+    Preserves enclosed magenta subjects (e.g., Prism-Lily petals) while stripping JPEG chroma rings & ripples.
+    """
+    if not HAS_PIL_NUMPY:
+        return image.convert("RGBA")
+
+    interior_rows_set = set(interior_key_rows or [])
+    rgba = np.array(image.convert("RGBA")).copy()
+    h, w = rgba.shape[:2]
+    cw = w // max(grid_cols, 1)
+    ch = h // max(grid_rows, 1)
+
+    for r in range(grid_rows):
+        for c in range(grid_cols):
+            x0 = c * cw
+            y0 = r * ch
+            x1 = w if c == grid_cols - 1 else (c + 1) * cw
+            y1 = h if r == grid_rows - 1 else (r + 1) * ch
+            cell = rgba[y0:y1, x0:x1]
+            ch_px, cw_px = cell.shape[:2]
+
+            rgb = cell[:, :, :3].astype(np.float32)
+            corner_samples = np.concatenate([
+                rgb[:4, :4].reshape(-1, 3),
+                rgb[:4, -4:].reshape(-1, 3),
+                rgb[-4:, :4].reshape(-1, 3),
+                rgb[-4:, -4:].reshape(-1, 3),
+            ], axis=0)
+            bg_col = np.median(corner_samples, axis=0)
+
+            dist = np.sqrt(np.sum((rgb - bg_col) ** 2, axis=2))
+            is_bg_candidate = (dist <= bg_dist_thresh) | (cell[:, :, 3] < 128)
+
+            labeled, num_feat = _connected_components_bool(is_bg_candidate)
+            if num_feat > 0:
+                border_ids = set()
+                border_ids.update(np.unique(labeled[0, :]).tolist())
+                border_ids.update(np.unique(labeled[-1, :]).tolist())
+                border_ids.update(np.unique(labeled[:, 0]).tolist())
+                border_ids.update(np.unique(labeled[:, -1]).tolist())
+                border_ids.discard(0)
+                if border_ids:
+                    is_bg = np.isin(labeled, list(border_ids))
+                else:
+                    is_bg = np.zeros((ch_px, cw_px), dtype=bool)
+            else:
+                is_bg = np.zeros((ch_px, cw_px), dtype=bool)
+
+            if r in interior_rows_set:
+                is_exact_key_hole = (dist <= 90.0) & (np.minimum(rgb[:, :, 0], rgb[:, :, 2]) >= 175.0) & (rgb[:, :, 1] <= 70.0)
+                is_bg |= is_exact_key_hole
+            is_bg |= (cell[:, :, 3] < 128)
+
+            # Exterior glow/halo peel (up to 18px): strip outer pink/magenta/violet JPEG fringe & AI glow clouds,
+            # stopping cleanly at crisp dark pixel-art outlines (luma < 72) or non-magenta subjects.
+            luma = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+            rb_min = np.minimum(rgb[:, :, 0], rgb[:, :, 2])
+            g_ch = rgb[:, :, 1]
+            magenta_chroma = np.clip((rb_min - g_ch) / np.maximum(bg_col[0] - bg_col[1], 120.0), 0.0, 1.0)
+            is_purple_pink_halo = (
+                ((rgb[:, :, 0] > g_ch + 16.0) & (rgb[:, :, 2] > g_ch + 8.0) & (luma >= 72.0))
+                | ((magenta_chroma > 0.32) & (dist < 165.0) & (luma >= 66.0))
+                | ((rgb[:, :, 2] > g_ch + 28.0) & (rgb[:, :, 0] > g_ch + 22.0) & (luma >= 68.0))
+            )
+            for _rim_pass in range(18):
+                p_bg = np.pad(is_bg, 1, mode="constant", constant_values=True)
+                adj_bg = p_bg[:-2, 1:-1] | p_bg[2:, 1:-1] | p_bg[1:-1, :-2] | p_bg[1:-1, 2:]
+                fg_edge = (~is_bg) & adj_bg
+                # 1px soft white/lavender fringe outside dark outline only within 2px of original border key
+                if _rim_pass < 2:
+                    mix_rim = fg_edge & (is_purple_pink_halo | ((dist < 145.0) & (luma >= 66.0)))
+                else:
+                    mix_rim = fg_edge & is_purple_pink_halo
+                if not np.any(mix_rim):
+                    break
+                is_bg |= mix_rim
+
+            cell[is_bg] = [0, 0, 0, 0]
+            cell[~is_bg, 3] = 255
+
+            # Despill residual magenta tint on remaining silhouette boundary texels (preserve cyan/gold/dark outlines)
+            opaque = cell[:, :, 3] > 0
+            p_bg = np.pad(~opaque, 1, mode="constant", constant_values=True)
+            adj_transp = p_bg[:-2, 1:-1] | p_bg[2:, 1:-1] | p_bg[1:-1, :-2] | p_bg[1:-1, 2:]
+            r_u = cell[:, :, 0].astype(np.int32)
+            g_u = cell[:, :, 1].astype(np.int32)
+            b_u = cell[:, :, 2].astype(np.int32)
+            spill = opaque & adj_transp & (np.minimum(r_u, b_u) > g_u + 32) & ((r_u + b_u) > (2 * g_u + 72)) & (g_u < 120)
+            if np.any(spill):
+                # Pull stray green/blue-red imbalance back toward dark neutral outline or green-anchored tint
+                cap = g_u[spill] + 20
+                cell[spill, 0] = np.minimum(r_u[spill], cap).astype(np.uint8)
+                cell[spill, 2] = np.minimum(b_u[spill], cap).astype(np.uint8)
+
+    return Image.fromarray(rgba, "RGBA")
+
+
+def downsample_eco_grid_nearest(rgba_image, grid_cols=4, grid_rows=4, target_cell_size=128):
+    """Downsamples each cell independently with NEAREST so cell borders never bleed."""
+    w, h = rgba_image.size
+    cw = w // max(grid_cols, 1)
+    ch = h // max(grid_rows, 1)
+    out = Image.new("RGBA", (grid_cols * target_cell_size, grid_rows * target_cell_size), (0, 0, 0, 0))
+    for r in range(grid_rows):
+        for c in range(grid_cols):
+            crop = rgba_image.crop((c * cw, r * ch, (c + 1) * cw, (r + 1) * ch))
+            scaled = crop.resize((target_cell_size, target_cell_size), Image.NEAREST)
+            out.paste(scaled, (c * target_cell_size, r * target_cell_size))
+    return out
+
+
+def generate_eco_emissive_mask(diffuse_image):
+    """
+    Eco emissive mask (_E.png RGB): extracts vivid glowing flora petals, spore gills,
+    crystals, moss veins, water ripples, and bioluminescent critters via HSV S/V
+    WITHOUT any global magenta suppression (magenta BG is already keyed out).
+    """
+    arr = np.array(diffuse_image.convert("RGBA"))
+    r = arr[:, :, 0].astype(np.float32) / 255.0
+    g = arr[:, :, 1].astype(np.float32) / 255.0
+    b = arr[:, :, 2].astype(np.float32) / 255.0
+    alpha_ok = arr[:, :, 3] > 0
+
+    vmax = np.maximum(np.maximum(r, g), b)
+    vmin = np.minimum(np.minimum(r, g), b)
+    sat = (vmax - vmin) / np.maximum(vmax, 1e-4)
+
+    # Vivid luminous highlights & glowing veins/petals; exclude dark outlines (V<0.40) and muted stone (S<0.32)
+    is_glow = alpha_ok & (vmax >= 0.42) & (sat >= 0.34)
+    # Also preserve very bright luminous cores (cyan/gold/white highlights inside blooms/splashes)
+    is_hot_core = alpha_ok & (vmax >= 0.78) & (sat >= 0.16)
+    mask = is_glow | is_hot_core
+
+    out_rgb = np.zeros((arr.shape[0], arr.shape[1], 3), dtype=np.uint8)
+    out_rgb[mask] = arr[mask, :3]
+    return Image.fromarray(out_rgb, "RGB")
+
+
+def process_eco_sheet(args):
+    """Processes an Ecosystem 4x4 sheet (--mode eco), writing _D/_N/_E/AtlasMetadata and optional fauna strip."""
+    if not args.input:
+        raise ValueError("Eco mode requires --input <file>")
+
+    asset_name = os.path.splitext(os.path.basename(args.input))[0]
+    output_dir = args.output or os.path.join("Content", "Art", "Ecosystem", asset_name)
+    os.makedirs(output_dir, exist_ok=True)
+
+    raw_img = Image.open(args.input).convert("RGB")
+    cleanup_path = getattr(args, "cleanup_masks", "") or os.path.join(os.path.dirname(__file__), "eco_cleanup_masks.json")
+    raw_clean, interior_key_rows = apply_eco_cleanup_masks(raw_img, asset_name, cleanup_path, args.grid_cols, args.grid_rows)
+    keyed_hi = eco_flood_fill_chroma_key(raw_clean, args.grid_cols, args.grid_rows, interior_key_rows=interior_key_rows)
+
+    cell_size = max(16, int(getattr(args, "cell_size", 128)))
+    diffuse_img = downsample_eco_grid_nearest(keyed_hi, args.grid_cols, args.grid_rows, cell_size)
+    normal_img = generate_tangent_normal_map(diffuse_img, normal_strength=2.5, bevel_radius=max(3.0, cell_size * 0.04))
+    emissive_img = generate_eco_emissive_mask(diffuse_img)
+
+    generated_files = []
+    diffuse_path = os.path.join(output_dir, f"{asset_name}_D.png")
+    normal_path = os.path.join(output_dir, f"{asset_name}_N.png")
+    emissive_path = os.path.join(output_dir, f"{asset_name}_E.png")
+    diffuse_img.save(diffuse_path, "PNG")
+    normal_img.save(normal_path, "PNG")
+    emissive_img.save(emissive_path, "PNG")
+    generated_files.extend([diffuse_path, normal_path, emissive_path])
+
+    atlas_meta = build_atlas_metadata_json(diffuse_img, asset_name, args.grid_cols, args.grid_rows)
+    atlas_meta["SheetMode"] = "ECOSYSTEM"
+    atlas_meta["CellSizePx"] = cell_size
+    atlas_meta_path = os.path.join(output_dir, "AtlasMetadata.json")
+    with open(atlas_meta_path, "w", encoding="utf-8") as f:
+        json.dump(atlas_meta, f, indent=2)
+    generated_files.append(atlas_meta_path)
+
+    manifest_path = getattr(args, "manifest_path", None) or os.path.join("Content", "AssetManifest.json")
+    update_asset_manifest(manifest_path, asset_name, generated_files, f"EcoFloodFillKey-{asset_name}-v1")
+
+    # Optional 4x1 fauna strip extracted from a single row (e.g. Row 3 at 32px cells -> ~0.5m critters at 64 px/m)
+    strip_row = int(getattr(args, "strip_row", -1))
+    if 0 <= strip_row < args.grid_rows:
+        strip_name = getattr(args, "strip_name", "") or "PROP_Fauna_Critters_Strip_4x1"
+        strip_cell = max(16, int(getattr(args, "strip_cell_size", 32)))
+        strip_dir = os.path.join(os.path.dirname(output_dir), strip_name)
+        os.makedirs(strip_dir, exist_ok=True)
+
+        cw_hi = keyed_hi.width // args.grid_cols
+        ch_hi = keyed_hi.height // args.grid_rows
+        row_hi = keyed_hi.crop((0, strip_row * ch_hi, args.grid_cols * cw_hi, (strip_row + 1) * ch_hi))
+        strip_d = downsample_eco_grid_nearest(row_hi, args.grid_cols, 1, strip_cell)
+        strip_n = generate_tangent_normal_map(strip_d, normal_strength=2.2, bevel_radius=max(2.0, strip_cell * 0.08))
+        strip_e = generate_eco_emissive_mask(strip_d)
+
+        sd_path = os.path.join(strip_dir, f"{strip_name}_D.png")
+        sn_path = os.path.join(strip_dir, f"{strip_name}_N.png")
+        se_path = os.path.join(strip_dir, f"{strip_name}_E.png")
+        strip_d.save(sd_path, "PNG")
+        strip_n.save(sn_path, "PNG")
+        strip_e.save(se_path, "PNG")
+        strip_meta = build_atlas_metadata_json(strip_d, strip_name, args.grid_cols, 1)
+        strip_meta["SheetMode"] = "ECOSYSTEM_FAUNA_STRIP"
+        strip_meta["CellSizePx"] = strip_cell
+        sm_path = os.path.join(strip_dir, "AtlasMetadata.json")
+        with open(sm_path, "w", encoding="utf-8") as f:
+            json.dump(strip_meta, f, indent=2)
+        strip_files = [sd_path, sn_path, se_path, sm_path]
+        update_asset_manifest(manifest_path, strip_name, strip_files, f"EcoFaunaStrip-{strip_name}-v1")
+        generated_files.extend(strip_files)
+
+    print(f"[OK] Eco pipeline generated {len(generated_files)} files for {asset_name}.")
+    return generated_files
+
+
 def process_pipeline(args):
     """Executes sprite keying, bevel/Sobel normal extraction, emissive masking, ORM, and metadata output."""
     if not HAS_PIL_NUMPY:
         raise RuntimeError("Pillow and numpy are required to execute slice_normal_rig.py.")
+
+    if getattr(args, "mode", "rig") == "eco":
+        return process_eco_sheet(args)
 
     if getattr(args, "mode", "rig") == "dungeon":
         synth_choice = getattr(args, "synthesize_dungeon", None)
@@ -1481,20 +1780,68 @@ def run_self_test():
     orm_mirror = np.array(Image.open(mirror_files[2]).convert("RGBA"))
     assert np.any(orm_mirror[:, :, 0] == 255), "Expected #00FF00 mirror panes packed as MirrorPortalMask=255 in _ORM.png Red"
 
+    # Self-test --mode eco (enclosed magenta Prism-Lily preservation + border keying + 128px downsample + 32px strip)
+    print("\n--- Testing Eco Mode: Flood-Fill Key + Enclosed Magenta Preservation ---")
+    eco_test_dir = os.path.join("Content", "Art", "Dungeon", "SelfTest", "Eco")
+    os.makedirs(eco_test_dir, exist_ok=True)
+    syn = Image.new("RGB", (512, 512), (253, 2, 254))
+    syn_draw = ImageDraw.Draw(syn)
+    # Row 0..3 synthetic outlined magenta/cyan items on JPEG-noisy magenta
+    enclosed_mask = np.zeros((512, 512), dtype=bool)
+    for r in range(4):
+        for c in range(4):
+            cx, cy = c * 128 + 64, r * 128 + 64
+            syn_draw.ellipse([cx - 38, cy - 38, cx + 38, cy + 38], fill=(255, 20, 230), outline=(24, 12, 32), width=6)
+            if r == 3:
+                syn_draw.ellipse([cx - 18, cy - 18, cx + 18, cy + 18], fill=(40, 255, 160), outline=(12, 20, 18), width=4)
+    syn_path = os.path.join(eco_test_dir, "SelfTest_Eco_4x4.jpg")
+    syn.save(syn_path, "JPEG", quality=92)
+    eco_args = argparse.Namespace(
+        mode="eco",
+        input=syn_path,
+        output=eco_test_dir,
+        grid_cols=4,
+        grid_rows=4,
+        cell_size=128,
+        strip_row=3,
+        strip_cell_size=32,
+        strip_name="SelfTest_Fauna_Strip_4x1",
+        cleanup_masks="",
+        manifest_path=dungeon_manifest,
+    )
+    eco_files = process_pipeline(eco_args)
+    assert len(eco_files) == 8, f"Expected 8 eco + strip outputs, got {len(eco_files)}"
+    d_eco = np.array(Image.open(eco_files[0]).convert("RGBA"))
+    assert d_eco.shape == (512, 512, 4), f"Expected 512x512 eco _D, got {d_eco.shape}"
+    assert tuple(d_eco[0, 0]) == (0, 0, 0, 0), f"Corner BG must be (0,0,0,0), got {d_eco[0, 0]}"
+    # Center of cell (0,0) at (64,64) is inside the dark-outlined magenta circle -> must remain >= 99% opaque
+    center_box = d_eco[40:88, 40:88, 3]
+    opaque_frac = float(np.mean(center_box == 255))
+    assert opaque_frac >= 0.99, f"Enclosed magenta flower lost interior opacity: {opaque_frac:.3f}"
+    e_eco = np.array(Image.open(eco_files[2]).convert("RGB"))
+    assert np.any(e_eco > 0), "Eco _E mask must preserve vivid magenta/green petals"
+    d_strip = np.array(Image.open(eco_files[4]).convert("RGBA"))
+    assert d_strip.shape == (32, 128, 4), f"Expected 128x32 strip, got {d_strip.shape}"
+
     assert os.path.isfile(test_manifest), "SelfTestManifest.json was not created!"
     assert os.path.isfile(dungeon_manifest), "SelfTestDungeonManifest.json was not created!"
     print("\n==================================================")
-    print("[PASS] slice_normal_rig.py self-test succeeded (Rig + Dungeon modes)!")
+    print("[PASS] slice_normal_rig.py self-test succeeded (Rig + Dungeon + Eco modes)!")
     print("==================================================")
     return True
 
 
 def main():
     parser = argparse.ArgumentParser(description="2.5D Hybrid Sprite Sheet Cutter, Emissive Extractor & Normal Rig Pipeline")
-    parser.add_argument("--mode", type=str, choices=["rig", "dungeon"], default="rig", help="Pipeline mode: 'rig' (character/zombie) or 'dungeon' (ATLAS_ / PROP_)")
+    parser.add_argument("--mode", type=str, choices=["rig", "dungeon", "eco"], default="rig", help="Pipeline mode: 'rig' (character/zombie), 'dungeon' (ATLAS_ / PROP_), or 'eco' (living ecosystem 4x4 + fauna strip)")
     parser.add_argument("--dungeon-sheet-type", type=str, choices=["auto", "atlas", "prop"], default="auto", help="Dungeon sheet type override")
     parser.add_argument("--synthesize-dungeon", type=str, choices=["atlas_floors", "prop_walls", "prop_mirrors", "prop_breakables", "all"], help="Synthesize dungeon atlas/prop sheets")
-    parser.add_argument("--input", type=str, help="Path to input raw 4x4 sprite sheet (PNG)")
+    parser.add_argument("--input", type=str, help="Path to input raw 4x4 sprite sheet (PNG or JPG)")
+    parser.add_argument("--cell-size", type=int, default=128, help="Target cell size in px for --mode eco (default: 128 -> 512x512 sheet)")
+    parser.add_argument("--strip-row", type=int, default=-1, help="Optional row index to also emit as a 4x1 horizontal strip (--mode eco)")
+    parser.add_argument("--strip-cell-size", type=int, default=32, help="Cell size in px for --strip-row output (default: 32 -> 128x32 strip)")
+    parser.add_argument("--strip-name", type=str, default="PROP_Fauna_Critters_Strip_4x1", help="Asset name for the 4x1 strip output")
+    parser.add_argument("--cleanup-masks", type=str, default="", help="Path to eco_cleanup_masks.json for erasing stray stamps")
     parser.add_argument("--directions", type=int, choices=[4, 8], default=4, help="Direction count (4 or 8)")
     parser.add_argument("--generate-normals", action="store_true", default=True, help="Synthesize tangent-space normal maps")
     parser.add_argument("--remix", action="store_true", default=False, help="Apply palette remix and edge beveling")
@@ -1515,6 +1862,10 @@ def main():
 
     if args.mode == "dungeon":
         if not args.input and not args.synthesize_dungeon:
+            parser.print_help()
+            sys.exit(1)
+    elif args.mode == "eco":
+        if not args.input:
             parser.print_help()
             sys.exit(1)
     elif not args.input and not args.synthesize_archetype:

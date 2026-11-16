@@ -1,6 +1,13 @@
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeonEncounterActors.h"
+#include "Audio/DungeonAcousticSubsystem.h"
+#include "Ecosystem/DungeonEcosystemTypes.h"
+#include "Ecosystem/DungeonFaunaSubsystem.h"
+#include "Ecosystem/DungeonFloraManagerComponent.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
+#include "Lighting/DungeonLightBudgetSubsystem.h"
+#include "Rendering/DungeoneerEcoMaterialFactory.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
@@ -8,7 +15,7 @@
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
-#include "Components/PointLightComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -181,27 +188,37 @@ ADungeoneerTileMapInstancer::ADungeoneerTileMapInstancer()
 
 	ForegroundParallaxHISM = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("ForegroundParallaxHISM"));
 	ForegroundParallaxHISM->SetupAttachment(SceneRoot);
-	ForegroundParallaxHISM->NumCustomDataFloats = 4;
+	ForegroundParallaxHISM->NumCustomDataFloats = EEcoCPD::Count;
 	ForegroundParallaxHISM->SetCastShadow(false);
 	ForegroundParallaxHISM->bCastHiddenShadow = false;
 	ForegroundParallaxHISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ForegroundParallaxHISM->SetCullDistances(0, 3200);
 
-	SconceLightPool.Reserve(4);
-	for (int32 LightIdx = 0; LightIdx < 4; ++LightIdx)
-	{
-		const FName LightName(*FString::Printf(TEXT("SconcePoolLight_%d"), LightIdx));
-		if (UPointLightComponent* LightComp = CreateDefaultSubobject<UPointLightComponent>(LightName))
-		{
-			LightComp->SetupAttachment(SceneRoot);
-			LightComp->CastShadows = false;
-			LightComp->SetIntensity(0.0f);
-			LightComp->SetAttenuationRadius(680.0f);
-			LightComp->SetLightColor(FLinearColor(1.0f, 0.56f, 0.22f));
-			LightComp->VolumetricScatteringIntensity = 1.4f;
-			SconceLightPool.Add(LightComp);
-		}
-	}
+	HISM_Water = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("HISM_Water"));
+	HISM_Water->SetupAttachment(SceneRoot);
+	HISM_Water->NumCustomDataFloats = EEcoCPD::Count;
+	HISM_Water->SetCastShadow(false);
+	HISM_Water->bCastHiddenShadow = false;
+	HISM_Water->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HISM_Water->SetCullDistances(0, 3800);
+
+	ISM_WaterFX = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISM_WaterFX"));
+	ISM_WaterFX->SetupAttachment(SceneRoot);
+	ISM_WaterFX->NumCustomDataFloats = EEcoCPD::Count;
+	ISM_WaterFX->SetCastShadow(false);
+	ISM_WaterFX->bCastHiddenShadow = false;
+	ISM_WaterFX->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ISM_WaterFX->SetCullDistances(0, 3200);
+
+	ISM_Fauna = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISM_Fauna"));
+	ISM_Fauna->SetupAttachment(SceneRoot);
+	ISM_Fauna->NumCustomDataFloats = EEcoCPD::Count;
+	ISM_Fauna->SetCastShadow(false);
+	ISM_Fauna->bCastHiddenShadow = false;
+	ISM_Fauna->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ISM_Fauna->SetCullDistances(0, 2800);
+
+	FloraManager = CreateDefaultSubobject<UDungeonFloraManagerComponent>(TEXT("FloraManager"));
 
 	ScratchSweepHits.Reserve(32);
 }
@@ -233,11 +250,14 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 	const UWorld* World = GetWorld();
 	const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI ? GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>() : nullptr;
+	UMaterialInterface* EcoMat = Bootstrap ? Bootstrap->EnsureEcoInstancedMaterial() : nullptr;
 
-	auto AssignHISMVisuals = [this, BaseShapeMat, Bootstrap](
+	auto AssignHISMVisuals = [this, BaseShapeMat, Bootstrap, EcoMat](
 		UHierarchicalInstancedStaticMeshComponent* Comp,
-		FName DiffuseKey,
-		FName NormalKey,
+		FName AtlasPrefix,
+		FName SingleDiffuseKey,
+		FName SingleNormalKey,
+		EDungeoneerMaterialLayoutMode LayoutMode,
 		const FLinearColor& TintColor,
 		const float RoughnessVal)
 	{
@@ -245,10 +265,44 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 		{
 			return;
 		}
+		Comp->NumCustomDataFloats = EEcoCPD::Count;
+
+		// D1b: Bind full 4x4 atlas onto M_Dungeoneer_EcoInstanced with Tier 1 glow reception
+		if (Bootstrap && EcoMat && !bTexturedHISMApplied)
+		{
+			UTexture2D* AtlasD = Bootstrap->GetLoadedDungeonTexture(FName(*FString::Printf(TEXT("%s_D"), *AtlasPrefix.ToString())));
+			UTexture2D* AtlasN = Bootstrap->GetLoadedDungeonTexture(FName(*FString::Printf(TEXT("%s_N"), *AtlasPrefix.ToString())));
+			UTexture2D* AtlasE = Bootstrap->GetLoadedDungeonTexture(FName(*FString::Printf(TEXT("%s_E"), *AtlasPrefix.ToString())));
+			if (AtlasD)
+			{
+				const float TexPx = static_cast<float>(FMath::Max(AtlasD->GetSizeX(), 128));
+				if (UMaterialInstanceDynamic* EcoMID = FDungeoneerEcoMaterialFactory::CreateInstancedAtlasMID(
+					Comp, EcoMat, AtlasD, AtlasN, AtlasE, LayoutMode, true, TexPx, 4, 4, RoughnessVal, 1.0f, 0.0f))
+				{
+					EcoMID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), FMath::Lerp(FLinearColor::White, TintColor, 0.22f));
+					Comp->SetMaterial(0, EcoMID);
+					return;
+				}
+			}
+
+			// Single-cell extracted fallback using Eco shader so Tier 1 glow still illuminates props/sconces
+			UTexture2D* SingleD = Bootstrap->GetExtractedCellTexture(SingleDiffuseKey);
+			UTexture2D* SingleN = Bootstrap->GetExtractedCellTexture(SingleNormalKey);
+			if (SingleD)
+			{
+				if (UMaterialInstanceDynamic* EcoMID = FDungeoneerEcoMaterialFactory::CreateInstancedAtlasMID(
+					Comp, EcoMat, SingleD, SingleN, nullptr, EDungeoneerMaterialLayoutMode::LegacyDirectCD0, true, 128.0f, 1, 1, RoughnessVal, 1.0f, 0.0f))
+				{
+					EcoMID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), TintColor);
+					Comp->SetMaterial(0, EcoMID);
+					return;
+				}
+			}
+		}
 
 		if (Bootstrap && !bTexturedHISMApplied)
 		{
-			if (UMaterialInstanceDynamic* TexturedMID = Bootstrap->CreateDungeonOrRigMaterial(this, DiffuseKey, NormalKey, TintColor, RoughnessVal, true))
+			if (UMaterialInstanceDynamic* TexturedMID = Bootstrap->CreateDungeonOrRigMaterial(this, SingleDiffuseKey, SingleNormalKey, TintColor, RoughnessVal, true))
 			{
 				Comp->SetMaterial(0, TexturedMID);
 				return;
@@ -268,50 +322,54 @@ void ADungeoneerTileMapInstancer::EnsureMeshAssetsInitialized()
 
 	auto ConfigurePlaneHISM = [PlaneMesh, BoxFallback, &AssignHISMVisuals](
 		UHierarchicalInstancedStaticMeshComponent* Comp,
+		FName AtlasPrefix,
 		FName DiffuseKey,
 		FName NormalKey,
+		EDungeoneerMaterialLayoutMode LayoutMode,
 		const FLinearColor& TintColor,
 		const float RoughnessVal)
 	{
 		if (Comp)
 		{
-			Comp->NumCustomDataFloats = 4;
+			Comp->NumCustomDataFloats = EEcoCPD::Count;
 			if (!Comp->GetStaticMesh() && (PlaneMesh || BoxFallback))
 			{
 				Comp->SetStaticMesh(PlaneMesh ? PlaneMesh : BoxFallback);
 			}
-			AssignHISMVisuals(Comp, DiffuseKey, NormalKey, TintColor, RoughnessVal);
+			AssignHISMVisuals(Comp, AtlasPrefix, DiffuseKey, NormalKey, LayoutMode, TintColor, RoughnessVal);
 		}
 	};
 
 	auto ConfigureBoxHISM = [BoxFallback, &AssignHISMVisuals](
 		UHierarchicalInstancedStaticMeshComponent* Comp,
 		const bool bShadow,
+		FName AtlasPrefix,
 		FName DiffuseKey,
 		FName NormalKey,
+		EDungeoneerMaterialLayoutMode LayoutMode,
 		const FLinearColor& TintColor,
 		const float RoughnessVal)
 	{
 		if (Comp)
 		{
-			Comp->NumCustomDataFloats = 4;
+			Comp->NumCustomDataFloats = EEcoCPD::Count;
 			Comp->bCastHiddenShadow = bShadow;
 			if (!Comp->GetStaticMesh() && BoxFallback)
 			{
 				Comp->SetStaticMesh(BoxFallback);
 			}
-			AssignHISMVisuals(Comp, DiffuseKey, NormalKey, TintColor, RoughnessVal);
+			AssignHISMVisuals(Comp, AtlasPrefix, DiffuseKey, NormalKey, LayoutMode, TintColor, RoughnessVal);
 		}
 	};
 
-	ConfigurePlaneHISM(FloorHISM.Get(),             FName(TEXT("Floor_Tile0_D")),    FName(TEXT("Floor_Tile0_N")),    FLinearColor(0.22f, 0.25f, 0.34f), 0.72f);
-	ConfigurePlaneHISM(WetFloorHISM.Get(),          FName(TEXT("Floor_Wet0_D")),     FName(TEXT("Floor_Wet0_N")),     FLinearColor(0.14f, 0.24f, 0.34f), 0.06f);
-	ConfigureBoxHISM(WallHISM.Get(),                true,  FName(TEXT("Wall_Full0_D")),     FName(TEXT("Wall_Full0_N")),     FLinearColor(0.32f, 0.30f, 0.40f), 0.65f);
-	ConfigureBoxHISM(DiagonalWedgeHISM.Get(),       true,  FName(TEXT("Wall_Diag0_D")),     FName(TEXT("Wall_Diag0_N")),     FLinearColor(0.28f, 0.28f, 0.38f), 0.58f);
-	ConfigureBoxHISM(MirrorHISM.Get(),              true,  FName(TEXT("Mirror_Intact_D")),  FName(TEXT("Mirror_Intact_N")),  FLinearColor(0.38f, 0.88f, 0.98f), 0.08f);
-	ConfigureBoxHISM(SconceHISM.Get(),              false, FName(TEXT("Doors_Sconce_D")),   FName(TEXT("Doors_Sconce_N")),   FLinearColor(1.0f, 0.62f, 0.20f),  0.28f);
-	ConfigureBoxHISM(BreakableHISM.Get(),           true,  FName(TEXT("Breakable_Intact_D")), FName(TEXT("Breakable_Intact_N")), FLinearColor(0.76f, 0.46f, 0.20f), 0.50f);
-	ConfigureBoxHISM(ForegroundParallaxHISM.Get(),  false, FName(TEXT("Wall_Chain_D")),     FName(TEXT("Wall_Chain_N")),     FLinearColor(0.14f, 0.15f, 0.20f), 0.45f);
+	ConfigurePlaneHISM(FloorHISM.Get(),             FName(TEXT("ATLAS_Dungeon_Floors_4x4")),            FName(TEXT("Floor_Tile0_D")),    FName(TEXT("Floor_Tile0_N")),    EDungeoneerMaterialLayoutMode::LegacyDirectCD1, FLinearColor(0.85f, 0.88f, 0.96f), 0.72f);
+	ConfigurePlaneHISM(WetFloorHISM.Get(),          FName(TEXT("ATLAS_Dungeon_Floors_4x4")),            FName(TEXT("Floor_Wet0_D")),     FName(TEXT("Floor_Wet0_N")),     EDungeoneerMaterialLayoutMode::LegacyDirectCD1, FLinearColor(0.55f, 0.80f, 0.96f), 0.03f);
+	ConfigureBoxHISM(WallHISM.Get(),                true,  FName(TEXT("ATLAS_Dungeon_Floors_4x4")),            FName(TEXT("Floor_Tile0_D")),    FName(TEXT("Floor_Tile0_N")),    EDungeoneerMaterialLayoutMode::LegacyDualCell,  FLinearColor(0.42f, 0.48f, 0.64f), 0.68f);
+	ConfigureBoxHISM(DiagonalWedgeHISM.Get(),       true,  FName(TEXT("ATLAS_Dungeon_Floors_4x4")),            FName(TEXT("Floor_Tile0_D")),    FName(TEXT("Floor_Tile0_N")),    EDungeoneerMaterialLayoutMode::LegacyDualCell,  FLinearColor(0.38f, 0.44f, 0.60f), 0.62f);
+	ConfigureBoxHISM(MirrorHISM.Get(),              true,  FName(TEXT("PROP_Mirror_Palace_Maze_4x4")),         FName(TEXT("Mirror_Intact_D")),  FName(TEXT("Mirror_Intact_N")),  EDungeoneerMaterialLayoutMode::LegacyMirror,    FLinearColor(0.75f, 0.96f, 1.00f), 0.08f);
+	ConfigurePlaneHISM(SconceHISM.Get(),              FName(TEXT("PROP_Doors_And_Level_Transitions_4x4")),FName(TEXT("Doors_Sconce_D")),   FName(TEXT("Doors_Sconce_N")),   EDungeoneerMaterialLayoutMode::LegacyDirectCD1, FLinearColor(0.95f, 0.90f, 0.85f), 0.62f);
+	ConfigurePlaneHISM(BreakableHISM.Get(),                 FName(TEXT("PROP_Breakables_And_Traps_4x4")),       FName(TEXT("Breakable_Intact_D")), FName(TEXT("Breakable_Intact_N")), EDungeoneerMaterialLayoutMode::LegacyDualCell, FLinearColor(0.95f, 0.85f, 0.72f), 0.50f);
+	ConfigureBoxHISM(ForegroundParallaxHISM.Get(),  false, FName(TEXT("PROP_Dungeon_Walls_And_Cutaways_4x4")), FName(TEXT("Wall_Chain_D")),     FName(TEXT("Wall_Chain_N")),     EDungeoneerMaterialLayoutMode::LegacyDirectCD1, FLinearColor(0.70f, 0.72f, 0.80f), 0.45f);
 
 	if (Bootstrap)
 	{
@@ -329,6 +387,9 @@ void ADungeoneerTileMapInstancer::ClearAllInstances()
 	if (SconceHISM)             { SconceHISM->ClearInstances(); }
 	if (BreakableHISM)          { BreakableHISM->ClearInstances(); }
 	if (ForegroundParallaxHISM) { ForegroundParallaxHISM->ClearInstances(); }
+	if (HISM_Water)             { HISM_Water->ClearInstances(); }
+	if (ISM_WaterFX)            { ISM_WaterFX->ClearInstances(); }
+	if (ISM_Fauna)              { ISM_Fauna->ClearInstances(); }
 
 	for (AActor* Encounter : SpawnedEncounterActors)
 	{
@@ -346,14 +407,6 @@ void ADungeoneerTileMapInstancer::ClearAllInstances()
 	SconceWorldPositions.Reset();
 	PendingCutawayFlags.Reset();
 	LastCorridorTileCount = 0;
-
-	for (UPointLightComponent* LightComp : SconceLightPool)
-	{
-		if (LightComp)
-		{
-			LightComp->SetIntensity(0.0f);
-		}
-	}
 }
 
 void ADungeoneerTileMapInstancer::AddWallInstance(
@@ -402,7 +455,10 @@ void ADungeoneerTileMapInstancer::AddWallInstance(
 			Entry.WorldHalfExtents = HalfExtents;
 			Entry.FullUVCellIndex = FullUVCell;
 			Entry.CutawayUVCellIndex = CutawayUVCell;
-			Entry.bCanCutawayForCamera = (Axis == EDungeoneerWallAxis::South);
+			Entry.bCanCutawayForCamera =
+				(Axis == EDungeoneerWallAxis::South ||
+				 Axis == EDungeoneerWallAxis::North ||
+				 Axis == EDungeoneerWallAxis::West);
 			Entry.bCurrentlyCutaway = false;
 
 			WallEntries.Add(Entry);
@@ -468,7 +524,19 @@ int32 ADungeoneerTileMapInstancer::RegisterBreakableInstance(
 
 	EnsureMeshAssetsInitialized();
 
-	const FTransform InstanceTransform(FRotator::ZeroRotator, WorldCenter, FVector(0.95f, 0.95f, 1.1f));
+	FRotator SpriteRot = FRotator(60.0f, 180.0f, 0.0f);
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UGameInstance* GI = World->GetGameInstance())
+		{
+			if (const UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
+			{
+				SpriteRot = Bootstrap->GetCameraFacingSpritePlaneRotation();
+			}
+		}
+	}
+
+	const FTransform InstanceTransform(SpriteRot, WorldCenter, FVector(0.88f, 0.88f, 1.0f));
 	const int32 InstIdx = BreakableHISM->AddInstance(InstanceTransform, true);
 	if (InstIdx != INDEX_NONE)
 	{
@@ -649,6 +717,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 	// Collect deduplicated grid corridor tiles across all DAG edges so T-junctions merge cleanly
 	TSet<FIntPoint> CorridorGridCells;
 	TArray<FVector2D> AllDoorways2D;
+	TArray<FVector> PuddleLocations;
 	const double GridStep = static_cast<double>(TileSizeUU);
 
 	auto AddCorridorStripXY = [&CorridorGridCells, GridStep](const FVector2D& P0, const FVector2D& P1)
@@ -686,16 +755,39 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		}
 	};
 
-	auto RecordSconceNearDoor = [this](const FVector2D& Door2D, const float BaseZ, const float LateralOffsetY)
+	FRotator DoorSpriteFacingRot(48.0f, -45.0f, 0.0f);
+	if (const UWorld* WorldPtr = GetWorld())
 	{
-		const FVector SconcePos(Door2D.X, Door2D.Y + LateralOffsetY, BaseZ + WallHeightUU * 0.62f);
+		if (const UGameInstance* GI = WorldPtr->GetGameInstance())
+		{
+			if (const UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
+			{
+				DoorSpriteFacingRot = Bootstrap->GetCameraFacingSpritePlaneRotation();
+			}
+		}
+	}
+
+	auto RecordSconceNearDoor = [this, &DoorSpriteFacingRot](const FVector2D& Door2D, const float BaseZ, const float LateralOffsetY)
+	{
+		const FVector SconcePos(Door2D.X, Door2D.Y + LateralOffsetY, BaseZ + WallHeightUU * 0.56f);
 		if (SconceHISM)
 		{
-			const int32 SconceIdx = SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, SconcePos, FVector(0.32f, 0.32f, 0.45f)), false);
+			// Upright stone gothic archway framing East/West corridor threshold (Cell 0 on PROP_Doors_And_Level_Transitions_4x4)
+			const FVector ArchPos(Door2D.X, Door2D.Y, BaseZ + 115.0f);
+			const int32 ArchIdx = SconceHISM->AddInstance(FTransform(DoorSpriteFacingRot, ArchPos, FVector(2.15f, 2.15f, 1.0f)), false);
+			if (ArchIdx != INDEX_NONE)
+			{
+				SconceHISM->SetCustomDataValue(ArchIdx, 0, 0.0f, false);
+				SconceHISM->SetCustomDataValue(ArchIdx, 1, 0.0f, false); // R0C0: Gothic Stone Archway
+			}
+
+			// Upright wall torch/lantern sconce (Row 3: Cell 12 Torch / Cell 14 Lantern)
+			const int32 SconceCell = (FMath::RoundToInt(FMath::Abs(Door2D.Y)) % 2 == 0) ? 12 : 14;
+			const int32 SconceIdx = SconceHISM->AddInstance(FTransform(DoorSpriteFacingRot, SconcePos, FVector(0.82f, 0.82f, 1.0f)), false);
 			if (SconceIdx != INDEX_NONE)
 			{
-				SconceHISM->SetCustomDataValue(SconceIdx, 0, 1.0f, false); // 1 = Emissive flame sconce
-				SconceHISM->SetCustomDataValue(SconceIdx, 1, 8.0f, false);
+				SconceHISM->SetCustomDataValue(SconceIdx, 0, 1.0f, false);
+				SconceHISM->SetCustomDataValue(SconceIdx, 1, static_cast<float>(SconceCell), false);
 			}
 		}
 		SconceWorldPositions.Add(SconcePos);
@@ -822,7 +914,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 	};
 
 	// 2. Build Rooms with Carved Doorways, Biome Atlases, Shapes, Puddles, Pillars & Traps
-	const double DoorCarveRadius = static_cast<double>(TileSizeUU) * 1.45;
+	const double DoorCarveRadius = static_cast<double>(TileSizeUU) * 0.65;
 	for (int32 NodeIdx = 0; NodeIdx < FloorGraph.Nodes.Num(); ++NodeIdx)
 	{
 		const FDungeonNode& Node = FloorGraph.Nodes[NodeIdx];
@@ -877,6 +969,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 						WetFloorHISM->SetCustomDataValue(WetIdx, 0, static_cast<float>(Node.NodeId), false);
 						WetFloorHISM->SetCustomDataValue(WetIdx, 1, static_cast<float>(4 + RoomRand.RandRange(0, 3)), false);
 					}
+					PuddleLocations.Add(TileCenter);
 				}
 			}
 		}
@@ -889,7 +982,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		const FVector NSExtents(SegSpan, 34.0f, WallHeightUU * 0.5f);
 		const FVector EWExtents(34.0f, SegSpan, WallHeightUU * 0.5f);
 
-		for (int32 ix = 1; ix < NumTilesX - 1; ++ix)
+		for (int32 ix = 0; ix < NumTilesX; ++ix)
 		{
 			const float WX = RoomOrigin.X + (static_cast<float>(ix) - 0.5f * static_cast<float>(NumTilesX - 1)) * TileSizeUU;
 			const double NorthWY = RoomOrigin.Y + EdgeOffsetY;
@@ -905,7 +998,7 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			}
 		}
 
-		for (int32 iy = 1; iy < NumTilesY - 1; ++iy)
+		for (int32 iy = 0; iy < NumTilesY; ++iy)
 		{
 			const float WY = RoomOrigin.Y + (static_cast<float>(iy) - 0.5f * static_cast<float>(NumTilesY - 1)) * TileSizeUU;
 			const double EastWX = RoomOrigin.X + EdgeOffsetX;
@@ -976,21 +1069,21 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		// Sanctuary Brazier / Descending Stairs Visual Landmarks (`SconceHISM`)
 		if (Node.RoomType == EDungeonRoomType::RestingGround && SconceHISM)
 		{
-			for (int32 r = 0; r < 4; ++r)
+			const int32 BrazierIdx = SconceHISM->AddInstance(FTransform(DoorSpriteFacingRot, RoomOrigin + FVector(0.0f, 0.0f, 75.0f), FVector(1.35f, 1.35f, 1.0f)), false);
+			if (BrazierIdx != INDEX_NONE)
 			{
-				const float Angle = static_cast<float>(r) * (HALF_PI);
-				const FVector RunePos = RoomOrigin + FVector(FMath::Cos(Angle) * 280.0f, FMath::Sin(Angle) * 280.0f, 6.0f);
-				SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, RunePos, FVector(0.55f, 0.55f, 0.08f)), false);
+				SconceHISM->SetCustomDataValue(BrazierIdx, 0, 1.0f, false);
+				SconceHISM->SetCustomDataValue(BrazierIdx, 1, 13.0f, false); // R3C1 Stone Brazier
 			}
 		}
 		else if (Node.bHasDescendingStairs && SconceHISM)
 		{
-			const FVector StairPos = RoomOrigin + FVector(EdgeOffsetX * 0.45f, 0.0f, 12.0f);
-			const int32 StairIdx = SconceHISM->AddInstance(FTransform(FRotator::ZeroRotator, StairPos, FVector(1.8f, 1.8f, 0.28f)), false);
+			const FVector StairPos = RoomOrigin + FVector(EdgeOffsetX * 0.45f, 0.0f, 88.0f);
+			const int32 StairIdx = SconceHISM->AddInstance(FTransform(DoorSpriteFacingRot, StairPos, FVector(1.85f, 1.85f, 1.0f)), false);
 			if (StairIdx != INDEX_NONE)
 			{
-				SconceHISM->SetCustomDataValue(StairIdx, 0, 2.0f, false); // 2 = Descending stairwell slab
-				SconceHISM->SetCustomDataValue(StairIdx, 1, 12.0f, false);
+				SconceHISM->SetCustomDataValue(StairIdx, 0, 2.0f, false); // 2 = Descending stairwell
+				SconceHISM->SetCustomDataValue(StairIdx, 1, 8.0f, false);  // R2C0 Stone Stairs
 			}
 		}
 
@@ -1032,7 +1125,9 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 		}
 
 		// 2d. Breakable Acoustic Props (loud 1.95f lures zombies + Acute Hearing ripples) & Systemic Biome Trap Vents
-		const FVector BreakOffset(RoomRand.FRandRange(-160.0f, 160.0f), RoomRand.FRandRange(-140.0f, 140.0f), 45.0f);
+		const FVector BreakOffset = (Node.RoomType == EDungeonRoomType::Entry)
+			? FVector(340.0f, 320.0f, 45.0f)
+			: FVector(RoomRand.FRandRange(-160.0f, 160.0f), RoomRand.FRandRange(-140.0f, 140.0f), 45.0f);
 		const int32 IntactCell = RoomRand.RandRange(0, 1);
 		RegisterBreakableInstance(RoomOrigin + BreakOffset, IntactCell, IntactCell + 2, 85.0f, 1.95f);
 
@@ -1134,16 +1229,142 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 	// 4. Spawn Room Encounters (Exploders, Fast Throwers, Sanctuary, Vendor, Vault)
 	SpawnEncountersForFloorGraph(FloorGraph);
 
-	if (FloorHISM)              { FloorHISM->MarkRenderStateDirty(); }
-	if (WetFloorHISM)           { WetFloorHISM->MarkRenderStateDirty(); }
-	if (WallHISM)               { WallHISM->MarkRenderStateDirty(); }
-	if (DiagonalWedgeHISM)      { DiagonalWedgeHISM->MarkRenderStateDirty(); }
-	if (MirrorHISM)             { MirrorHISM->MarkRenderStateDirty(); }
-	if (SconceHISM)             { SconceHISM->MarkRenderStateDirty(); }
-	if (BreakableHISM)          { BreakableHISM->MarkRenderStateDirty(); }
-	if (ForegroundParallaxHISM) { ForegroundParallaxHISM->MarkRenderStateDirty(); }
+	// 5. Register 4-Tier Living Ecosystem Light Candidates, Hydrology & Interactive Flora
+	UDungeonLightBudgetSubsystem* LightBudget = World ? World->GetSubsystem<UDungeonLightBudgetSubsystem>() : nullptr;
+	if (LightBudget)
+	{
+		LightBudget->ClearCandidates();
 
-	UpdateSconcePointLightPool();
+		for (const FVector& SconcePos : SconceWorldPositions)
+		{
+			FDungeonLightCandidate C;
+			C.WorldPosition = SconcePos;
+			C.Color = EcoPalette::AmberFire;
+			C.RadiusUU = 360.0f;
+			C.BaseIntensity = 360.0f;
+			C.RequestedTier = EDungeonLightTier::Tier2_Pooled;
+			LightBudget->RegisterCandidate(C);
+		}
+
+		for (const FDungeonNode& Node : FloorGraph.Nodes)
+		{
+			if (Node.RoomType == EDungeonRoomType::RestingGround)
+			{
+				FDungeonLightCandidate C;
+				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 75.0);
+				C.Color = EcoPalette::AmberFire;
+				C.RadiusUU = 820.0f;
+				C.BaseIntensity = 1250.0f;
+				C.PriorityBoost = 2.0f;
+				C.RequestedTier = EDungeonLightTier::Tier3_Hero;
+				LightBudget->RegisterCandidate(C);
+			}
+			else if (Node.RoomType == EDungeonRoomType::MajorLootVault)
+			{
+				FDungeonLightCandidate C;
+				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 85.0);
+				C.Color = EcoPalette::GoldenRune;
+				C.RadiusUU = 760.0f;
+				C.BaseIntensity = 1200.0f;
+				C.PriorityBoost = 1.5f;
+				C.RequestedTier = EDungeonLightTier::Tier3_Hero;
+				LightBudget->RegisterCandidate(C);
+			}
+			else if (Node.RoomType == EDungeonRoomType::Vendor)
+			{
+				FDungeonLightCandidate C;
+				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 60.0);
+				C.Color = EcoPalette::GoldenRune;
+				C.RadiusUU = 155.0f;
+				C.BaseIntensity = 380.0f;
+				C.RequestedTier = EDungeonLightTier::Tier1_MPCGlow;
+				LightBudget->RegisterCandidate(C);
+			}
+		}
+
+		for (const FDungeoneerTrapVentEntry& Vent : TrapVentEntries)
+		{
+			FDungeonLightCandidate C;
+			C.WorldPosition = Vent.WorldCenter + FVector(0.0, 0.0, 24.0);
+			C.Color = (Vent.HazardType == EDungeoneerTrapHazardType::EmberFire)
+				? EcoPalette::MagmaOrange
+				: (Vent.HazardType == EDungeoneerTrapHazardType::PoisonSpore ? EcoPalette::EmeraldMoss : EcoPalette::AstralCyan);
+			C.RadiusUU = 135.0f;
+			C.BaseIntensity = 320.0f;
+			C.RequestedTier = EDungeonLightTier::Tier1_MPCGlow;
+			LightBudget->RegisterCandidate(C);
+		}
+
+		for (int32 m = 0; m < MirrorEntries.Num(); m += 2)
+		{
+			FDungeonLightCandidate C;
+			C.WorldPosition = MirrorEntries[m].WorldCenter;
+			C.Color = EcoPalette::AstralCyan;
+			C.RadiusUU = 130.0f;
+			C.BaseIntensity = 290.0f;
+			C.RequestedTier = EDungeonLightTier::Tier1_MPCGlow;
+			LightBudget->RegisterCandidate(C);
+		}
+	}
+
+	if (UDungeonWaterSubsystem* WaterSub = World ? World->GetSubsystem<UDungeonWaterSubsystem>() : nullptr)
+	{
+		FWaterFloorBuildInput WaterInput;
+		WaterInput.FloorGraph = &FloorGraph;
+		WaterInput.WallEntries = &WallEntries;
+		WaterInput.PuddleLocations = &PuddleLocations;
+		WaterInput.WaterHISM = HISM_Water.Get();
+		WaterInput.WaterFxISM = ISM_WaterFX.Get();
+		WaterInput.TileSizeUU = TileSizeUU;
+		WaterInput.WallHeightUU = WallHeightUU;
+		WaterSub->OnFloorBuilt(WaterInput);
+	}
+
+	if (FloraManager)
+	{
+		FloraManager->PopulateForFloor(FloorGraph, &MirrorEntries, TileSizeUU);
+	}
+
+	if (UDungeonFaunaSubsystem* FaunaSub = World ? World->GetSubsystem<UDungeonFaunaSubsystem>() : nullptr)
+	{
+		FFaunaFloorBuildInput FaunaInput;
+		FaunaInput.FloorGraph = &FloorGraph;
+		FaunaInput.WallEntries = &WallEntries;
+		FaunaInput.PuddleLocations = &PuddleLocations;
+		FaunaInput.FaunaISM = ISM_Fauna.Get();
+		FaunaInput.TileSizeUU = TileSizeUU;
+		FaunaSub->OnFloorBuilt(FaunaInput);
+	}
+
+	if (UDungeonAcousticSubsystem* AcousticSub = World ? World->GetSubsystem<UDungeonAcousticSubsystem>() : nullptr)
+	{
+		AcousticSub->OnFloorBuilt(this, FloorGraph.DominantBiome, FloorGraph.MasterSeed, &FloorGraph);
+	}
+
+	if (FloorHISM)              { FloorHISM->MarkRenderStateDirty(); }
+	if (FloorHISM)              { FloorHISM->BuildTreeIfOutdated(false, true); FloorHISM->UpdateBounds(); FloorHISM->MarkRenderStateDirty(); }
+	if (WetFloorHISM)           { WetFloorHISM->BuildTreeIfOutdated(false, true); WetFloorHISM->UpdateBounds(); WetFloorHISM->MarkRenderStateDirty(); }
+	if (WallHISM)               { WallHISM->BuildTreeIfOutdated(false, true); WallHISM->UpdateBounds(); WallHISM->MarkRenderStateDirty(); }
+	if (DiagonalWedgeHISM)      { DiagonalWedgeHISM->BuildTreeIfOutdated(false, true); DiagonalWedgeHISM->UpdateBounds(); DiagonalWedgeHISM->MarkRenderStateDirty(); }
+	if (MirrorHISM)             { MirrorHISM->BuildTreeIfOutdated(false, true); MirrorHISM->UpdateBounds(); MirrorHISM->MarkRenderStateDirty(); }
+	if (SconceHISM)             { SconceHISM->BuildTreeIfOutdated(false, true); SconceHISM->UpdateBounds(); SconceHISM->MarkRenderStateDirty(); }
+	if (BreakableHISM)          { BreakableHISM->BuildTreeIfOutdated(false, true); BreakableHISM->UpdateBounds(); BreakableHISM->MarkRenderStateDirty(); }
+	if (ForegroundParallaxHISM) { ForegroundParallaxHISM->BuildTreeIfOutdated(false, true); ForegroundParallaxHISM->UpdateBounds(); ForegroundParallaxHISM->MarkRenderStateDirty(); }
+	if (HISM_Water)             { HISM_Water->BuildTreeIfOutdated(false, true); HISM_Water->UpdateBounds(); HISM_Water->MarkRenderStateDirty(); }
+
+	if (LightBudget)
+	{
+		LightBudget->OnFloorBuilt(this);
+		LightBudget->EvaluateLightBudgetNow(0.25f);
+	}
+
+	UE_LOG(LogTemp, Display,
+		TEXT("[TileMap] Floor=%d Wet=%d Wall=%d Sconce=%d Water=%d"),
+		FloorHISM ? FloorHISM->GetInstanceCount() : -1,
+		WetFloorHISM ? WetFloorHISM->GetInstanceCount() : -1,
+		WallHISM ? WallHISM->GetInstanceCount() : -1,
+		SconceHISM ? SconceHISM->GetInstanceCount() : -1,
+		HISM_Water ? HISM_Water->GetInstanceCount() : -1);
 }
 
 void ADungeoneerTileMapInstancer::BuildFromActiveGenerator()
@@ -1468,65 +1689,6 @@ int32 ADungeoneerTileMapInstancer::EvaluateTrapVentsForEntities(const float Delt
 	return TriggeredCount;
 }
 
-void ADungeoneerTileMapInstancer::UpdateSconcePointLightPool() noexcept
-{
-	if (SconceLightPool.Num() == 0)
-	{
-		return;
-	}
-
-	FVector FocusLoc = GetActorLocation();
-	if (const UWorld* World = GetWorld())
-	{
-		if (const UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
-		{
-			if (const ADungeoneerCharacter* Player0 = SpatialSys->GetTrackedPlayerAt(0))
-			{
-				FocusLoc = Player0->GetActorLocation();
-			}
-		}
-	}
-
-	int32 BestIdx[4] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
-	double BestDistSq[4] = { DBL_MAX, DBL_MAX, DBL_MAX, DBL_MAX };
-
-	for (int32 s = 0; s < SconceWorldPositions.Num(); ++s)
-	{
-		const double DistSq = FVector::DistSquared2D(FocusLoc, SconceWorldPositions[s]);
-		for (int32 Slot = 0; Slot < 4; ++Slot)
-		{
-			if (DistSq < BestDistSq[Slot])
-			{
-				for (int32 Shift = 3; Shift > Slot; --Shift)
-				{
-					BestDistSq[Shift] = BestDistSq[Shift - 1];
-					BestIdx[Shift] = BestIdx[Shift - 1];
-				}
-				BestDistSq[Slot] = DistSq;
-				BestIdx[Slot] = s;
-				break;
-			}
-		}
-	}
-
-	for (int32 Slot = 0; Slot < SconceLightPool.Num() && Slot < 4; ++Slot)
-	{
-		if (UPointLightComponent* LightComp = SconceLightPool[Slot].Get())
-		{
-			if (BestIdx[Slot] != INDEX_NONE)
-			{
-				LightComp->SetWorldLocation(SconceWorldPositions[BestIdx[Slot]]);
-				const float Flicker = 3900.0f + 780.0f * FMath::Sin(SconceFlickerPhase + static_cast<float>(Slot) * 1.6f);
-				LightComp->SetIntensity(Flicker);
-			}
-			else
-			{
-				LightComp->SetIntensity(0.0f);
-			}
-		}
-	}
-}
-
 void ADungeoneerTileMapInstancer::RevealMirrorIllusionSeam(const int32 MirrorEntryIndex, const bool bRevealed)
 {
 	if (!MirrorEntries.IsValidIndex(MirrorEntryIndex))
@@ -1547,9 +1709,6 @@ void ADungeoneerTileMapInstancer::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateSouthWallCutawaysForViewports();
-
-	SconceFlickerPhase += DeltaSeconds * 8.5f;
-	UpdateSconcePointLightPool();
 
 	TrapPollAccumulator += DeltaSeconds;
 	if (TrapPollAccumulator >= 0.15f)

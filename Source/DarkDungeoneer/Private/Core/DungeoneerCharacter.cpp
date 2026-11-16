@@ -7,11 +7,14 @@
 #include "Rendering/SensoryPerkComponent.h"
 #include "Rendering/25DDirectionalRigComponent.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Audio/DungeonAcousticSubsystem.h"
 #include "Audio/DungeoneerTimedAudioComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
+#include "Ecosystem/DungeonEcosystemTypes.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "UI/MenuDioramaStageActor.h"
@@ -45,8 +48,8 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->SetUsingAbsoluteRotation(true);
-	CameraBoom->TargetArmLength = 1100.0f;
-	CameraBoom->SetRelativeRotation(FRotator(-60.0f, 0.0f, 0.0f));
+	CameraBoom->TargetArmLength = 1320.0f;
+	CameraBoom->SetRelativeRotation(FRotator(-42.0f, -45.0f, 0.0f));
 	CameraBoom->bDoCollisionTest = false;
 	CameraBoom->bEnableCameraLag = true;
 	CameraBoom->CameraLagSpeed = 12.0f;
@@ -54,30 +57,41 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	TopDownCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
 	TopDownCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	TopDownCamera->bUsePawnControlRotation = false;
-	TopDownCamera->FieldOfView = 42.0f; // Orthographic-feel perspective foreshortening
+	TopDownCamera->FieldOfView = 35.0f; // Crisp 2.5D isometric diorama framing
 	TopDownCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
-	TopDownCamera->PostProcessSettings.AutoExposureMinBrightness = 0.25f;
+	TopDownCamera->PostProcessSettings.AutoExposureMinBrightness = 0.42f;
 	TopDownCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
-	TopDownCamera->PostProcessSettings.AutoExposureMaxBrightness = 2.0f;
+	TopDownCamera->PostProcessSettings.AutoExposureMaxBrightness = 1.40f;
+	TopDownCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
+	TopDownCamera->PostProcessSettings.AutoExposureBias = -0.10f;
+	TopDownCamera->PostProcessSettings.bOverride_BloomIntensity = true;
+	TopDownCamera->PostProcessSettings.BloomIntensity = 0.35f;
 
 	FlashlightComponent = CreateDefaultSubobject<USpotLightComponent>(TEXT("FlashlightComponent"));
 	FlashlightComponent->SetupAttachment(RootComponent);
-	FlashlightComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 55.0f));
-	FlashlightComponent->SetIntensity(26000.0f);
-	FlashlightComponent->SetLightColor(FLinearColor(1.0f, 0.94f, 0.82f));
-	FlashlightComponent->SetInnerConeAngle(12.0f);
-	FlashlightComponent->SetOuterConeAngle(28.0f);
-	FlashlightComponent->SetAttenuationRadius(2200.0f);
+	FlashlightComponent->SetRelativeLocation(FVector(30.0f, 30.0f, 32.0f));
+	FlashlightComponent->SetIntensityUnits(ELightUnits::Lumens);
+	FlashlightComponent->SetSourceRadius(22.0f);
+	FlashlightComponent->SetSoftSourceRadius(32.0f);
+	FlashlightComponent->SetIntensity(650.0f);
+	FlashlightComponent->SetLightColor(FLinearColor(1.0f, 0.74f, 0.34f));
+	FlashlightComponent->SetInnerConeAngle(8.0f);
+	FlashlightComponent->SetOuterConeAngle(22.0f);
+	FlashlightComponent->SetAttenuationRadius(920.0f);
 	FlashlightComponent->bUseInverseSquaredFalloff = true;
-	FlashlightComponent->VolumetricScatteringIntensity = 2.5f;
+	FlashlightComponent->VolumetricScatteringIntensity = 1.85f;
 	FlashlightComponent->CastShadows = true;
 
 	HeroLanternFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("HeroLanternFillLight"));
 	HeroLanternFillLight->SetupAttachment(RootComponent);
-	HeroLanternFillLight->SetRelativeLocation(FVector(-65.0f, 0.0f, 110.0f));
-	HeroLanternFillLight->SetIntensity(4800.0f);
-	HeroLanternFillLight->SetAttenuationRadius(1100.0f);
-	HeroLanternFillLight->SetLightColor(FLinearColor(1.0f, 0.84f, 0.55f));
+	HeroLanternFillLight->SetRelativeLocation(FVector(-35.0f, 35.0f, 75.0f));
+	HeroLanternFillLight->SetUseInverseSquaredFalloff(true);
+	HeroLanternFillLight->SetIntensityUnits(ELightUnits::Lumens);
+	HeroLanternFillLight->SetSourceRadius(32.0f);
+	HeroLanternFillLight->SetSoftSourceRadius(48.0f);
+	HeroLanternFillLight->SetIntensity(120.0f);
+	HeroLanternFillLight->SetAttenuationRadius(680.0f);
+	HeroLanternFillLight->SetLightColor(FLinearColor(1.0f, 0.78f, 0.45f));
 	HeroLanternFillLight->CastShadows = false;
 
 	SensoryPerkComponent = CreateDefaultSubobject<USensoryPerkComponent>(TEXT("SensoryPerkComponent"));
@@ -214,6 +228,7 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 
 void ADungeoneerCharacter::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept
 {
+	const int32 PrevColumn = ActiveWalkFrameColumn;
 	const float ClampedDist = FMath::Max(DeltaDistanceUU, 0.0f);
 	if (bIsMoving || ClampedDist > 0.25f)
 	{
@@ -226,6 +241,24 @@ void ADungeoneerCharacter::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, 
 		// Lock to Column 0 (Contact / Idle Pose A) when standing still
 		ActiveWalkFrameColumn = 0;
 	}
+
+	if (ActiveWalkFrameColumn != PrevColumn)
+	{
+		if (ActiveWalkFrameColumn == 1 || ActiveWalkFrameColumn == 3)
+		{
+			++WalkStepSequenceCount;
+			if (const UWorld* World = GetWorld())
+			{
+				if (UDungeonWaterSubsystem* WaterSub = World->GetSubsystem<UDungeonWaterSubsystem>())
+				{
+					const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+					const ECompassOctant MoveOct = MoveComp ? MoveComp->GetMoveOctant() : ReplicatedMoveOctant;
+					WaterSub->NotifyWalkerStep(this, GetActorLocation(), MoveOct, true);
+				}
+			}
+		}
+		OnWalkColumnChanged.Broadcast(ActiveWalkFrameColumn);
+	}
 }
 
 void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOctant, int32 FrameColumn) noexcept
@@ -235,7 +268,7 @@ void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOcta
 		return;
 	}
 
-	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(FacingOctant));
+	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(FacingOctant, -45.0f));
 	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
 	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
 
@@ -275,6 +308,10 @@ void ADungeoneerCharacter::BeginPlay()
 		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 		{
 			SpatialSys->RegisterPlayer(this);
+		}
+		if (UDungeonAcousticSubsystem* AcousticSys = World->GetSubsystem<UDungeonAcousticSubsystem>())
+		{
+			AcousticSys->RegisterWalker(this);
 		}
 	}
 
@@ -394,7 +431,8 @@ void ADungeoneerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 
 void ADungeoneerCharacter::HandleMoveInput(const FInputActionValue& Value)
 {
-	const FVector2D MoveVec = Value.Get<FVector2D>();
+	const FVector2D RawMoveVec = Value.Get<FVector2D>();
+	const FVector2D MoveVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RawMoveVec, -45.0f);
 	if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
 	{
 		MoveComp->SetMoveInputVector(MoveVec);
@@ -416,7 +454,8 @@ void ADungeoneerCharacter::HandleMoveCompleted(const FInputActionValue& Value)
 
 void ADungeoneerCharacter::HandleAimInput(const FInputActionValue& Value)
 {
-	const FVector2D AimVec = Value.Get<FVector2D>();
+	const FVector2D RawAimVec = Value.Get<FVector2D>();
+	const FVector2D AimVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RawAimVec, -45.0f);
 	if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
 	{
 		MoveComp->SetAimInputVector(AimVec);
@@ -801,11 +840,11 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 		if (FlashlightComponent)
 		{
-			FlashlightComponent->SetIntensity(26000.0f + 12000.0f * (1.0f - Alpha));
+			FlashlightComponent->SetIntensity(650.0f + 250.0f * (1.0f - Alpha));
 		}
 		if (HeroLanternFillLight)
 		{
-			HeroLanternFillLight->SetIntensity(4800.0f + 5600.0f * (1.0f - Alpha));
+			HeroLanternFillLight->SetIntensity(120.0f + 55.0f * (1.0f - Alpha));
 		}
 
 		if (AttackSwingElapsed >= SlashDuration)
@@ -821,11 +860,11 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 	}
 	if (FlashlightComponent)
 	{
-		FlashlightComponent->SetIntensity(26000.0f);
+		FlashlightComponent->SetIntensity(650.0f);
 	}
 	if (HeroLanternFillLight)
 	{
-		HeroLanternFillLight->SetIntensity(4800.0f);
+		HeroLanternFillLight->SetIntensity(120.0f);
 	}
 
 	if (CombatActionState == EDungeoneerCombatActionState::DodgeDash)
@@ -882,7 +921,11 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 	if (HeroVisualMesh)
 	{
-		HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation);
+		const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+		const double WadingBootDrop = (MoveComp && MoveComp->IsWadingInStream())
+			? -static_cast<double>(EcoCells::WadingBootDropUU)
+			: 0.0;
+		HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(0.0, 0.0, WadingBootDrop));
 		HeroVisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
 		HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale);
 	}
@@ -956,7 +999,7 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 	if (PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Right)) { MoveY += 1.0; }
 	if (PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Left))  { MoveY -= 1.0; }
 
-	const FVector2D MoveVec(MoveX, MoveY);
+	const FVector2D MoveVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(FVector2D(MoveX, MoveY), -45.0f);
 	MoveComp->SetMoveInputVector(MoveVec);
 	if (MoveComp->HasActiveMoveInput())
 	{
@@ -990,7 +1033,8 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 			{
 				const float CenterX = static_cast<float>(ViewW) * 0.5f;
 				const float CenterY = static_cast<float>(ViewH) * 0.5f;
-				const FVector2D AimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
+				const FVector2D RawAimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
+				const FVector2D AimVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RawAimVec, -45.0f);
 				MoveComp->SetAimInputVector(AimVec);
 				bMouseActivelyAiming = true;
 			}
@@ -1120,7 +1164,9 @@ void ADungeoneerCharacter::SyncFlashlightTransform(float DeltaSeconds) noexcept
 		: 18.0f;
 
 	CurrentFlashlightYawDeg = FMath::FixedTurn(CurrentFlashlightYawDeg, TargetYawDeg, InterpSpeed * DeltaSeconds * 30.0f);
-	FlashlightComponent->SetWorldRotation(FRotator(-5.0f, CurrentFlashlightYawDeg, 0.0f));
+	const float AimYawRad = FMath::DegreesToRadians(CurrentFlashlightYawDeg);
+	FlashlightComponent->SetRelativeLocation(FVector(FMath::Cos(AimYawRad) * 42.0, FMath::Sin(AimYawRad) * 42.0, 32.0));
+	FlashlightComponent->SetWorldRotation(FRotator(-16.0f, CurrentFlashlightYawDeg, 0.0f));
 }
 
 void ADungeoneerCharacter::Server_UpdateOctants_Implementation(ECompassOctant NewMoveOctant, ECompassOctant NewAimOctant)

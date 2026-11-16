@@ -1,4 +1,5 @@
 #include "Audio/DungeoneerTimedAudioComponent.h"
+#include "Audio/DungeonAcousticSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "AI/ZombieBase.h"
@@ -102,6 +103,17 @@ void UDungeoneerTimedAudioComponent::TriggerAnimNotifyCue(
 
 void UDungeoneerTimedAudioComponent::HandlePlayerStepEvent(const FDungeoneerStepEvent& StepEvent)
 {
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UDungeonAcousticSubsystem* AcousticSub = World->GetSubsystem<UDungeonAcousticSubsystem>())
+		{
+			if (AcousticSub->IsWalkerRegistered(GetOwner()))
+			{
+				return; // UDungeonAcousticSubsystem handles Layer A/B surface-resolved footsteps
+			}
+		}
+	}
+
 	if (PlayerFootstepSound)
 	{
 		const float PitchJitter = 0.96f + 0.08f * static_cast<float>(StepEvent.StepSequenceIndex & 1);
@@ -113,6 +125,17 @@ void UDungeoneerTimedAudioComponent::HandlePlayerStepEvent(const FDungeoneerStep
 
 void UDungeoneerTimedAudioComponent::HandleZombieStepEvent(const FDungeoneerStepEvent& StepEvent)
 {
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UDungeonAcousticSubsystem* AcousticSub = World->GetSubsystem<UDungeonAcousticSubsystem>())
+		{
+			if (AcousticSub->IsWalkerRegistered(GetOwner()))
+			{
+				return; // UDungeonAcousticSubsystem handles Layer A surface-resolved footsteps
+			}
+		}
+	}
+
 	if (ZombieFootstepSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, ZombieFootstepSound, StepEvent.WorldLocation, StepEvent.AcousticLoudness);

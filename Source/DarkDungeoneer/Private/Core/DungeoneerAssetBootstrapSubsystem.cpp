@@ -1,6 +1,8 @@
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
+#include "Audio/DungeoneerPCMSoundWave.h"
 #include "Core/DungeoneerMovementConfig.h"
 #include "Rendering/Dungeoneer25DMaterialBuilder.h"
+#include "Rendering/DungeoneerEcoMaterialFactory.h"
 #include "Audio.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
@@ -25,7 +27,51 @@
 
 namespace AssetBootstrapPrivate
 {
-	static bool SaveAssetPackageToContent(UObject* Asset, const TCHAR* LongPackageName)
+	static UDungeoneerPCMSoundWave* CreateRuntimePCMSoundWaveFromWavFile(
+		UObject* Outer,
+		const FString& WavPath,
+		const bool bLooping,
+		TArray<uint8>& ScratchRawWavBytes)
+	{
+		ScratchRawWavBytes.Reset();
+		if (!Outer || !FFileHelper::LoadFileToArray(ScratchRawWavBytes, *WavPath) || ScratchRawWavBytes.Num() <= 44)
+		{
+			return nullptr;
+		}
+
+		FWaveModInfo WaveInfo;
+		if (!WaveInfo.ReadWaveInfo(ScratchRawWavBytes.GetData(), ScratchRawWavBytes.Num())
+			|| WaveInfo.SampleDataSize == 0
+			|| !WaveInfo.SampleDataStart)
+		{
+			return nullptr;
+		}
+
+		const uint32 SampleRate = WaveInfo.pSamplesPerSec ? *WaveInfo.pSamplesPerSec : 22050U;
+		const uint16 Channels = WaveInfo.pChannels ? *WaveInfo.pChannels : 1U;
+		const uint16 Bits = WaveInfo.pBitsPerSample ? *WaveInfo.pBitsPerSample : 16U;
+
+		UDungeoneerPCMSoundWave* SoundWave = NewObject<UDungeoneerPCMSoundWave>(Outer);
+		if (!SoundWave)
+		{
+			return nullptr;
+		}
+
+		if (!SoundWave->InitializeFromPCMBytes(
+			WaveInfo.SampleDataStart,
+			WaveInfo.SampleDataSize,
+			SampleRate,
+			Channels,
+			Bits,
+			bLooping))
+		{
+			return nullptr;
+		}
+
+		return SoundWave;
+	}
+
+	static bool SaveAssetPackageToContent(UObject* Asset, const TCHAR* LongPackageName, bool bForceOverwrite = false)
 	{
 		if (!Asset)
 		{
@@ -38,7 +84,7 @@ namespace AssetBootstrapPrivate
 			return false;
 		}
 
-		if (FPaths::FileExists(DiskFilename) && IFileManager::Get().FileSize(*DiskFilename) > 0)
+		if (!bForceOverwrite && FPaths::FileExists(DiskFilename) && IFileManager::Get().FileSize(*DiskFilename) > 0)
 		{
 			return true;
 		}
@@ -65,6 +111,8 @@ void UDungeoneerAssetBootstrapSubsystem::Initialize(FSubsystemCollectionBase& Co
 	ImportAllRigTexturesFromDisk();
 	ImportAllDungeonTexturesFromDisk();
 	ExtractDefaultSingleCellTiles();
+	ImportAllEcosystemTexturesFromDisk();
+	ImportAllFoleyFromDisk();
 }
 
 void UDungeoneerAssetBootstrapSubsystem::Deinitialize()
@@ -74,7 +122,10 @@ void UDungeoneerAssetBootstrapSubsystem::Deinitialize()
 	ExtractedCellTextures.Reset();
 	SpriteMaskTextures.Reset();
 	LoadedVoiceStems.Reset();
+	LoadedEcosystemTextures.Reset();
+	LoadedFoleySounds.Reset();
 	SensoryMPC = nullptr;
+	EcoInstancedMaterial = nullptr;
 	MaterialConfigAsset = nullptr;
 	MovementConfigAsset = nullptr;
 	Super::Deinitialize();
@@ -264,13 +315,12 @@ void UDungeoneerAssetBootstrapSubsystem::ComputeSpritePlaneOrientation() const n
 	const FVector Nrm = LocalNormal.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 0.0, 1.0));
 	const FVector E2 = FVector::CrossProduct(Nrm, E1).GetSafeNormal(UE_SMALL_NUMBER, FVector(0.0, 1.0, 0.0));
 
-	// Desired world frame for 45 deg 2.5D billboard tilt toward the -60 deg camera looking along +X:
-	// - Sprite head (V=0) above boots (V=1): WorldUp = (0.7071068, 0.0, 0.7071068)
-	// - Plane front (+Z) tilted toward camera:   WorldNormal = (-0.7071068, 0.0, 0.7071068)
-	// - Cross(WorldNormal, WorldUp) = (0, +1, 0) = Screen Right (+Y)
-	const FVector WorldUp = FVector(0.7071067811865475, 0.0, 0.7071067811865475).GetSafeNormal();
-	const FVector WorldNormal = FVector(-0.7071067811865475, 0.0, 0.7071067811865475).GetSafeNormal();
-	const FVector WorldRight = FVector::CrossProduct(WorldNormal, WorldUp).GetSafeNormal();
+	// Desired world frame aligned with our isometric diorama camera (Pitch = -42 deg, Yaw = -45 deg):
+	// Plane normal (-CamForward) points toward camera so 2.5D upright sprites suffer zero skew/foreshortening.
+	const FRotationMatrix CamBasis(FRotator(-42.0f, -45.0f, 0.0f));
+	const FVector WorldNormal = -CamBasis.GetScaledAxis(EAxis::X).GetSafeNormal();
+	const FVector WorldUp = CamBasis.GetScaledAxis(EAxis::Z).GetSafeNormal();
+	const FVector WorldRight = CamBasis.GetScaledAxis(EAxis::Y).GetSafeNormal();
 
 	FMatrix SrcMat = FMatrix::Identity;
 	SrcMat.SetAxes(&E1, &E2, &Nrm);
@@ -281,7 +331,7 @@ void UDungeoneerAssetBootstrapSubsystem::ComputeSpritePlaneOrientation() const n
 	CachedSpritePlaneRotation = RotMat.Rotator();
 
 	const FVector TransformedRightU = CachedSpritePlaneRotation.RotateVector(LocalRightU);
-	bFlipHorizontalForSpritePlane = (FVector::DotProduct(TransformedRightU, FVector(0.0, 1.0, 0.0)) < 0.0);
+	bFlipHorizontalForSpritePlane = (FVector::DotProduct(TransformedRightU, WorldRight) < 0.0);
 	bSpritePlaneOrientationComputed = true;
 }
 
@@ -588,10 +638,10 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 
 	AliasCellKey(TEXT("Doors_Arch_D"),        TEXT("Doors_Cell0_D"));
 	AliasCellKey(TEXT("Doors_Arch_N"),        TEXT("Doors_Cell0_N"));
-	AliasCellKey(TEXT("Doors_Sconce_D"),      TEXT("Doors_Cell8_D"));
-	AliasCellKey(TEXT("Doors_Sconce_N"),      TEXT("Doors_Cell8_N"));
-	AliasCellKey(TEXT("Doors_Stairs_D"),      TEXT("Doors_Cell12_D"));
-	AliasCellKey(TEXT("Doors_Stairs_N"),      TEXT("Doors_Cell12_N"));
+	AliasCellKey(TEXT("Doors_Stairs_D"),      TEXT("Doors_Cell8_D"));
+	AliasCellKey(TEXT("Doors_Stairs_N"),      TEXT("Doors_Cell8_N"));
+	AliasCellKey(TEXT("Doors_Sconce_D"),      TEXT("Doors_Cell12_D"));
+	AliasCellKey(TEXT("Doors_Sconce_N"),      TEXT("Doors_Cell12_N"));
 	AliasCellKey(TEXT("Sanctuary_Brazier_D"), TEXT("Sanctuary_Cell0_D"));
 	AliasCellKey(TEXT("Sanctuary_Brazier_N"), TEXT("Sanctuary_Cell0_N"));
 	AliasCellKey(TEXT("Sanctuary_Rune_D"),    TEXT("Sanctuary_Cell12_D"));
@@ -816,6 +866,10 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::ResolveAnyTextureByKey(const FNa
 	{
 		return Dungeon->Get();
 	}
+	if (const TObjectPtr<UTexture2D>* Eco = LoadedEcosystemTextures.Find(Key))
+	{
+		return Eco->Get();
+	}
 	if (const TObjectPtr<UTexture2D>* Rig = LoadedRigTextures.Find(Key))
 	{
 		return Rig->Get();
@@ -966,41 +1020,10 @@ int32 UDungeoneerAssetBootstrapSubsystem::ImportAllVoiceStemsFromDisk()
 			continue;
 		}
 
-		RawWavBytes.Reset();
-		if (!FFileHelper::LoadFileToArray(RawWavBytes, *WavPath) || RawWavBytes.Num() <= 44)
+		if (UDungeoneerPCMSoundWave* SoundWave = AssetBootstrapPrivate::CreateRuntimePCMSoundWaveFromWavFile(this, WavPath, false, RawWavBytes))
 		{
-			continue;
+			LoadedVoiceStems.Add(Key, SoundWave);
 		}
-
-		FWaveModInfo WaveInfo;
-		if (!WaveInfo.ReadWaveInfo(RawWavBytes.GetData(), RawWavBytes.Num()))
-		{
-			continue;
-		}
-
-		const uint32 SampleRate = WaveInfo.pSamplesPerSec ? *WaveInfo.pSamplesPerSec : 22050U;
-		const uint16 Channels = WaveInfo.pChannels ? *WaveInfo.pChannels : 1U;
-		const uint16 Bits = WaveInfo.pBitsPerSample ? *WaveInfo.pBitsPerSample : 16U;
-		const uint32 ByteRate = FMath::Max(1U, static_cast<uint32>(SampleRate * Channels * FMath::Max<uint16>(1U, Bits / 8U)));
-
-		USoundWave* SoundWave = NewObject<USoundWave>(this);
-		if (!SoundWave)
-		{
-			continue;
-		}
-
-		SoundWave->SetSampleRate(SampleRate);
-		SoundWave->NumChannels = static_cast<int32>(Channels);
-		SoundWave->Duration = static_cast<float>(WaveInfo.SampleDataSize) / static_cast<float>(ByteRate);
-
-		if (WaveInfo.SampleDataSize > 0 && WaveInfo.SampleDataStart)
-		{
-			SoundWave->RawPCMDataSize = static_cast<int32>(WaveInfo.SampleDataSize);
-			SoundWave->RawPCMData = static_cast<uint8*>(FMemory::Malloc(WaveInfo.SampleDataSize));
-			FMemory::Memcpy(SoundWave->RawPCMData, WaveInfo.SampleDataStart, WaveInfo.SampleDataSize);
-		}
-
-		LoadedVoiceStems.Add(Key, SoundWave);
 	}
 
 	return LoadedVoiceStems.Num();
@@ -1044,9 +1067,283 @@ UMaterialParameterCollection* UDungeoneerAssetBootstrapSubsystem::EnsureSensoryM
 
 		AddVector(TEXT("HearingPulseOrigin"), FLinearColor::Black);
 		AddVector(TEXT("PlayerWorldOrigin"), FLinearColor::Black);
+		bSensoryMPCNeedsResave = true;
+	}
+
+	if (SensoryMPC && SensoryMPC->GetScalarParameterByName(FName(TEXT("EcoTime"))) == nullptr)
+	{
+		auto AddEcoScalar = [this](const FName& Name, float DefaultVal)
+		{
+			FCollectionScalarParameter Param;
+			Param.ParameterName = Name;
+			Param.DefaultValue = DefaultVal;
+			SensoryMPC->ScalarParameters.Add(Param);
+		};
+		auto AddEcoVector = [this](const FName& Name, const FLinearColor& DefaultColor)
+		{
+			FCollectionVectorParameter Param;
+			Param.ParameterName = Name;
+			Param.DefaultValue = DefaultColor;
+			SensoryMPC->VectorParameters.Add(Param);
+		};
+
+		AddEcoScalar(FName(TEXT("EcoTime")), 0.0f);
+		AddEcoScalar(FName(TEXT("EcoGlowCount")), 0.0f);
+		for (int32 i = 0; i < 32; ++i)
+		{
+			AddEcoVector(FName(*FString::Printf(TEXT("EcoGlow%02d"), i)), FLinearColor::Black);
+		}
+		bSensoryMPCNeedsResave = true;
+	}
+
+	if (SensoryMPC && bSensoryMPCNeedsResave)
+	{
+		if (AssetBootstrapPrivate::SaveAssetPackageToContent(SensoryMPC.Get(), TEXT("/Game/Materials/MPC_SensoryState"), true))
+		{
+			bSensoryMPCNeedsResave = false;
+		}
 	}
 
 	return SensoryMPC.Get();
+}
+
+UMaterialInterface* UDungeoneerAssetBootstrapSubsystem::EnsureEcoInstancedMaterial()
+{
+	if (!EcoInstancedMaterial)
+	{
+		EcoInstancedMaterial = FDungeoneerEcoMaterialFactory::EnsureEcoInstancedMaterial(EnsureSensoryMPC());
+	}
+	return EcoInstancedMaterial.Get();
+}
+
+int32 UDungeoneerAssetBootstrapSubsystem::ImportAllEcosystemTexturesFromDisk()
+{
+	const FString EcoRoot = FPaths::ProjectContentDir() / TEXT("Art/Ecosystem");
+	static constexpr const TCHAR* EcoSets[] =
+	{
+		TEXT("PROP_Magical_Flora_And_Crystals_4x4"),
+		TEXT("PROP_Water_And_Fauna_4x4"),
+		TEXT("PROP_Fauna_Critters_Strip_4x1"),
+		TEXT("ATLAS_Water_Surfaces_4x4"),
+		TEXT("PROP_Water_Cascades_And_Geysers_4x4"),
+		TEXT("PROP_Water_FX_4x4"),
+		TEXT("PROP_Wall_Bioluminescence_4x4")
+	};
+	struct FEcoChannel { const TCHAR* Suffix; bool bNormal; bool bSRGB; };
+	static constexpr FEcoChannel Channels[] =
+	{
+		{ TEXT("D"), false, true },
+		{ TEXT("N"), true,  false },
+		{ TEXT("E"), false, true }
+	};
+
+	auto BuildProceduralWaterAtlas = [this](const FName& CacheKey, const bool bEmissiveChannel) -> UTexture2D*
+	{
+		constexpr int32 Size = 512;
+		constexpr int32 CellPx = 128;
+		UTexture2D* Tex = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
+		if (!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num() == 0)
+		{
+			return nullptr;
+		}
+		FTexture2DMipMap& Mip = Tex->GetPlatformData()->Mips[0];
+		uint8* Bytes = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+		if (!Bytes)
+		{
+			Mip.BulkData.Unlock();
+			return nullptr;
+		}
+		for (int32 Y = 0; Y < Size; ++Y)
+		{
+			const int32 Row = Y / CellPx;
+			const int32 LY = Y % CellPx;
+			for (int32 X = 0; X < Size; ++X)
+			{
+				const int32 Col = X / CellPx;
+				const int32 LX = X % CellPx;
+				const int32 Idx = (Y * Size + X) * 4;
+				uint8 R = 0, G = 0, B = 0, A = 0;
+				if (Row == 0) // Deep dark indigo subterranean stream with smooth organic cyan current threads & mossy stone banks
+				{
+					const float FX = static_cast<float>(LX);
+					const float FY = static_cast<float>(LY);
+					const float Phase = static_cast<float>(Col) * 1.57f;
+					const float RippleA = FMath::Sin(FX * 0.22f + FMath::Sin(FY * 0.14f + Phase) * 1.8f);
+					const float RippleB = FMath::Sin(FY * 0.19f + FMath::Cos(FX * 0.11f - Phase) * 1.4f);
+					const bool bHighlight = (RippleA > 0.90f && RippleB > 0.25f) || (RippleA > 0.96f);
+					const bool bMid = (!bHighlight && RippleA > 0.65f);
+					const bool bEdge = (LX < 7 || LX >= CellPx - 7);
+					if (bEmissiveChannel)
+					{
+						R = bHighlight ? 4 : 0;
+						G = bHighlight ? 28 : (bMid ? 10 : 4);
+						B = bHighlight ? 44 : (bMid ? 18 : 9);
+					}
+					else if (bEdge)
+					{
+						R = 14;
+						G = 28;
+						B = 22;
+					}
+					else
+					{
+						R = bHighlight ? 20 : (bMid ? 10 : 6);
+						G = bHighlight ? 78 : (bMid ? 34 : 16);
+						B = bHighlight ? 112 : (bMid ? 52 : 28);
+					}
+					A = bEdge ? (((LX + LY) % 5 == 0) ? 120 : 165) : (bHighlight ? 230 : 210);
+				}
+				else if (Row == 1) // Crisp translucent concentric boot/drip ripple rings (no opaque disc fill)
+				{
+					const float DX = static_cast<float>(LX - CellPx / 2);
+					const float DY = static_cast<float>(LY - CellPx / 2);
+					const float Dist = FMath::Sqrt(DX * DX + DY * DY);
+					const float OuterR = 22.0f + static_cast<float>(Col) * 9.0f;
+					const float InnerR = FMath::Max(6.0f, OuterR - 14.0f);
+					const bool bOuterRing = (FMath::Abs(Dist - OuterR) < 1.8f);
+					const bool bInnerRing = (Col > 0) && (FMath::Abs(Dist - InnerR) < 1.4f);
+					if (bOuterRing || bInnerRing)
+					{
+						if (bEmissiveChannel)
+						{
+							R = 24;
+							G = 128;
+							B = 180;
+						}
+						else
+						{
+							R = bOuterRing ? 140 : 95;
+							G = bOuterRing ? 225 : 190;
+							B = bOuterRing ? 255 : 235;
+						}
+						A = bOuterRing ? 215 : 155;
+					}
+				}
+				else if (Row == 2) // Shallow dark reflective dungeon puddle
+				{
+					const float DX = static_cast<float>(LX - CellPx / 2);
+					const float DY = static_cast<float>(LY - CellPx / 2);
+					const float Dist = FMath::Sqrt(DX * DX + DY * DY);
+					const bool bInside = Dist < 54.0f;
+					const bool bRing = (FMath::Abs(Dist - (24.0f + Col * 7.0f)) < 2.0f);
+					if (bInside)
+					{
+						if (bEmissiveChannel)
+						{
+							R = bRing ? 14 : 2;
+							G = bRing ? 75 : 18;
+							B = bRing ? 112 : 34;
+						}
+						else
+						{
+							R = bRing ? 48 : 10;
+							G = bRing ? 120 : 26;
+							B = bRing ? 165 : 46;
+						}
+						A = bRing ? 195 : 140;
+					}
+				}
+				else // Row 3: Wet bootprints (cols 0..3 => N, NE, E, SE)
+				{
+					const float AngleRad = static_cast<float>(Col) * 0.785398f;
+					const float C = FMath::Cos(AngleRad);
+					const float S = FMath::Sin(AngleRad);
+					const float CX = static_cast<float>(LX - CellPx / 2);
+					const float CY = static_cast<float>(LY - CellPx / 2);
+					const float RX = CX * C + CY * S;
+					const float RY = -CX * S + CY * C;
+					const bool bSole = (FMath::Abs(RX) < 16.0f && FMath::Abs(RY) < 34.0f && (FMath::Abs(RY) > 6.0f || FMath::Abs(RX) < 11.0f));
+					if (bSole)
+					{
+						R = bEmissiveChannel ? 25 : 52;
+						G = bEmissiveChannel ? 140 : 145;
+						B = bEmissiveChannel ? 185 : 190;
+						A = 230;
+					}
+				}
+				Bytes[Idx + 0] = B;
+				Bytes[Idx + 1] = G;
+				Bytes[Idx + 2] = R;
+				Bytes[Idx + 3] = A;
+			}
+		}
+		Mip.BulkData.Unlock();
+		FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(Tex, false, true);
+		LoadedEcosystemTextures.Add(CacheKey, Tex);
+		return Tex;
+	};
+
+	for (const TCHAR* SetName : EcoSets)
+	{
+		for (const FEcoChannel& Ch : Channels)
+		{
+			const FName Key(*FString::Printf(TEXT("%s_%s"), SetName, Ch.Suffix));
+			if (LoadedEcosystemTextures.Contains(Key))
+			{
+				continue;
+			}
+			const FString FilePath = EcoRoot / SetName / FString::Printf(TEXT("%s_%s.png"), SetName, Ch.Suffix);
+			if (FPaths::FileExists(FilePath))
+			{
+				if (UTexture2D* Imported = FImageUtils::ImportFileAsTexture2D(FilePath))
+				{
+					FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(Imported, Ch.bNormal, Ch.bSRGB);
+					LoadedEcosystemTextures.Add(Key, Imported);
+				}
+			}
+			else if (FCString::Strcmp(SetName, TEXT("ATLAS_Water_Surfaces_4x4")) == 0 &&
+				(FCString::Strcmp(Ch.Suffix, TEXT("D")) == 0 || FCString::Strcmp(Ch.Suffix, TEXT("E")) == 0))
+			{
+				BuildProceduralWaterAtlas(Key, FCString::Strcmp(Ch.Suffix, TEXT("E")) == 0);
+			}
+			else if (FString(Ch.Suffix) == TEXT("D"))
+			{
+				// Safe procedural 64x64 fallback for optional future ecosystem sheets
+				const FColor Primary = FString(SetName).Contains(TEXT("Water"))
+					? FColor(28, 128, 175, 255)
+					: FColor(24, 155, 110, 255);
+				const FColor Secondary = FColor(16, 48, 64, 255);
+				if (UTexture2D* Fallback = RegisterProceduralTileFallback(Key, Primary, Secondary, false, true, 1))
+				{
+					LoadedEcosystemTextures.Add(Key, Fallback);
+				}
+			}
+		}
+	}
+
+	return LoadedEcosystemTextures.Num();
+}
+
+int32 UDungeoneerAssetBootstrapSubsystem::ImportAllFoleyFromDisk()
+{
+	const FString FoleyRoot = FPaths::ProjectContentDir() / TEXT("Audio/Foley");
+	if (!FPaths::DirectoryExists(FoleyRoot))
+	{
+		return LoadedFoleySounds.Num();
+	}
+
+	TArray<FString> WavFiles;
+	IFileManager::Get().FindFilesRecursive(WavFiles, *FoleyRoot, TEXT("*.wav"), true, false);
+	WavFiles.Sort();
+
+	TArray<uint8> RawWavBytes;
+	for (const FString& WavPath : WavFiles)
+	{
+		const FString FileStem = FPaths::GetBaseFilename(WavPath);
+		const FName Key(*FileStem);
+		if (LoadedFoleySounds.Contains(Key))
+		{
+			continue;
+		}
+
+		const bool bIsLoop = FileStem.Contains(TEXT("Loop_"));
+		if (UDungeoneerPCMSoundWave* SoundWave = AssetBootstrapPrivate::CreateRuntimePCMSoundWaveFromWavFile(this, WavPath, bIsLoop, RawWavBytes))
+		{
+			LoadedFoleySounds.Add(Key, SoundWave);
+		}
+	}
+
+	return LoadedFoleySounds.Num();
 }
 
 bool UDungeoneerAssetBootstrapSubsystem::SaveCoreDataAssetsToDisk()
@@ -1083,7 +1380,12 @@ bool UDungeoneerAssetBootstrapSubsystem::SaveCoreDataAssetsToDisk()
 		MovementConfigAsset = NewObject<UDungeoneerMovementConfig>(MoveCfgPkg, TEXT("DA_MovementConfig"), RF_Public | RF_Standalone);
 	}
 
-	const bool bSavedMPC = AssetBootstrapPrivate::SaveAssetPackageToContent(MPC, TEXT("/Game/Materials/MPC_SensoryState"));
+	const bool bSavedMPC = AssetBootstrapPrivate::SaveAssetPackageToContent(MPC, TEXT("/Game/Materials/MPC_SensoryState"), bSensoryMPCNeedsResave);
+	if (bSavedMPC)
+	{
+		bSensoryMPCNeedsResave = false;
+	}
+	EnsureEcoInstancedMaterial();
 	const bool bSavedMatCfg = AssetBootstrapPrivate::SaveAssetPackageToContent(MaterialConfigAsset.Get(), TEXT("/Game/Materials/DA_25DMaterialConfig"));
 	const bool bSavedMoveCfg = AssetBootstrapPrivate::SaveAssetPackageToContent(MovementConfigAsset.Get(), TEXT("/Game/Core/DA_MovementConfig"));
 
@@ -1117,5 +1419,17 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetSpriteMaskTexture(FName Diffu
 USoundWave* UDungeoneerAssetBootstrapSubsystem::GetLoadedVoiceStem(FName Key) const noexcept
 {
 	const TObjectPtr<USoundWave>* Found = LoadedVoiceStems.Find(Key);
+	return Found ? Found->Get() : nullptr;
+}
+
+UTexture2D* UDungeoneerAssetBootstrapSubsystem::GetLoadedEcosystemTexture(FName Key) const noexcept
+{
+	const TObjectPtr<UTexture2D>* Found = LoadedEcosystemTextures.Find(Key);
+	return Found ? Found->Get() : nullptr;
+}
+
+USoundWave* UDungeoneerAssetBootstrapSubsystem::GetLoadedFoley(FName Key) const noexcept
+{
+	const TObjectPtr<USoundWave>* Found = LoadedFoleySounds.Find(Key);
 	return Found ? Found->Get() : nullptr;
 }

@@ -1,5 +1,6 @@
 #include "Rendering/25DAnimOrchestratorComponent.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
 #include "CollisionQueryParams.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/HitResult.h"
@@ -149,6 +150,10 @@ void U25DAnimOrchestratorComponent::AdvanceWalkDistance(float DeltaDistanceUU, c
 			if (CurrentFrameColumn == 1 || CurrentFrameColumn == 3)
 			{
 				DispatchStepContact(CurrentFrameColumn);
+			}
+			else
+			{
+				OnPassingPose.Broadcast(CurrentFrameColumn);
 			}
 		}
 	}
@@ -330,6 +335,23 @@ void U25DAnimOrchestratorComponent::DispatchStepContact(int32 FrameCol) noexcept
 			{
 				Event.PhysicalMaterial = PhysMat;
 				Event.SurfaceType = PhysMat->SurfaceType;
+			}
+		}
+
+		// When no UPhysicalMaterial exists on procedural floor meshes, resolve via O(1) SurfaceGrid
+		if (Event.PhysicalMaterial == nullptr)
+		{
+			if (const UDungeonWaterSubsystem* WaterSub = World->GetSubsystem<UDungeonWaterSubsystem>())
+			{
+				const EDungeonSurfaceKind GridKind = WaterSub->ResolveSurface(Event.WorldLocation);
+				if (GridKind == EDungeonSurfaceKind::ShallowPuddle || GridKind == EDungeonSurfaceKind::AnkleDeepStream)
+				{
+					Event.SurfaceType = SurfaceType1;
+				}
+				else if (GridKind == EDungeonSurfaceKind::CrystalShard || GridKind == EDungeonSurfaceKind::ObsidianMirror)
+				{
+					Event.SurfaceType = SurfaceType2;
+				}
 			}
 		}
 

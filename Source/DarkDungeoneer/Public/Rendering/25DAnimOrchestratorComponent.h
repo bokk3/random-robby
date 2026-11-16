@@ -68,6 +68,7 @@ struct DARKDUNGEONEER_API F25DStepContactEvent
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOn25DStepContactSignature, const F25DStepContactEvent&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOn25DFootstepContactSignature, EFoot);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOn25DPassingPoseSignature, int32 /*FrameColumn*/);
 
 /**
  * Drives 4x4 sprite-sheet cutouts with distance-locked walk cycles, 120Hz springs,
@@ -152,6 +153,7 @@ public:
 
 	FOn25DStepContactSignature OnStepContact;
 	FOn25DFootstepContactSignature OnFootstepContact;
+	FOn25DPassingPoseSignature OnPassingPose;
 
 protected:
 	void EvaluateSubFrameSprings(float DeltaTime, const FVector& VelocityXY, bool bHasMovement) noexcept;

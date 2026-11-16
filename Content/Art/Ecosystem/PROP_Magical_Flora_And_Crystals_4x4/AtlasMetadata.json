@@ -1,0 +1,487 @@
+{
+  "AssetName": "PROP_Magical_Flora_And_Crystals_4x4",
+  "SheetSize": [
+    512,
+    512
+  ],
+  "Grid": {
+    "Columns": 4,
+    "Rows": 4,
+    "TotalCells": 16
+  },
+  "TexelDensity": 64.0,
+  "UnrealUnitsPerMeter": 100.0,
+  "UnrealUnitsPerPixel": 1.5625,
+  "CellWorldSizeUU": [
+    200.0,
+    200.0
+  ],
+  "Cells": [
+    {
+      "CellIndex": 0,
+      "Row": 0,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 0,
+        "X1": 128,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.0,
+        "U1": 0.25,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.238281
+      ],
+      "FootPivotPx": [
+        64.0,
+        122.0
+      ]
+    },
+    {
+      "CellIndex": 1,
+      "Row": 0,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 0,
+        "X1": 256,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.0,
+        "U1": 0.5,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.238281
+      ],
+      "FootPivotPx": [
+        192.0,
+        122.0
+      ]
+    },
+    {
+      "CellIndex": 2,
+      "Row": 0,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 0,
+        "X1": 384,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.0,
+        "U1": 0.75,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.238281
+      ],
+      "FootPivotPx": [
+        320.0,
+        122.0
+      ]
+    },
+    {
+      "CellIndex": 3,
+      "Row": 0,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 0,
+        "X1": 512,
+        "Y1": 128
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.0,
+        "U1": 1.0,
+        "V1": 0.25
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.25
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.238281
+      ],
+      "FootPivotPx": [
+        448.0,
+        122.0
+      ]
+    },
+    {
+      "CellIndex": 4,
+      "Row": 1,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 128,
+        "X1": 128,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.25,
+        "U1": 0.25,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.482422
+      ],
+      "FootPivotPx": [
+        64.0,
+        247.0
+      ]
+    },
+    {
+      "CellIndex": 5,
+      "Row": 1,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 128,
+        "X1": 256,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.25,
+        "U1": 0.5,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.488281
+      ],
+      "FootPivotPx": [
+        192.0,
+        250.0
+      ]
+    },
+    {
+      "CellIndex": 6,
+      "Row": 1,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 128,
+        "X1": 384,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.25,
+        "U1": 0.75,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.490234
+      ],
+      "FootPivotPx": [
+        320.0,
+        251.0
+      ]
+    },
+    {
+      "CellIndex": 7,
+      "Row": 1,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 128,
+        "X1": 512,
+        "Y1": 256
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.25,
+        "U1": 1.0,
+        "V1": 0.5
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.5
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.490234
+      ],
+      "FootPivotPx": [
+        448.0,
+        251.0
+      ]
+    },
+    {
+      "CellIndex": 8,
+      "Row": 2,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 256,
+        "X1": 128,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.5,
+        "U1": 0.25,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.734375
+      ],
+      "FootPivotPx": [
+        64.0,
+        376.0
+      ]
+    },
+    {
+      "CellIndex": 9,
+      "Row": 2,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 256,
+        "X1": 256,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.5,
+        "U1": 0.5,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.742188
+      ],
+      "FootPivotPx": [
+        192.0,
+        380.0
+      ]
+    },
+    {
+      "CellIndex": 10,
+      "Row": 2,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 256,
+        "X1": 384,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.5,
+        "U1": 0.75,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.746094
+      ],
+      "FootPivotPx": [
+        320.0,
+        382.0
+      ]
+    },
+    {
+      "CellIndex": 11,
+      "Row": 2,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 256,
+        "X1": 512,
+        "Y1": 384
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.5,
+        "U1": 1.0,
+        "V1": 0.75
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        0.75
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.746094
+      ],
+      "FootPivotPx": [
+        448.0,
+        382.0
+      ]
+    },
+    {
+      "CellIndex": 12,
+      "Row": 3,
+      "Column": 0,
+      "PixelRect": {
+        "X0": 0,
+        "Y0": 384,
+        "X1": 128,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.0,
+        "V0": 0.75,
+        "U1": 0.25,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.125,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.125,
+        0.984375
+      ],
+      "FootPivotPx": [
+        64.0,
+        504.0
+      ]
+    },
+    {
+      "CellIndex": 13,
+      "Row": 3,
+      "Column": 1,
+      "PixelRect": {
+        "X0": 128,
+        "Y0": 384,
+        "X1": 256,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.25,
+        "V0": 0.75,
+        "U1": 0.5,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.375,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.375,
+        0.984375
+      ],
+      "FootPivotPx": [
+        192.0,
+        504.0
+      ]
+    },
+    {
+      "CellIndex": 14,
+      "Row": 3,
+      "Column": 2,
+      "PixelRect": {
+        "X0": 256,
+        "Y0": 384,
+        "X1": 384,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.5,
+        "V0": 0.75,
+        "U1": 0.75,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.625,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.625,
+        0.984375
+      ],
+      "FootPivotPx": [
+        320.0,
+        504.0
+      ]
+    },
+    {
+      "CellIndex": 15,
+      "Row": 3,
+      "Column": 3,
+      "PixelRect": {
+        "X0": 384,
+        "Y0": 384,
+        "X1": 512,
+        "Y1": 512
+      },
+      "UVRect": {
+        "U0": 0.75,
+        "V0": 0.75,
+        "U1": 1.0,
+        "V1": 1.0
+      },
+      "CellBottomCenterUV": [
+        0.875,
+        1.0
+      ],
+      "FootPivotUV": [
+        0.875,
+        0.984375
+      ],
+      "FootPivotPx": [
+        448.0,
+        504.0
+      ]
+    }
+  ],
+  "SheetMode": "ECOSYSTEM",
+  "CellSizePx": 128
+}

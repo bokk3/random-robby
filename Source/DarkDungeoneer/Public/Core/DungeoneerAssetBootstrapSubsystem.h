@@ -7,6 +7,7 @@
 class UTexture2D;
 class USoundWave;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UMaterialParameterCollection;
 class UDungeoneer25DMaterialConfig;
 class UDungeoneerMovementConfig;
@@ -75,6 +76,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
 	int32 ImportAllVoiceStemsFromDisk();
 
+	/** Imports full 4x4 & 4x1 Ecosystem atlases (_D, _N, _E) from Content/Art/Ecosystem. */
+	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
+	int32 ImportAllEcosystemTexturesFromDisk();
+
+	/** Imports generated ecosystem WAVs from Content/Audio/Foley with automatic bLooping detection. */
+	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
+	int32 ImportAllFoleyFromDisk();
+
+	/** Returns /Game/Materials/M_Dungeoneer_EcoInstanced (synthesizing in Editor if needed). */
+	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
+	UMaterialInterface* EnsureEcoInstancedMaterial();
+
 	/** Ensures MPC_SensoryState exists and registers all sensory scalar/vector parameters. */
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
 	UMaterialParameterCollection* EnsureSensoryMPC();
@@ -97,6 +110,18 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
 	USoundWave* GetLoadedVoiceStem(FName Key) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	UTexture2D* GetLoadedEcosystemTexture(FName Key) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	USoundWave* GetLoadedFoley(FName Key) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	int32 GetLoadedEcosystemTextureCount() const noexcept { return LoadedEcosystemTextures.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
+	int32 GetLoadedFoleyCount() const noexcept { return LoadedFoleySounds.Num(); }
 
 	UFUNCTION(BlueprintPure, Category = "Assets|Bootstrap")
 	UMaterialParameterCollection* GetSensoryMPC() const noexcept { return SensoryMPC.Get(); }
@@ -159,7 +184,18 @@ private:
 	TMap<FName, TObjectPtr<USoundWave>> LoadedVoiceStems;
 
 	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> LoadedEcosystemTextures;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<USoundWave>> LoadedFoleySounds;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UMaterialParameterCollection> SensoryMPC;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> EcoInstancedMaterial;
+
+	bool bSensoryMPCNeedsResave = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDungeoneer25DMaterialConfig> MaterialConfigAsset;

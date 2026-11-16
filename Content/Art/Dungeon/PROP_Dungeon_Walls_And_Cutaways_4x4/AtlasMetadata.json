@@ -1,8 +1,8 @@
 {
   "AssetName": "PROP_Dungeon_Walls_And_Cutaways_4x4",
   "SheetSize": [
-    512,
-    512
+    1024,
+    1024
   ],
   "Grid": {
     "Columns": 4,
@@ -13,8 +13,8 @@
   "UnrealUnitsPerMeter": 100.0,
   "UnrealUnitsPerPixel": 1.5625,
   "CellWorldSizeUU": [
-    200.0,
-    200.0
+    400.0,
+    400.0
   ],
   "Cells": [
     {
@@ -24,8 +24,8 @@
       "PixelRect": {
         "X0": 0,
         "Y0": 0,
-        "X1": 128,
-        "Y1": 128
+        "X1": 256,
+        "Y1": 256
       },
       "UVRect": {
         "U0": 0.0,
@@ -39,11 +39,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.240234
+        0.25
       ],
       "FootPivotPx": [
-        64.0,
-        123.0
+        128.0,
+        256.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -53,10 +53,10 @@
       "Row": 0,
       "Column": 1,
       "PixelRect": {
-        "X0": 128,
+        "X0": 256,
         "Y0": 0,
-        "X1": 256,
-        "Y1": 128
+        "X1": 512,
+        "Y1": 256
       },
       "UVRect": {
         "U0": 0.25,
@@ -70,11 +70,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.240234
+        0.25
       ],
       "FootPivotPx": [
-        192.0,
-        123.0
+        384.0,
+        256.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -84,10 +84,10 @@
       "Row": 0,
       "Column": 2,
       "PixelRect": {
-        "X0": 256,
+        "X0": 512,
         "Y0": 0,
-        "X1": 384,
-        "Y1": 128
+        "X1": 768,
+        "Y1": 256
       },
       "UVRect": {
         "U0": 0.5,
@@ -101,11 +101,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.240234
+        0.25
       ],
       "FootPivotPx": [
-        320.0,
-        123.0
+        640.0,
+        256.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -115,10 +115,10 @@
       "Row": 0,
       "Column": 3,
       "PixelRect": {
-        "X0": 384,
+        "X0": 768,
         "Y0": 0,
-        "X1": 512,
-        "Y1": 128
+        "X1": 1024,
+        "Y1": 256
       },
       "UVRect": {
         "U0": 0.75,
@@ -132,11 +132,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.240234
+        0.25
       ],
       "FootPivotPx": [
-        448.0,
-        123.0
+        896.0,
+        256.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -147,9 +147,9 @@
       "Column": 0,
       "PixelRect": {
         "X0": 0,
-        "Y0": 128,
-        "X1": 128,
-        "Y1": 256
+        "Y0": 256,
+        "X1": 256,
+        "Y1": 512
       },
       "UVRect": {
         "U0": 0.0,
@@ -163,11 +163,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.490234
+        0.495117
       ],
       "FootPivotPx": [
-        64.0,
-        251.0
+        128.0,
+        507.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -177,10 +177,10 @@
       "Row": 1,
       "Column": 1,
       "PixelRect": {
-        "X0": 128,
-        "Y0": 128,
-        "X1": 256,
-        "Y1": 256
+        "X0": 256,
+        "Y0": 256,
+        "X1": 512,
+        "Y1": 512
       },
       "UVRect": {
         "U0": 0.25,
@@ -194,11 +194,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.490234
+        0.495117
       ],
       "FootPivotPx": [
-        192.0,
-        251.0
+        384.0,
+        507.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -208,10 +208,10 @@
       "Row": 1,
       "Column": 2,
       "PixelRect": {
-        "X0": 256,
-        "Y0": 128,
-        "X1": 384,
-        "Y1": 256
+        "X0": 512,
+        "Y0": 256,
+        "X1": 768,
+        "Y1": 512
       },
       "UVRect": {
         "U0": 0.5,
@@ -225,11 +225,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.490234
+        0.495117
       ],
       "FootPivotPx": [
-        320.0,
-        251.0
+        640.0,
+        507.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -239,10 +239,10 @@
       "Row": 1,
       "Column": 3,
       "PixelRect": {
-        "X0": 384,
-        "Y0": 128,
-        "X1": 512,
-        "Y1": 256
+        "X0": 768,
+        "Y0": 256,
+        "X1": 1024,
+        "Y1": 512
       },
       "UVRect": {
         "U0": 0.75,
@@ -256,11 +256,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.490234
+        0.495117
       ],
       "FootPivotPx": [
-        448.0,
-        251.0
+        896.0,
+        507.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -271,9 +271,9 @@
       "Column": 0,
       "PixelRect": {
         "X0": 0,
-        "Y0": 256,
-        "X1": 128,
-        "Y1": 384
+        "Y0": 512,
+        "X1": 256,
+        "Y1": 768
       },
       "UVRect": {
         "U0": 0.0,
@@ -287,11 +287,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.732422
+        0.740234
       ],
       "FootPivotPx": [
-        64.0,
-        375.0
+        128.0,
+        758.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -301,10 +301,10 @@
       "Row": 2,
       "Column": 1,
       "PixelRect": {
-        "X0": 128,
-        "Y0": 256,
-        "X1": 256,
-        "Y1": 384
+        "X0": 256,
+        "Y0": 512,
+        "X1": 512,
+        "Y1": 768
       },
       "UVRect": {
         "U0": 0.25,
@@ -318,11 +318,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.732422
+        0.740234
       ],
       "FootPivotPx": [
-        192.0,
-        375.0
+        384.0,
+        758.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -332,10 +332,10 @@
       "Row": 2,
       "Column": 2,
       "PixelRect": {
-        "X0": 256,
-        "Y0": 256,
-        "X1": 384,
-        "Y1": 384
+        "X0": 512,
+        "Y0": 512,
+        "X1": 768,
+        "Y1": 768
       },
       "UVRect": {
         "U0": 0.5,
@@ -349,11 +349,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.705078
+        0.740234
       ],
       "FootPivotPx": [
-        320.0,
-        361.0
+        640.0,
+        758.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -363,10 +363,10 @@
       "Row": 2,
       "Column": 3,
       "PixelRect": {
-        "X0": 384,
-        "Y0": 256,
-        "X1": 512,
-        "Y1": 384
+        "X0": 768,
+        "Y0": 512,
+        "X1": 1024,
+        "Y1": 768
       },
       "UVRect": {
         "U0": 0.75,
@@ -380,11 +380,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.705078
+        0.740234
       ],
       "FootPivotPx": [
-        448.0,
-        361.0
+        896.0,
+        758.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -395,9 +395,9 @@
       "Column": 0,
       "PixelRect": {
         "X0": 0,
-        "Y0": 384,
-        "X1": 128,
-        "Y1": 512
+        "Y0": 768,
+        "X1": 256,
+        "Y1": 1024
       },
       "UVRect": {
         "U0": 0.0,
@@ -411,11 +411,11 @@
       ],
       "FootPivotUV": [
         0.125,
-        0.986328
+        0.996094
       ],
       "FootPivotPx": [
-        64.0,
-        505.0
+        128.0,
+        1020.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -425,10 +425,10 @@
       "Row": 3,
       "Column": 1,
       "PixelRect": {
-        "X0": 128,
-        "Y0": 384,
-        "X1": 256,
-        "Y1": 512
+        "X0": 256,
+        "Y0": 768,
+        "X1": 512,
+        "Y1": 1024
       },
       "UVRect": {
         "U0": 0.25,
@@ -442,11 +442,11 @@
       ],
       "FootPivotUV": [
         0.375,
-        0.986328
+        0.995117
       ],
       "FootPivotPx": [
-        192.0,
-        505.0
+        384.0,
+        1019.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -456,10 +456,10 @@
       "Row": 3,
       "Column": 2,
       "PixelRect": {
-        "X0": 256,
-        "Y0": 384,
-        "X1": 384,
-        "Y1": 512
+        "X0": 512,
+        "Y0": 768,
+        "X1": 768,
+        "Y1": 1024
       },
       "UVRect": {
         "U0": 0.5,
@@ -473,11 +473,11 @@
       ],
       "FootPivotUV": [
         0.625,
-        0.986328
+        0.993164
       ],
       "FootPivotPx": [
-        320.0,
-        505.0
+        640.0,
+        1017.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0
@@ -487,10 +487,10 @@
       "Row": 3,
       "Column": 3,
       "PixelRect": {
-        "X0": 384,
-        "Y0": 384,
-        "X1": 512,
-        "Y1": 512
+        "X0": 768,
+        "Y0": 768,
+        "X1": 1024,
+        "Y1": 1024
       },
       "UVRect": {
         "U0": 0.75,
@@ -504,11 +504,11 @@
       ],
       "FootPivotUV": [
         0.875,
-        0.986328
+        0.990234
       ],
       "FootPivotPx": [
-        448.0,
-        505.0
+        896.0,
+        1014.0
       ],
       "HasMirrorPortalMask": false,
       "MirrorPortalPixelCount": 0

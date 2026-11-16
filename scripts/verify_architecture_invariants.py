@@ -110,6 +110,25 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Dungeon/DungeoneerTileMapInstancer.cpp",
     "Source/DarkDungeoneer/Public/Dungeon/MirrorLightBounceComponent.h",
     "Source/DarkDungeoneer/Private/Dungeon/MirrorLightBounceComponent.cpp",
+    # Task Group 11 (v1.2.0 Living Ecosystem M1: Types, Eco Material Factory, Light Budget & Pipelines)
+    "Source/DarkDungeoneer/Public/Ecosystem/DungeonEcosystemTypes.h",
+    "Source/DarkDungeoneer/Public/Rendering/DungeoneerEcoMaterialFactory.h",
+    "Source/DarkDungeoneer/Private/Rendering/DungeoneerEcoMaterialFactory.cpp",
+    "Source/DarkDungeoneer/Public/Lighting/DungeonLightBudgetSubsystem.h",
+    "Source/DarkDungeoneer/Private/Lighting/DungeonLightBudgetSubsystem.cpp",
+    "scripts/synthesize_ecosystem_foley.py",
+    ".agents/skills/sprite-sheet-25d-cutter/scripts/eco_cleanup_masks.json",
+    "docs/TO_GENERATE_ECOSYSTEM.md",
+    # Task Group 12 (v1.2.0 Living Ecosystem M2: Hydrology & Interactive Flora)
+    "Source/DarkDungeoneer/Public/Ecosystem/DungeonWaterSubsystem.h",
+    "Source/DarkDungeoneer/Private/Ecosystem/DungeonWaterSubsystem.cpp",
+    "Source/DarkDungeoneer/Public/Ecosystem/DungeonFloraManagerComponent.h",
+    "Source/DarkDungeoneer/Private/Ecosystem/DungeonFloraManagerComponent.cpp",
+    # Task Group 13 (v1.2.0 Living Ecosystem M3: Ambient Fauna SoA & Acoustic Engine)
+    "Source/DarkDungeoneer/Public/Ecosystem/DungeonFaunaSubsystem.h",
+    "Source/DarkDungeoneer/Private/Ecosystem/DungeonFaunaSubsystem.cpp",
+    "Source/DarkDungeoneer/Public/Audio/DungeonAcousticSubsystem.h",
+    "Source/DarkDungeoneer/Private/Audio/DungeonAcousticSubsystem.cpp",
 ]
 
 
@@ -195,6 +214,15 @@ def check_math_invariants() -> list[str]:
             errors.append(f"Invalid player velocity {v_player} for slow {s}")
         if s > 0.0 and not (v_zombie > z_base and cd_zombie < cd_base):
             errors.append(f"Chrono-Leech failed to buff zombie for slow {s}")
+
+    # Ecosystem CPD slot count & wading 0.88x compass parity invariant
+    eco_types = (ROOT / "Source/DarkDungeoneer/Public/Ecosystem/DungeonEcosystemTypes.h").read_text(encoding="utf-8")
+    if "Count     = 8" not in eco_types and "Count = 8" not in eco_types:
+        errors.append("EEcoCPD::Count must stay locked to 8 floats in DungeonEcosystemTypes.h")
+    wade_card = math.hypot(*compass[0]) * base_speed * 0.88
+    wade_diag = math.hypot(*compass[1]) * base_speed * 0.88
+    if abs(wade_card - wade_diag) >= 1e-5:
+        errors.append(f"Wading diagonal speed {wade_diag} != cardinal speed {wade_card}")
 
     return errors
 

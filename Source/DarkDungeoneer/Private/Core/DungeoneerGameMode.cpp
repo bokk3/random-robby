@@ -12,7 +12,9 @@
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "UI/MenuDioramaStageActor.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -62,6 +64,7 @@ namespace DungeoneerGameModePrivate
 
 ADungeoneerGameMode::ADungeoneerGameMode()
 {
+	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = ADungeoneerCharacter::StaticClass();
 	GameStateClass = ADungeoneerGameState::StaticClass();
 }
@@ -211,6 +214,57 @@ void ADungeoneerGameMode::StartPlay()
 			}
 		}
 	}
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo")))
+	{
+		EnterLiveDungeonFromMenu(EDungeoneerMenuAction::EnterCatacombs);
+	}
+
+	float ShotDelaySec = 0.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("CaptureShotAfterSec="), ShotDelaySec) && ShotDelaySec > 0.0f)
+	{
+		AutoShotDelayRemaining = ShotDelaySec;
+		bPendingAutoShot = true;
+	}
+}
+
+void ADungeoneerGameMode::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bPendingAutoShot)
+	{
+		AutoShotDelayRemaining -= DeltaSeconds;
+		if (AutoShotDelayRemaining <= 0.0f)
+		{
+			bPendingAutoShot = false;
+			if (UWorld* World = GetWorld())
+			{
+				if (UGameViewportClient* GVC = World->GetGameViewport())
+				{
+					GVC->ConsoleCommand(TEXT("HighResShot 1280x720"));
+				}
+				else if (GEngine)
+				{
+					GEngine->Exec(World, TEXT("HighResShot 1280x720"));
+				}
+			}
+			if (FParse::Param(FCommandLine::Get(), TEXT("QuitAfterShot")))
+			{
+				bPendingAutoQuit = true;
+				AutoQuitDelayRemaining = 2.5f;
+			}
+		}
+	}
+	else if (bPendingAutoQuit)
+	{
+		AutoQuitDelayRemaining -= DeltaSeconds;
+		if (AutoQuitDelayRemaining <= 0.0f)
+		{
+			bPendingAutoQuit = false;
+			FPlatformMisc::RequestExit(false);
+		}
+	}
 }
 
 void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
@@ -237,10 +291,19 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 	if (ActiveCoopLobbyWidget)  { ActiveCoopLobbyWidget->SetVisibility(ESlateVisibility::Collapsed); }
 	if (ActiveFooterWidget)     { ActiveFooterWidget->SetVisibility(ESlateVisibility::Collapsed); }
 
+	const bool bAutoPlaySolo = FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo"));
 	if (ActiveDioramaStage)
 	{
-		ActiveDioramaStage->SetActorHiddenInGame(true);
-		ActiveDioramaStage->SetActorTickEnabled(false);
+		if (bAutoPlaySolo)
+		{
+			ActiveDioramaStage->Destroy();
+			ActiveDioramaStage = nullptr;
+		}
+		else
+		{
+			ActiveDioramaStage->SetActorHiddenInGame(true);
+			ActiveDioramaStage->SetActorTickEnabled(false);
+		}
 	}
 
 	FVector TargetRoomCenter = FVector::ZeroVector;
@@ -289,7 +352,7 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 					{
 						BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
 					}
-					PC->SetViewTargetWithBlend(Character, 0.35f);
+					PC->SetViewTargetWithBlend(Character, bAutoPlaySolo ? 0.0f : 0.35f);
 
 					if (!IsRunningCommandlet() && World->IsGameWorld())
 					{

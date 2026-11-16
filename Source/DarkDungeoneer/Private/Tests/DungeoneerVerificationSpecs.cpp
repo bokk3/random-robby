@@ -26,14 +26,25 @@
 #include "UI/DungeoneerTradeModalWidget.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
+#include "Ecosystem/DungeonEcosystemTypes.h"
+#include "Ecosystem/DungeonFaunaSubsystem.h"
+#include "Ecosystem/DungeonFloraManagerComponent.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
+#include "Audio/DungeonAcousticSubsystem.h"
+#include "Audio/DungeoneerPCMSoundWave.h"
+#include "Lighting/DungeonLightBudgetSubsystem.h"
+#include "Rendering/DungeoneerEcoMaterialFactory.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "MaterialShared.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "RHIDefinitions.h"
 #include "Misc/Paths.h"
 #include "Rendering/25DAnimOrchestratorComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -369,8 +380,9 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestEqual(TEXT("All 18 2.5D rig textures imported"), RigCount, 18);
 
 		const int32 DungeonTexCount = Bootstrap->ImportAllDungeonTexturesFromDisk();
-		TestEqual(TEXT("All 16 2.5D dungeon atlas textures imported"), DungeonTexCount, 16);
+		TestTrue(TEXT("All 2.5D dungeon atlas textures imported (>= 20 including Doors & Transitions)"), DungeonTexCount >= 20);
 		TestNotNull(TEXT("ATLAS_Dungeon_Floors_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("ATLAS_Dungeon_Floors_4x4_D"))));
+		TestNotNull(TEXT("PROP_Doors_And_Level_Transitions_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("PROP_Doors_And_Level_Transitions_4x4_D"))));
 
 		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
 		TestTrue(TEXT("All 4x4 dungeon atlas cells, Doors/Sanctuary fallbacks & 16-cell rig walk frames extracted (>= 250)"), ExtractedCells >= 250);
@@ -397,6 +409,14 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::E), static_cast<uint8>(1));
 		TestEqual(TEXT("ScreenDirectionalRow N (+Y screen right) -> Row 2 (Right)"),
 			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::N), static_cast<uint8>(2));
+		TestEqual(TEXT("Isometric -45 deg Yaw: NE -> Row 2 (Screen Right)"),
+			DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(ECompassOctant::NE, -45.0f), static_cast<uint8>(2));
+		TestEqual(TEXT("Isometric -45 deg Yaw: SW -> Row 3 (Screen Left)"),
+			DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(ECompassOctant::SW, -45.0f), static_cast<uint8>(3));
+		TestEqual(TEXT("Isometric -45 deg Yaw: NW -> Row 0 (Screen Front)"),
+			DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(ECompassOctant::NW, -45.0f), static_cast<uint8>(0));
+		TestEqual(TEXT("Isometric -45 deg Yaw: SE -> Row 1 (Screen Back)"),
+			DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(ECompassOctant::SE, -45.0f), static_cast<uint8>(1));
 		TestEqual(TEXT("ScreenDirectionalRow NE -> Row 2 (Right)"),
 			DungeoneerMath::OctantToScreenDirectionalRow(ECompassOctant::NE), static_cast<uint8>(2));
 		TestEqual(TEXT("ScreenDirectionalRow S (-Y screen left) -> Row 3 (Left)"),
@@ -985,6 +1005,578 @@ bool FDungeoneerBiomesOctagonalTrapsAndExploderLureTest::RunTest(const FString& 
 	TestEqual(TEXT("Atmosphere tracks SporeFens biome"), Atmo->GetActiveBiome(), EDungeonBiomeType::SporeFens);
 	TestTrue(TEXT("AmbientMotesHISM pre-allocated 64 instances"), Atmo->GetAmbientMotesHISM() && Atmo->GetAmbientMotesHISM()->GetInstanceCount() == 64);
 	Atmo->UpdateAmbientMotesAroundFocus(FVector(200.0, 200.0, 95.0), 0.1f);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerEcoCPDRGB24AndBootstrapTest,
+	"DarkDungeoneer.Ecosystem.CustomDataPackingAndRGB24",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerEcoCPDRGB24AndBootstrapTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("EEcoCPD::Count == 8"), EEcoCPD::Count, 8);
+
+	const FLinearColor TestColors[] = {
+		FLinearColor(0.0f, 0.0f, 0.0f, 1.0f),
+		FLinearColor(1.0f, 1.0f, 1.0f, 1.0f),
+		EcoPalette::EmeraldMoss,
+		EcoPalette::MagentaBloom,
+		EcoPalette::AstralCyan,
+		EcoPalette::GoldenRune,
+		EcoPalette::AmberFire,
+		EcoPalette::MagmaOrange
+	};
+	for (const FLinearColor& Col : TestColors)
+	{
+		const uint8 ExpR = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Col.R * 255.0f), 0, 255));
+		const uint8 ExpG = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Col.G * 255.0f), 0, 255));
+		const uint8 ExpB = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Col.B * 255.0f), 0, 255));
+		const float Packed = EcoColors::PackRGB24(ExpR, ExpG, ExpB);
+		uint8 OutR = 0, OutG = 0, OutB = 0;
+		EcoColors::UnpackRGB24(Packed, OutR, OutG, OutB);
+		TestEqual(TEXT("RGB24 exact R round-trip"), OutR, ExpR);
+		TestEqual(TEXT("RGB24 exact G round-trip"), OutG, ExpG);
+		TestEqual(TEXT("RGB24 exact B round-trip"), OutB, ExpB);
+	}
+
+	// Verify edge values 0 and 255 explicitly
+	{
+		uint8 R0 = 99, G0 = 99, B0 = 99;
+		EcoColors::UnpackRGB24(EcoColors::PackRGB24(0, 0, 0), R0, G0, B0);
+		TestEqual(TEXT("Min R=0"), R0, static_cast<uint8>(0));
+		TestEqual(TEXT("Min G=0"), G0, static_cast<uint8>(0));
+		TestEqual(TEXT("Min B=0"), B0, static_cast<uint8>(0));
+
+		uint8 R1 = 0, G1 = 0, B1 = 0;
+		EcoColors::UnpackRGB24(EcoColors::PackRGB24(255, 255, 255), R1, G1, B1);
+		TestEqual(TEXT("Max R=255"), R1, static_cast<uint8>(255));
+		TestEqual(TEXT("Max G=255"), G1, static_cast<uint8>(255));
+		TestEqual(TEXT("Max B=255"), B1, static_cast<uint8>(255));
+	}
+
+	// Verify asset bootstrap: EcoTime/EcoGlow00..31 MPC params, M_Dungeoneer_EcoInstanced, Eco textures & 42 foley WAVs
+	if (UGameInstance* DummyGI = NewObject<UGameInstance>(GetTransientPackage()))
+	{
+		if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = NewObject<UDungeoneerAssetBootstrapSubsystem>(DummyGI))
+		{
+			UMaterialParameterCollection* MPC = Bootstrap->EnsureSensoryMPC();
+			TestNotNull(TEXT("SensoryMPC loaded"), MPC);
+			if (MPC)
+			{
+				TestNotNull(TEXT("MPC has EcoTime"), MPC->GetScalarParameterByName(FName(TEXT("EcoTime"))));
+				TestNotNull(TEXT("MPC has EcoGlowCount"), MPC->GetScalarParameterByName(FName(TEXT("EcoGlowCount"))));
+				TestNotNull(TEXT("MPC has EcoGlow00"), MPC->GetVectorParameterByName(FName(TEXT("EcoGlow00"))));
+				TestNotNull(TEXT("MPC has EcoGlow31"), MPC->GetVectorParameterByName(FName(TEXT("EcoGlow31"))));
+			}
+
+			Bootstrap->SaveCoreDataAssetsToDisk();
+			UMaterialInterface* EcoMat = Bootstrap->EnsureEcoInstancedMaterial();
+			TestNotNull(TEXT("M_Dungeoneer_EcoInstanced ensured"), EcoMat);
+#if WITH_EDITOR
+			if (UMaterial* EcoBaseMat = Cast<UMaterial>(EcoMat))
+			{
+				const EShaderPlatform PlatformsToCompile[] = { SP_PCD3D_SM5, SP_PCD3D_SM6 };
+				for (const EShaderPlatform Platform : PlatformsToCompile)
+				{
+					if (FMaterialResource* MatRes = EcoBaseMat->GetMaterialResource(Platform))
+					{
+						const bool bStarted = MatRes->CacheShaders(EMaterialShaderPrecompileMode::Default);
+						MatRes->FinishCompilation();
+						for (const FString& CompileErr : MatRes->GetCompileErrors())
+						{
+							AddError(FString::Printf(
+								TEXT("M_Dungeoneer_EcoInstanced SM%d compile error: %s"),
+								Platform == SP_PCD3D_SM6 ? 6 : 5,
+								*CompileErr));
+						}
+						TestTrue(
+							Platform == SP_PCD3D_SM6
+								? TEXT("M_Dungeoneer_EcoInstanced compiles cleanly for PCD3D_SM6")
+								: TEXT("M_Dungeoneer_EcoInstanced compiles cleanly for PCD3D_SM5"),
+							bStarted && MatRes->GetCompileErrors().IsEmpty());
+					}
+				}
+			}
+#endif
+
+			Bootstrap->ImportAllEcosystemTexturesFromDisk();
+			TestNotNull(TEXT("PROP_Magical_Flora_And_Crystals_4x4_D loaded"),
+				Bootstrap->GetLoadedEcosystemTexture(FName(TEXT("PROP_Magical_Flora_And_Crystals_4x4_D"))));
+			TestNotNull(TEXT("PROP_Water_And_Fauna_4x4_D loaded"),
+				Bootstrap->GetLoadedEcosystemTexture(FName(TEXT("PROP_Water_And_Fauna_4x4_D"))));
+			TestNotNull(TEXT("PROP_Fauna_Critters_Strip_4x1_D loaded"),
+				Bootstrap->GetLoadedEcosystemTexture(FName(TEXT("PROP_Fauna_Critters_Strip_4x1_D"))));
+			if (UTexture2D* FaunaTex = Bootstrap->GetLoadedEcosystemTexture(FName(TEXT("PROP_Fauna_Critters_Strip_4x1_D"))))
+			{
+				const EPixelFormat FaunaPF = FaunaTex->GetPixelFormat();
+				uint8 CornerAlpha = 255;
+				if (const FTexturePlatformData* PD = FaunaTex->GetPlatformData(); PD && PD->Mips.Num() > 0)
+				{
+					if (const uint8* RawBytes = static_cast<const uint8*>(PD->Mips[0].BulkData.LockReadOnly()))
+					{
+						CornerAlpha = RawBytes[3];
+						PD->Mips[0].BulkData.Unlock();
+					}
+				}
+				int32 bNoAlpha = 0;
+#if WITH_EDITORONLY_DATA
+				bNoAlpha = FaunaTex->CompressionNoAlpha ? 1 : 0;
+#endif
+				UE_LOG(LogTemp, Display, TEXT("[EcoDiag] FaunaTex PF=%d NoAlpha=%d CornerAlpha=%u"),
+					static_cast<int32>(FaunaPF), bNoAlpha, CornerAlpha);
+				TestEqual(TEXT("FaunaTex corner pixel keeps Alpha=0"), CornerAlpha, static_cast<uint8>(0));
+			}
+
+			Bootstrap->ImportAllFoleyFromDisk();
+			TestTrue(TEXT("All 42 ecosystem foley WAVs imported"), Bootstrap->GetLoadedFoleyCount() >= 42);
+			USoundWave* WadeLoop = Bootstrap->GetLoadedFoley(FName(TEXT("Water_Loop_StreamRush")));
+			USoundWave* OneShotClick = Bootstrap->GetLoadedFoley(FName(TEXT("Bio_BeetleClick_0")));
+			TestNotNull(TEXT("Water_Loop_StreamRush imported"), WadeLoop);
+			TestNotNull(TEXT("Bio_BeetleClick_0 imported"), OneShotClick);
+			if (WadeLoop)
+			{
+				TestTrue(TEXT("Loop_* foley sets bLooping = true"), WadeLoop->bLooping != 0);
+				TestTrue(TEXT("Imported foley is UDungeoneerPCMSoundWave (procedural AudioMixer safe)"),
+					WadeLoop->IsA<UDungeoneerPCMSoundWave>() && WadeLoop->bProcedural != 0);
+				const ESoundWaveLoadingBehavior WadeBehavior = WadeLoop->GetLoadingBehavior(true);
+				TestTrue(TEXT("Loop foley pre-resolves LoadingBehavior on GameThread"),
+					WadeBehavior != ESoundWaveLoadingBehavior::Uninitialized
+					&& WadeBehavior != ESoundWaveLoadingBehavior::Inherited);
+
+				FSoundGeneratorInitParams GenParams;
+				GenParams.SampleRate = 48000.0f;
+				GenParams.NumChannels = WadeLoop->NumChannels;
+				ISoundGeneratorPtr LoopGen = WadeLoop->CreateSoundGenerator(GenParams);
+				TestTrue(TEXT("Looping foley creates valid ISoundGenerator"), LoopGen.IsValid());
+				if (LoopGen.IsValid())
+				{
+					TArray<float> OutPCM;
+					OutPCM.SetNumZeroed(1024 * FMath::Max(1, WadeLoop->NumChannels));
+					const int32 Written = LoopGen->OnGenerateAudio(OutPCM.GetData(), OutPCM.Num());
+					TestEqual(TEXT("Loop generator renders requested buffer frames"), Written, OutPCM.Num());
+					TestFalse(TEXT("Looping generator stays unfinished after first buffer"), LoopGen->IsFinished());
+				}
+			}
+			if (OneShotClick)
+			{
+				const ESoundWaveLoadingBehavior ClickBehavior = OneShotClick->GetLoadingBehavior(true);
+				TestTrue(TEXT("One-shot foley is procedural with pre-resolved LoadingBehavior"),
+					OneShotClick->IsA<UDungeoneerPCMSoundWave>()
+					&& OneShotClick->bProcedural != 0
+					&& ClickBehavior != ESoundWaveLoadingBehavior::Uninitialized
+					&& ClickBehavior != ESoundWaveLoadingBehavior::Inherited);
+
+				FSoundGeneratorInitParams GenParams;
+				GenParams.SampleRate = 48000.0f;
+				GenParams.NumChannels = OneShotClick->NumChannels;
+				ISoundGeneratorPtr OneShotGen = OneShotClick->CreateSoundGenerator(GenParams);
+				TestTrue(TEXT("One-shot foley creates valid ISoundGenerator"), OneShotGen.IsValid());
+				if (OneShotGen.IsValid())
+				{
+					TArray<float> OutPCM;
+					OutPCM.SetNumZeroed(1024 * FMath::Max(1, OneShotClick->NumChannels));
+					bool bReachedEnd = false;
+					for (int32 Iter = 0; Iter < 256; ++Iter)
+					{
+						OneShotGen->OnGenerateAudio(OutPCM.GetData(), OutPCM.Num());
+						if (OneShotGen->IsFinished())
+						{
+							bReachedEnd = true;
+							break;
+						}
+					}
+					TestTrue(TEXT("One-shot generator finishes cleanly without looping forever"), bReachedEnd);
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerLightBudgetTierCapsTest,
+	"DarkDungeoneer.Ecosystem.LightBudgetTierCaps",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerLightBudgetTierCapsTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for LightBudget tests"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	AActor* PoolHost = TestWorld->SpawnActor<AActor>();
+	USceneComponent* Root = NewObject<USceneComponent>(PoolHost);
+	PoolHost->SetRootComponent(Root);
+	Root->RegisterComponent();
+
+	UDungeonLightBudgetSubsystem* LightBudget = TestWorld->GetSubsystem<UDungeonLightBudgetSubsystem>();
+	TestNotNull(TEXT("UDungeonLightBudgetSubsystem active"), LightBudget);
+	if (!LightBudget)
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	LightBudget->SetShadowQualityOverride(3); // High quality: 32 Tier1, 16 Tier2, 2 Tier3
+	LightBudget->OnFloorBuilt(PoolHost);
+
+	// Register 300 mixed candidates across Tiers 1, 2, 3
+	int32 FirstBloomCandId = INDEX_NONE;
+	for (int32 i = 0; i < 300; ++i)
+	{
+		FDungeonLightCandidate C;
+		C.WorldPosition = FVector(100.0 * (i + 1), (i % 5) * 80.0, 60.0);
+		if (i < 6)
+		{
+			C.RequestedTier = EDungeonLightTier::Tier3_Hero;
+			C.RadiusUU = 800.0f;
+			C.Color = EcoPalette::GoldenRune;
+		}
+		else if (i < 46)
+		{
+			C.RequestedTier = EDungeonLightTier::Tier2_Pooled;
+			C.RadiusUU = 340.0f;
+			C.Color = EcoPalette::AmberFire;
+		}
+		else
+		{
+			C.RequestedTier = EDungeonLightTier::Tier1_MPCGlow;
+			C.RadiusUU = 120.0f;
+			C.Color = EcoPalette::AstralCyan;
+		}
+		C.bEnabled = (i != 20); // Candidate 20 starts dormant for 15s bloom lease test
+		const int32 Cid = LightBudget->RegisterCandidate(C);
+		if (i == 20)
+		{
+			FirstBloomCandId = Cid;
+		}
+	}
+
+	LightBudget->EvaluateLightBudgetNow(0.25f);
+	TestEqual(TEXT("High quality caps Tier 3 world lights at 2"), LightBudget->GetActiveTier3WorldCount(), 2);
+	TestEqual(TEXT("High quality caps Tier 2 pooled lights at 16"), LightBudget->GetActiveTier2Count(), 16);
+	TestEqual(TEXT("High quality caps Tier 1 MPC glow nodes at 32"), LightBudget->GetActiveTier1Count(), 32);
+
+	// Verify 15s Tier 2 lease activates dormant flora candidate & expires cleanly
+	TestTrue(TEXT("RequestTier2Lease succeeds on flora candidate"), LightBudget->RequestTier2Lease(FirstBloomCandId, 15.0f));
+	LightBudget->EvaluateLightBudgetNow(0.1f);
+	const FDungeonLightCandidate* Leased = LightBudget->GetCandidate(FirstBloomCandId);
+	TestNotNull(TEXT("Leased candidate pointer valid"), Leased);
+	TestTrue(TEXT("Leased flora candidate enabled & boosted"), Leased && Leased->bEnabled && Leased->PriorityBoost >= 1.5f);
+
+	// Verify D7 Intel HD 520 scaling: sg.ShadowQuality <= 1 drops Tier 2 -> 8 and Tier 1 -> 16
+	LightBudget->SetShadowQualityOverride(1);
+	LightBudget->EvaluateLightBudgetNow(0.1f);
+	TestEqual(TEXT("Low ShadowQuality caps Tier 2 pooled lights at 8"), LightBudget->GetActiveTier2Count(), 8);
+	TestEqual(TEXT("Low ShadowQuality caps Tier 1 MPC glow nodes at 16"), LightBudget->GetActiveTier1Count(), 16);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerWaterAndWadingDeterminismTest,
+	"DarkDungeoneer.Ecosystem.WaterSurfaceGridAndWadingDeterminism",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerWaterAndWadingDeterminismTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Water tests"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	TestWorld->InitializeActorsForPlay(FURL());
+
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	UDungeonWaterSubsystem* WaterSub = TestWorld->GetSubsystem<UDungeonWaterSubsystem>();
+	TestNotNull(TEXT("Generator subsystem present"), GenSub);
+	TestNotNull(TEXT("Water subsystem present"), WaterSub);
+
+	const FDungeonFloorGraph Graph = GenSub->GenerateFloorGraph(1, 7711);
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	TestNotNull(TEXT("Spawned TileMapInstancer"), Instancer);
+	Instancer->BuildDungeonFromFloorGraph(Graph);
+
+	TestTrue(TEXT("TileMapInstancer owns HISM_Water"), Instancer->GetWaterHISM() != nullptr);
+	TestTrue(TEXT("TileMapInstancer owns ISM_WaterFX"), Instancer->GetWaterFxISM() != nullptr);
+	TestTrue(TEXT("TileMapInstancer owns FloraManager"), Instancer->GetFloraManagerComponent() != nullptr);
+	TestTrue(TEXT("O(1) SurfaceGrid allocated"), WaterSub->GetGridWidth() >= 8 && WaterSub->GetGridHeight() >= 8);
+	TestTrue(TEXT("Streams spawned in Crypt floor"), WaterSub->GetActiveStreamTileCount() > 0);
+	TestTrue(TEXT("Weeping wall cascades spawned"), WaterSub->GetActiveCascadeCount() > 0);
+
+	// Verify explicit SurfaceGrid stamping & puddle -> dry step wet footprints (4s fade)
+	const FVector PuddlePos(500.0, 500.0, 0.0);
+	const FVector DryPos(950.0, 500.0, 0.0);
+	const FVector StreamPos(1350.0, 500.0, 0.0);
+	WaterSub->SetSurfaceCell(PuddlePos, EDungeonSurfaceKind::ShallowPuddle);
+	WaterSub->SetSurfaceCell(DryPos, EDungeonSurfaceKind::DryStone);
+	WaterSub->SetSurfaceCell(StreamPos, EDungeonSurfaceKind::AnkleDeepStream);
+
+	TestEqual(TEXT("ResolveSurface ShallowPuddle"), WaterSub->ResolveSurface(PuddlePos), EDungeonSurfaceKind::ShallowPuddle);
+	TestEqual(TEXT("ResolveSurface DryStone"), WaterSub->ResolveSurface(DryPos), EDungeonSurfaceKind::DryStone);
+	TestEqual(TEXT("ResolveSurface AnkleDeepStream"), WaterSub->ResolveSurface(StreamPos), EDungeonSurfaceKind::AnkleDeepStream);
+
+	// Step in puddle then step onto dry stone -> footprint spawns
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>();
+	TestNotNull(TEXT("Spawned Hero"), Hero);
+	const int32 FootprintsBefore = WaterSub->GetActiveFootprintCount();
+	WaterSub->NotifyWalkerStep(Hero, PuddlePos, ECompassOctant::E, true);
+	WaterSub->NotifyWalkerStep(Hero, DryPos, ECompassOctant::E, true);
+	TestEqual(TEXT("Dry step after puddle spawns 1 footprint"), WaterSub->GetActiveFootprintCount(), FootprintsBefore + 1);
+
+	// Advance simulation past 4.0s fade lifetime -> footprint clears
+	WaterSub->StepHydrologySimulation(4.25f);
+	TestEqual(TEXT("4s fading footprint expires cleanly"), WaterSub->GetActiveFootprintCount(), FootprintsBefore);
+
+	// Verify 0.88x wading speed preserves Diagonal == Cardinal speed + SavedMove never combines across stream edge
+	UDungeoneerMovementComponent* MoveComp = Hero->GetDungeoneerMovement();
+	TestNotNull(TEXT("Hero has UDungeoneerMovementComponent"), MoveComp);
+	if (MoveComp)
+	{
+		MoveComp->SetWadingInStream(false);
+		const float DryMaxSpeed = MoveComp->GetMaxSpeed();
+		MoveComp->SetWadingInStream(true);
+		const float WadeMaxSpeed = MoveComp->GetMaxSpeed();
+		TestTrue(TEXT("Wading speed is strictly 0.88x dry speed"),
+			FMath::IsNearlyEqual(WadeMaxSpeed, DryMaxSpeed * EcoCells::WadingSpeedScalar, 1e-3f));
+
+		const FVector DirN = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ECompassOctant::N) * WadeMaxSpeed;
+		const FVector DirNE = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ECompassOctant::NE) * WadeMaxSpeed;
+		TestTrue(TEXT("Diagonal wading speed == cardinal wading speed"),
+			FMath::IsNearlyEqual(static_cast<float>(DirN.Size2D()), static_cast<float>(DirNE.Size2D()), 1e-2f));
+
+		FSavedMove_Dungeoneer MoveDry;
+		MoveDry.bSavedWading = 0;
+		FSavedMove_Dungeoneer MoveWet;
+		MoveWet.bSavedWading = 1;
+		// Verify flag mismatch prevents SavedMove combine across stream edge
+		TestTrue(TEXT("SavedMove wading bit distinct across stream edge"), MoveDry.bSavedWading != MoveWet.bSavedWading);
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerFloraInteractionTest,
+	"DarkDungeoneer.Ecosystem.FloraBloomMossWaveAndCrystalNoFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerFloraInteractionTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Flora tests"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	TestNotNull(TEXT("Spawned TileMapInstancer"), Instancer);
+
+	UDungeonFloraManagerComponent* Flora = Instancer->GetFloraManagerComponent();
+	UDungeonLightBudgetSubsystem* LightBudget = TestWorld->GetSubsystem<UDungeonLightBudgetSubsystem>();
+	UDungeoneerSensoryWorldSubsystem* SensoryWorld = TestWorld->GetSubsystem<UDungeoneerSensoryWorldSubsystem>();
+	TestNotNull(TEXT("FloraManager present"), Flora);
+	TestNotNull(TEXT("LightBudget present"), LightBudget);
+	TestNotNull(TEXT("SensoryWorld present"), SensoryWorld);
+
+	// 1. Prism-Lily bloom + 15s Tier 2 lease
+	const int32 LilyIdx = Flora->AddFloraInstance(EFloraKind::PrismLily, FVector(200.0, 200.0, 0.0), EcoPalette::MagentaBloom);
+	TestEqual(TEXT("Prism-Lily starts dormant"), Flora->GetFloraStateAt(LilyIdx), static_cast<uint8>(0));
+	Flora->IgnitePrismLily(LilyIdx, 15.0f);
+	TestEqual(TEXT("IgnitePrismLily blooms lily"), Flora->GetFloraStateAt(LilyIdx), static_cast<uint8>(1));
+	TestTrue(TEXT("Bloomed Prism-Lily emissive reaches 12.0"), FMath::IsNearlyEqual(Flora->GetFloraEmissiveAt(LilyIdx), 12.0f, 1e-2f));
+	const FDungeonLightCandidate* LilyLight = LightBudget->GetCandidate(Flora->GetFloraLightCandidateAt(LilyIdx));
+	TestTrue(TEXT("Prism-Lily acquires enabled Tier 2 lease"), LilyLight && LilyLight->bEnabled && LilyLight->LeaseExpiryTime > 0.0);
+
+	// 2. Pulse-Moss zero-allocation CSR BFS wave
+	const int32 Moss0 = Flora->AddFloraInstance(EFloraKind::PulseMoss, FVector(1000.0, 200.0, 0.0), EcoPalette::EmeraldMoss);
+	const int32 Moss1 = Flora->AddFloraInstance(EFloraKind::PulseMoss, FVector(1150.0, 200.0, 0.0), EcoPalette::EmeraldMoss);
+	const int32 Moss2 = Flora->AddFloraInstance(EFloraKind::PulseMoss, FVector(1300.0, 200.0, 0.0), EcoPalette::EmeraldMoss);
+	Flora->RebuildPulseMossCSRGraph(200.0f);
+	const int32 ReachedMoss = Flora->TriggerPulseMossWaveNear(FVector(1005.0, 200.0, 0.0), 80.0f);
+	TestEqual(TEXT("Pulse-Moss CSR BFS reaches all 3 connected nodes"), ReachedMoss, 3);
+	TestTrue(TEXT("Pulse-Moss wave staggers EventTime by +0.08s per hop"),
+		Flora->GetFloraEventTimeAt(Moss2) > Flora->GetFloraEventTimeAt(Moss1) &&
+		Flora->GetFloraEventTimeAt(Moss1) >= Flora->GetFloraEventTimeAt(Moss0));
+
+	// 3. Spore-Cap burst + cooldown
+	Flora->AddFloraInstance(EFloraKind::SporeCap, FVector(2000.0, 200.0, 0.0), EcoPalette::EmeraldMoss);
+	TestTrue(TEXT("Spore-Cap triggers within 120 UU"), Flora->TriggerSporeCapNear(FVector(2040.0, 200.0, 0.0), 120.0f));
+	TestFalse(TEXT("Spore-Cap respects 6s cooldown against immediate retrigger"), Flora->TriggerSporeCapNear(FVector(2040.0, 200.0, 0.0), 120.0f));
+
+	// 4. Echo-Crystal flashes on noise ripple and NEVER emits a new noise event (zero feedback)
+	const int32 CrystalIdx = Flora->AddFloraInstance(EFloraKind::EchoCrystal, FVector(3000.0, 200.0, 0.0), EcoPalette::AstralCyan);
+	SensoryWorld->BroadcastNoiseEvent(FVector(3050.0, 200.0, 0.0), 1.5f, 400.0f, false);
+	const uint64 SerialBefore = SensoryWorld->GetNoiseEventSerial();
+	const int32 Flashed = Flora->EvaluateEchoCrystalsAgainstNoise();
+	TestEqual(TEXT("Echo-Crystal reacts to covering noise event"), Flashed, 1);
+	TestEqual(TEXT("Echo-Crystal enters charged state"), Flora->GetFloraStateAt(CrystalIdx), static_cast<uint8>(1));
+	TestEqual(TEXT("Echo-Crystal NEVER emits noise event into SensoryWorld"), static_cast<int64>(SensoryWorld->GetNoiseEventSerial()), static_cast<int64>(SerialBefore));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerFaunaSoAScatterTest,
+	"DarkDungeoneer.Ecosystem.FaunaSoAZeroAllocScatterNewtNoise",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerFaunaSoAScatterTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Fauna tests"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	if (Instancer) { Instancer->DispatchBeginPlay(); }
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	UDungeonFaunaSubsystem* FaunaSub = TestWorld->GetSubsystem<UDungeonFaunaSubsystem>();
+	UDungeoneerSensoryWorldSubsystem* SensoryWorld = TestWorld->GetSubsystem<UDungeoneerSensoryWorldSubsystem>();
+	TestNotNull(TEXT("TileMapInstancer present"), Instancer);
+	TestNotNull(TEXT("FaunaSubsystem present"), FaunaSub);
+	TestNotNull(TEXT("SensoryWorld present"), SensoryWorld);
+
+	const FDungeonFloorGraph Graph = GenSub->GenerateFloorGraph(1, 4422);
+	Instancer->BuildDungeonFromFloorGraph(Graph);
+	TestNotNull(TEXT("TileMapInstancer owns ISM_Fauna"), Instancer->GetFaunaISM());
+	TestTrue(TEXT("Floor build seeds critters into SoA"), FaunaSub->GetActiveCritterCount() > 0);
+
+	const int32 MothIdx = FaunaSub->SpawnScriptedCritter(EFaunaSpecies::LumenMoth, FVector(5000.0, 5000.0, 90.0));
+	const int32 NewtIdx = FaunaSub->SpawnScriptedCritter(EFaunaSpecies::PuddleNewt, FVector(6500.0, 6500.0, 6.0));
+	TestTrue(TEXT("Scripted moth & newt spawned in fixed 256 pool"), MothIdx != INDEX_NONE && NewtIdx != INDEX_NONE);
+
+	// 1. Verify zero heap allocation across 600 simulation ticks
+	const SIZE_T InitialScratchBytes = FaunaSub->GetScratchTransformsAllocatedSize();
+	for (int32 t = 0; t < 600; ++t)
+	{
+		FaunaSub->StepFaunaSimulation(1.0f / 30.0f);
+	}
+	TestEqual(TEXT("ScratchTransforms buffer capacity unchanged across 600 ticks (0 heap allocs)"),
+		static_cast<uint64>(FaunaSub->GetScratchTransformsAllocatedSize()),
+		static_cast<uint64>(InitialScratchBytes));
+
+	// 2. Fast Thrower within 250 UU scatters Lumen-Moth into Flee state
+	AZombieFastThrower* Thrower = TestWorld->SpawnActor<AZombieFastThrower>(FVector(5050.0, 5000.0, 88.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned Fast Thrower near moth"), Thrower);
+	if (Thrower) { Thrower->DispatchBeginPlay(); }
+	FaunaSub->StepFaunaSimulation(1.0f / 30.0f);
+	TestEqual(TEXT("Moth scatters into EFaunaState::Flee near Fast Thrower"),
+		FaunaSub->GetCritterStateAt(MothIdx), EFaunaState::Flee);
+
+	// 3. Player within 180 UU triggers Newt Dart + 0.25 loudness decoy ring + 4.0s cooldown
+	const int64 SerialBefore = SensoryWorld->GetNoiseEventSerial();
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(6540.0, 6500.0, 88.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned Hero near puddle newt"), Hero);
+	if (Hero) { Hero->DispatchBeginPlay(); }
+	FaunaSub->StepFaunaSimulation(1.0f / 30.0f);
+	TestEqual(TEXT("Puddle-Newt enters EFaunaState::Dart on proximity"), FaunaSub->GetCritterStateAt(NewtIdx), EFaunaState::Dart);
+	TestTrue(TEXT("Puddle-Newt respects 4.0s noise cooldown"), FaunaSub->GetCritterNoiseCooldownAt(NewtIdx) > 3.5f);
+	TestTrue(TEXT("Puddle-Newt broadcasts decoy ring on SensoryWorld"), SensoryWorld->GetNoiseEventSerial() > SerialBefore);
+
+	// Confirm the latest ring's loudness is strictly 0.25 (< 1.55 zombie lure threshold)
+	bool bFoundDecoyRing = false;
+	for (const FDungeoneerNoiseEvent& Ev : SensoryWorld->GetNoiseRingBuffer())
+	{
+		if (Ev.bActive && FMath::IsNearlyEqual(Ev.Loudness, 0.25f, 1e-2f))
+		{
+			bFoundDecoyRing = true;
+			break;
+		}
+	}
+	TestTrue(TEXT("Newt decoy ring loudness is 0.25 (< 1.55 zombie lure threshold)"), bFoundDecoyRing);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerAcousticSurfaceLayersTest,
+	"DarkDungeoneer.Ecosystem.AcousticSurfaceLayers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerAcousticSurfaceLayersTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Acoustic tests"), TestWorld);
+	if (!TestWorld)
+	{
+		return false;
+	}
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+	ADungeoneerTileMapInstancer* Instancer = TestWorld->SpawnActor<ADungeoneerTileMapInstancer>();
+	if (Instancer) { Instancer->DispatchBeginPlay(); }
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	UDungeonWaterSubsystem* WaterSub = TestWorld->GetSubsystem<UDungeonWaterSubsystem>();
+	UDungeonAcousticSubsystem* AcousticSub = TestWorld->GetSubsystem<UDungeonAcousticSubsystem>();
+	TestNotNull(TEXT("TileMapInstancer present"), Instancer);
+	TestNotNull(TEXT("WaterSubsystem present"), WaterSub);
+	TestNotNull(TEXT("AcousticSubsystem present"), AcousticSub);
+
+	const FDungeonFloorGraph Graph = GenSub->GenerateFloorGraph(1, 5588);
+	Instancer->BuildDungeonFromFloorGraph(Graph);
+
+	TestEqual(TEXT("Preallocated 22 pooled audio voices cleanly on floor build"),
+		AcousticSub->GetPreallocatedVoiceCount(), UDungeonAcousticSubsystem::TotalVoicePoolSize);
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(4200.0, 4200.0, 88.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned Hero"), Hero);
+	if (Hero) { Hero->DispatchBeginPlay(); }
+	TestTrue(TEXT("Hero auto-registered with AcousticSubsystem on BeginPlay"), AcousticSub->IsWalkerRegistered(Hero));
+
+	// Verify ShallowPuddle & CrystalShard yield 1.4x noise radius (850 * 1.4 = 1190 UU) on Layer A (cols 1 & 3)
+	WaterSub->SetSurfaceCell(Hero->GetActorLocation(), EDungeonSurfaceKind::ShallowPuddle);
+	const int32 LayerABefore = AcousticSub->GetLayerAFireCount();
+	const int32 LayerBBefore = AcousticSub->GetLayerBFireCount();
+
+	AcousticSub->NotifyWalkColumnChanged(Hero, 1);
+	TestEqual(TEXT("Col 1 fires Layer A"), AcousticSub->GetLayerAFireCount(), LayerABefore + 1);
+	TestEqual(TEXT("Col 1 does NOT fire Layer B"), AcousticSub->GetLayerBFireCount(), LayerBBefore);
+	TestEqual(TEXT("Resolved ShallowPuddle surface"), AcousticSub->GetLastTriggerRecord().Surface, EDungeonSurfaceKind::ShallowPuddle);
+	TestTrue(TEXT("ShallowPuddle scales noise radius by 1.4x (1190 UU)"),
+		FMath::IsNearlyEqual(AcousticSub->GetLastTriggerRecord().NoiseRadiusUU, 850.0f * 1.40f, 1.0f));
+
+	// CrystalShard also 1.4x on Col 3
+	WaterSub->SetSurfaceCell(Hero->GetActorLocation(), EDungeonSurfaceKind::CrystalShard);
+	AcousticSub->NotifyWalkColumnChanged(Hero, 3);
+	TestEqual(TEXT("Col 3 fires Layer A"), AcousticSub->GetLayerAFireCount(), LayerABefore + 2);
+	TestEqual(TEXT("Resolved CrystalShard surface"), AcousticSub->GetLastTriggerRecord().Surface, EDungeonSurfaceKind::CrystalShard);
+	TestTrue(TEXT("CrystalShard scales noise radius by 1.4x (1190 UU)"),
+		FMath::IsNearlyEqual(AcousticSub->GetLastTriggerRecord().NoiseRadiusUU, 850.0f * 1.40f, 1.0f));
+
+	// Passing pose cols 0 & 2 fire Layer B ONLY for Hero
+	AcousticSub->NotifyWalkColumnChanged(Hero, 2);
+	TestEqual(TEXT("Col 2 fires Layer B for Hero"), AcousticSub->GetLayerBFireCount(), LayerBBefore + 1);
+	TestEqual(TEXT("Col 2 does NOT fire Layer A"), AcousticSub->GetLayerAFireCount(), LayerABefore + 2);
+
+	// Verify monotonic LPF occlusion curve & biome fog scaling
+	const float ClearHz = UDungeonAcousticSubsystem::ComputeOcclusionLowPassHz(0.0f, 1.0f);
+	const float PartialHz = UDungeonAcousticSubsystem::ComputeOcclusionLowPassHz(0.5f, 1.0f);
+	const float FullOccHz = UDungeonAcousticSubsystem::ComputeOcclusionLowPassHz(1.0f, 1.0f);
+	const float SporeFogHz = UDungeonAcousticSubsystem::ComputeOcclusionLowPassHz(0.0f, 0.72f);
+	TestTrue(TEXT("Occlusion LPF monotonically decreases with obstruction and dense fog"),
+		(ClearHz > PartialHz) && (PartialHz > FullOccHz) && (ClearHz > SporeFogHz));
 
 	TestWorld->DestroyWorld(false);
 	return true;

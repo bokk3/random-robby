@@ -452,56 +452,56 @@
       }
     },
     "ATLAS_Dungeon_Floors_4x4": {
-      "Timestamp": "2026-11-15T08:08:00.795022+00:00",
-      "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
+      "Timestamp": "2026-11-15T20:51:55.759141+00:00",
+      "Provenance": "Imported-Dungeon-Asset",
       "ComplianceVerified": true,
       "Files": {
         "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_D.png": {
-          "SHA256": "5eb20289f8796820ff0bf08adcdcdcf713bf6c09fd806a47999d4297424c77bd",
-          "Bytes": 8741
+          "SHA256": "1224be27b0a9a05e62f9ba4185d61aa05062683a59c93e33a93648c0c5d3930e",
+          "Bytes": 1445433
         },
         "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_N.png": {
-          "SHA256": "608223945aace811a66961b2483eaf6e654b073a98d0e8c8e50f5211d509cff8",
-          "Bytes": 17774
+          "SHA256": "19a3b24150f638a23442e7ad91a5a0db367953d567832c803ce14d4299eef313",
+          "Bytes": 638444
         },
         "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_H.png": {
-          "SHA256": "86b40555a146eddad1a279300a4cbee23a5282f739dc723452275bd6b814ce38",
-          "Bytes": 5593
+          "SHA256": "30d67a07e77e65de7a391b01492a35c4255ce6634b94f9bd165c8a1f47dc7898",
+          "Bytes": 491637
         },
         "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/ATLAS_Dungeon_Floors_4x4_R.png": {
-          "SHA256": "e497e1418108db1352793e13e907f8761d6c9c484ec7d1e909125cc18dbc98ee",
-          "Bytes": 3858
+          "SHA256": "bf2bf8eb6b9a0c6350757ecfa9adb421d68c182812d941d5b01d0b3a6ee54542",
+          "Bytes": 49604
         },
         "Art/Dungeon/ATLAS_Dungeon_Floors_4x4/AtlasMetadata.json": {
-          "SHA256": "01c872a025b05780e19c0de1a890c8dcae8c61e1a9a43b11404dab397b3a9d69",
-          "Bytes": 8252
+          "SHA256": "a2c28409a701bf8bd162d201dc6067d9f95d1f2a2a9c40efcb366f0fb67fe9b0",
+          "Bytes": 8270
         }
       }
     },
     "PROP_Dungeon_Walls_And_Cutaways_4x4": {
-      "Timestamp": "2026-11-15T08:08:01.107449+00:00",
-      "Provenance": "ProceduralSynthesis-PROP_Dungeon_Walls_And_Cutaways_4x4-v1",
+      "Timestamp": "2026-11-15T20:52:11.891979+00:00",
+      "Provenance": "Imported-Dungeon-Asset",
       "ComplianceVerified": true,
       "Files": {
         "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_D.png": {
-          "SHA256": "27436bd9f9e1c8997a76703d0428d334cc0687ad2350f06176861109c4476310",
-          "Bytes": 4233
+          "SHA256": "07d59d2380895ffacde7780e6b0e8fa0758cd42a44f6ac1a286ef96eb557fa86",
+          "Bytes": 969897
         },
         "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_N.png": {
-          "SHA256": "89ff65685dfc827080bd8e3495d701dd4c197ed722d3eba1f6088287732899ca",
-          "Bytes": 9026
+          "SHA256": "dcd444a8a105a9c46ee00548f5c8199b56b8553ba57622429a90f67397cbacd6",
+          "Bytes": 474016
         },
         "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_ORM.png": {
-          "SHA256": "9774dc515b78123fed90a199c4354d1326700f0c0653bde68343df48a29434a2",
-          "Bytes": 4480
+          "SHA256": "137791478c82bfbc2384c403fed96ef0ee56f89b5e954aa8c57da6f5a35f7c35",
+          "Bytes": 376540
         },
         "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/PROP_Dungeon_Walls_And_Cutaways_4x4_E.png": {
-          "SHA256": "f6354718150dc4d116da7ab2f38c3745ca8df875a75785af25a6b06d4bc5d3d9",
-          "Bytes": 948
+          "SHA256": "d69112264db6c2c1b6f6bc930b7d7cf38c27a4fead1b5000259265c5405c66ef",
+          "Bytes": 3129
         },
         "Art/Dungeon/PROP_Dungeon_Walls_And_Cutaways_4x4/AtlasMetadata.json": {
-          "SHA256": "d8a0373967e604951380db078aad6266aa6ddabbca6a35ba6fd69e09e1ee0320",
-          "Bytes": 9502
+          "SHA256": "c9600f889f2717673228095b0c009835f29c0cbbae4d05db1955808b324a4d50",
+          "Bytes": 9504
         }
       }
     },
@@ -556,6 +556,277 @@
         "Art/Dungeon/PROP_Breakables_And_Traps_4x4/AtlasMetadata.json": {
           "SHA256": "31f94cd4eafb87a9f395124613e694c14e368520f0764e86af0df320d0f18182",
           "Bytes": 9492
+        }
+      }
+    },
+    "PROP_Magical_Flora_And_Crystals_4x4": {
+      "Timestamp": "2026-11-15T20:52:38.296778+00:00",
+      "Provenance": "EcoFloodFillKey-PROP_Magical_Flora_And_Crystals_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Ecosystem/PROP_Magical_Flora_And_Crystals_4x4/PROP_Magical_Flora_And_Crystals_4x4_D.png": {
+          "SHA256": "153b55bf2c0b27f4bb4ce0d8dc309f93e6796085bf9e1e107769e04fe7b64c94",
+          "Bytes": 298264
+        },
+        "Art/Ecosystem/PROP_Magical_Flora_And_Crystals_4x4/PROP_Magical_Flora_And_Crystals_4x4_N.png": {
+          "SHA256": "3128c328cb6ec9844f73bb5f5ca84f4643c029dd23dc0f3dc31c34de6ef7810a",
+          "Bytes": 191985
+        },
+        "Art/Ecosystem/PROP_Magical_Flora_And_Crystals_4x4/PROP_Magical_Flora_And_Crystals_4x4_E.png": {
+          "SHA256": "578900374af202fecdd98d13fd316b729856ad54129d77fda7918ebe0b0f86c4",
+          "Bytes": 167874
+        },
+        "Art/Ecosystem/PROP_Magical_Flora_And_Crystals_4x4/AtlasMetadata.json": {
+          "SHA256": "5729116e0ea1fbf63c31aa01e878216cafb580926e21780339c20454ac5b2613",
+          "Bytes": 8354
+        }
+      }
+    },
+    "PROP_Water_And_Fauna_4x4": {
+      "Timestamp": "2026-11-15T20:52:42.223196+00:00",
+      "Provenance": "EcoFloodFillKey-PROP_Water_And_Fauna_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Ecosystem/PROP_Water_And_Fauna_4x4/PROP_Water_And_Fauna_4x4_D.png": {
+          "SHA256": "5ef82930b24d62214487c6ece9022ac884a4e28a51c2a413cfb56ddcbb29a956",
+          "Bytes": 205002
+        },
+        "Art/Ecosystem/PROP_Water_And_Fauna_4x4/PROP_Water_And_Fauna_4x4_N.png": {
+          "SHA256": "4f86e6fbf3cb090f2a3809c5ba5de0ca4e009b06dc4b393e34fca86e1699524d",
+          "Bytes": 128598
+        },
+        "Art/Ecosystem/PROP_Water_And_Fauna_4x4/PROP_Water_And_Fauna_4x4_E.png": {
+          "SHA256": "c69eecb016b840fd1f9f4e9c67329201bf994879e014330152f469a25457161c",
+          "Bytes": 101864
+        },
+        "Art/Ecosystem/PROP_Water_And_Fauna_4x4/AtlasMetadata.json": {
+          "SHA256": "7029fcd18a5005163e103e7fcd00eda82b5bbbbb82319370f09ab896bb7a955a",
+          "Bytes": 8342
+        }
+      }
+    },
+    "PROP_Fauna_Critters_Strip_4x1": {
+      "Timestamp": "2026-11-15T20:52:42.296896+00:00",
+      "Provenance": "EcoFaunaStrip-PROP_Fauna_Critters_Strip_4x1-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Ecosystem/PROP_Fauna_Critters_Strip_4x1/PROP_Fauna_Critters_Strip_4x1_D.png": {
+          "SHA256": "41bbf7b2149c32e74a2b75693dd0d1492893344e4d041486ca589520f2f6be44",
+          "Bytes": 3667
+        },
+        "Art/Ecosystem/PROP_Fauna_Critters_Strip_4x1/PROP_Fauna_Critters_Strip_4x1_N.png": {
+          "SHA256": "86e283c4b63a1690ddd5f41fe3cc9d0652999bbe80909fd71b6ab448526a5ba7",
+          "Bytes": 2952
+        },
+        "Art/Ecosystem/PROP_Fauna_Critters_Strip_4x1/PROP_Fauna_Critters_Strip_4x1_E.png": {
+          "SHA256": "9fdf89748cc256e1cfccf33bcfd752826723650c5b59ee7c217a53100bfe134b",
+          "Bytes": 2252
+        },
+        "Art/Ecosystem/PROP_Fauna_Critters_Strip_4x1/AtlasMetadata.json": {
+          "SHA256": "e390cbdc4a4db00ace9f68fc0614392e5cf81a26fa1df62750fc38bb3a56aad0",
+          "Bytes": 2346
+        }
+      }
+    },
+    "Ecosystem_Foley_Bank": {
+      "Timestamp": "2026-11-15T15:30:10.360137+00:00",
+      "Provenance": "ProceduralDSP-EcosystemFoley-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Audio/Foley/Ambient_DistantGroan_0.wav": {
+          "SHA256": "b4aa76591abfa4ae6e1475ec9c3ca3a6b637aa6dac54bc93daa059590eca44f8",
+          "Bytes": 97064
+        },
+        "Audio/Foley/Bio_BeetleClick_0.wav": {
+          "SHA256": "336d6e19275d6f19145bed4fcf6fd2abfa3befc57d8475fa49a7d15b901c7458",
+          "Bytes": 3572
+        },
+        "Audio/Foley/Bio_Loop_CrystalHum.wav": {
+          "SHA256": "bd870b3b0462024790f4adf8dfae00d81e760ccce99bd98f676211ffb80b6306",
+          "Bytes": 88068
+        },
+        "Audio/Foley/Bio_Loop_FireflyFlutter.wav": {
+          "SHA256": "71da8a47e26a5d018f42c9a3d4cf7eefc4f6f45ea4c4d7f3f2d2531a7f1919a4",
+          "Bytes": 88068
+        },
+        "Audio/Foley/Echo_CrystalChord_0.wav": {
+          "SHA256": "d2ede5024556f912bf1134a8491ecf58f07156474ae90ff2186696e61464a321",
+          "Bytes": 41938
+        },
+        "Audio/Foley/Echo_CrystalChord_1.wav": {
+          "SHA256": "7f3fa1b28290a7fe1a634781f4833b07cfc9af712f5be1a77ed7b0c4bb24de91",
+          "Bytes": 41938
+        },
+        "Audio/Foley/Gear_Chain_0.wav": {
+          "SHA256": "3d3d05549ef1af90c4797fb5b40bbd5d59962917a0a2134d6f76ff046d44e3fb",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Gear_Chain_1.wav": {
+          "SHA256": "aae5d6cfa76cfe4d359a03c7be5d7b98029bac8a2160901d14c8a355cfe00b8c",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Gear_Chain_2.wav": {
+          "SHA256": "d3127c780583a8023ac698bdbca1299b5667b2bc7b341f409b8dc8d4fb333642",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Gear_Cloak_0.wav": {
+          "SHA256": "10127f32fbc7784ac506936dba5aefc1b8e6aad5143956fbcfba0e41c689f56e",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Gear_Cloak_1.wav": {
+          "SHA256": "7632f7b74cc821f812faa550e9aabc52eaf0a1cb45f73f96884db28382ff8fd2",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Gear_Cloak_2.wav": {
+          "SHA256": "f52b9f0921e31973f89e22d92ee32955a9d862fa6f103d50b7eb94078178d9a6",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Loop_FloraChime.wav": {
+          "SHA256": "223a786ade46ae2be9d616a1db62389bf182794e740f2e08bdf4c249a298e05b",
+          "Bytes": 88068
+        },
+        "Audio/Foley/Loop_WadeSlosh.wav": {
+          "SHA256": "d34516ff1c8d4499f11baf535fd6365bdbeb7ad3b111ad7f7b9a18a44cb79e5d",
+          "Bytes": 70428
+        },
+        "Audio/Foley/Step_Crystal_0.wav": {
+          "SHA256": "42c17218e851eb585352c71e9c1490bc411b370ee16c6abf621f7541dc205258",
+          "Bytes": 15038
+        },
+        "Audio/Foley/Step_Crystal_1.wav": {
+          "SHA256": "a6c8ee5e6c27f7c80039a18d4c693a01fb29423130d95cb2d8835be6dc47667c",
+          "Bytes": 15038
+        },
+        "Audio/Foley/Step_Crystal_2.wav": {
+          "SHA256": "d6e74d4478c37c6185f8e20e7275854cb51046b074ceb02fb7c4359afb04e30d",
+          "Bytes": 15038
+        },
+        "Audio/Foley/Step_Moss_0.wav": {
+          "SHA256": "b9a9bb90830a34ffd5aa3283f1f37b19696403cdf35fd66a6e3503dab68b1eba",
+          "Bytes": 8864
+        },
+        "Audio/Foley/Step_Moss_1.wav": {
+          "SHA256": "7a26f25f9a8e669d053f9e09ba5137bc31e7e2c8296f9594f08133d13940ef29",
+          "Bytes": 8864
+        },
+        "Audio/Foley/Step_Moss_2.wav": {
+          "SHA256": "b7564224241f4b6f3638d58c821a8921a04624d0513f7dc5c404442d4cc418c0",
+          "Bytes": 8864
+        },
+        "Audio/Foley/Step_Obsidian_0.wav": {
+          "SHA256": "0137fd1df66d054ac16b2155ad2b633e9ffe2e51ca6f4f9117c2630a25b2623e",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Step_Obsidian_1.wav": {
+          "SHA256": "7df6fd2f1a93107ad39333e6a936af505878c4cf5b03d6cbb0d624ebb121762a",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Step_Obsidian_2.wav": {
+          "SHA256": "02a9b4f4fa356948ebbe2f5373fbc96fc45b30f54901aa478df9a8f3991c1b63",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Step_Puddle_0.wav": {
+          "SHA256": "d406800cd2db75ac432ec9c60f252f362a639d624037d763dbb7f2604992ce0c",
+          "Bytes": 12392
+        },
+        "Audio/Foley/Step_Puddle_1.wav": {
+          "SHA256": "bed6e30d6895faf368e95ebe64f037a7de2509c0e46f71ebbac039f05bc8617f",
+          "Bytes": 12392
+        },
+        "Audio/Foley/Step_Puddle_2.wav": {
+          "SHA256": "6cc8576bd8b535964f7619a96b96e46a6197db14f49f6c14598d84843f416334",
+          "Bytes": 12392
+        },
+        "Audio/Foley/Step_Rug_0.wav": {
+          "SHA256": "3d3013f45693499aefed875e441dac5a4a3ebc6cda9fc1702c92dcbd4236e195",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Step_Rug_1.wav": {
+          "SHA256": "f7788aeee401adb1af1c4bd1f713c8b413205fd81041aae2ac0ba1764c901adc",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Step_Rug_2.wav": {
+          "SHA256": "22c947efe4dcf7420d63c943bd0989f344b22171d3f933b8ac3c585462469031",
+          "Bytes": 7100
+        },
+        "Audio/Foley/Step_Stone_0.wav": {
+          "SHA256": "aac4eacc51857962006d73f46b3b2d2a9ec04f18667485fd9a240e53f1e5c71b",
+          "Bytes": 7982
+        },
+        "Audio/Foley/Step_Stone_1.wav": {
+          "SHA256": "2f47b5dd18b385477919985843ee6ab1b28ad86710a76d840724ad6c277ffe4c",
+          "Bytes": 7982
+        },
+        "Audio/Foley/Step_Stone_2.wav": {
+          "SHA256": "91f548a4e9c309b8fc89999df6612428f500342bf256e4689623a83e4e47cd81",
+          "Bytes": 7982
+        },
+        "Audio/Foley/Step_Wade_0.wav": {
+          "SHA256": "8baa1d9cb58a4ca8a89c432612a8e8855948ac12eb323731fa11f68864cf2d1f",
+          "Bytes": 15920
+        },
+        "Audio/Foley/Step_Wade_1.wav": {
+          "SHA256": "aed88c70d4defe663612df7db6a29c7f9c026b0d6e9a7af92ae61f79442dde1e",
+          "Bytes": 15920
+        },
+        "Audio/Foley/Step_Wade_2.wav": {
+          "SHA256": "d3529e44b1214c9d68be5f4ea8c31e061928607f18979bd92b854779700177d0",
+          "Bytes": 15920
+        },
+        "Audio/Foley/Water_Drip_0.wav": {
+          "SHA256": "6818bb3bd2481be7a348a2cee0a9213a521d3fcb4950c5397c0ab06e26f848a1",
+          "Bytes": 6218
+        },
+        "Audio/Foley/Water_Drip_1.wav": {
+          "SHA256": "515b03b87ceac466758e2a6e45b3daf18f8215673a6ebb2c4f3a4b97f849f303",
+          "Bytes": 6218
+        },
+        "Audio/Foley/Water_Drip_2.wav": {
+          "SHA256": "6faa3c61a6da47636cdf59f9e9f3857ea3bd90522aaea71f9add27e82ae57de4",
+          "Bytes": 6218
+        },
+        "Audio/Foley/Water_Loop_PuddleLap.wav": {
+          "SHA256": "3273bd23b18d696960d447ec812878d8c04ccb04afd7738ec98bc44ccb6b0715",
+          "Bytes": 79248
+        },
+        "Audio/Foley/Water_Loop_StreamRush.wav": {
+          "SHA256": "d83a00701ef69bb3efb00af0ce94c618a3580127e0df29a4909be4b60f660275",
+          "Bytes": 79248
+        },
+        "Audio/Foley/Water_Loop_ThermalBubble.wav": {
+          "SHA256": "ceba5de0cd36c0cc8455147a9a92821eba99a170995dfa5e239acda5368403a2",
+          "Bytes": 79248
+        },
+        "Audio/Foley/Water_Loop_WallCascade.wav": {
+          "SHA256": "1774bc75029573778a6366426b679521567f1489202be95e9890e05fcca4ea69",
+          "Bytes": 79248
+        }
+      }
+    },
+    "PROP_Doors_And_Level_Transitions_4x4": {
+      "Timestamp": "2026-11-15T20:52:20.566237+00:00",
+      "Provenance": "Imported-Dungeon-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/PROP_Doors_And_Level_Transitions_4x4/PROP_Doors_And_Level_Transitions_4x4_D.png": {
+          "SHA256": "4c1ef1a31a211ade30f8a10418cdadf3e38230c62f5c01d9bf67e9eab2c8019d",
+          "Bytes": 921675
+        },
+        "Art/Dungeon/PROP_Doors_And_Level_Transitions_4x4/PROP_Doors_And_Level_Transitions_4x4_N.png": {
+          "SHA256": "a97951951d65a0471b676600916b5f1ab9feff68e5149e7d30449f926dc973a5",
+          "Bytes": 491100
+        },
+        "Art/Dungeon/PROP_Doors_And_Level_Transitions_4x4/PROP_Doors_And_Level_Transitions_4x4_ORM.png": {
+          "SHA256": "bfcbc5b44bd8e8d65dedc26bc0ba459b5303ffa8883c4f92796d7d32ed245f1a",
+          "Bytes": 374051
+        },
+        "Art/Dungeon/PROP_Doors_And_Level_Transitions_4x4/PROP_Doors_And_Level_Transitions_4x4_E.png": {
+          "SHA256": "79855427e2c2bb6bc5a2dc3bc1e02dcebbeba056323f6cc8ea0e82367e1aadbd",
+          "Bytes": 30213
+        },
+        "Art/Dungeon/PROP_Doors_And_Level_Transitions_4x4/AtlasMetadata.json": {
+          "SHA256": "0b4af2cffc5ff5947c09b4a3e653192113b783b1f95a032d78b4cfcace85f1c6",
+          "Bytes": 9519
         }
       }
     }

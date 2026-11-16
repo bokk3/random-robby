@@ -111,6 +111,36 @@ namespace DungeoneerMath
 			return 3;
 		}
 	}
+
+	/**
+	 * Maps an 8-compass world octant to the 4 screen-relative sprite sheet rows (0=Front, 1=Back, 2=Right, 3=Left)
+	 * for an arbitrary camera boom Yaw angle (e.g. -45.0 deg isometric diorama framing).
+	 */
+	[[nodiscard]] inline uint8 OctantToScreenDirectionalRowForCameraYaw(ECompassOctant Octant, float CameraYawDeg) noexcept
+	{
+		const FVector2f WorldDir = GCompassUnitVectors[static_cast<uint8>(Octant) & 7];
+		const float Rad = FMath::DegreesToRadians(-CameraYawDeg);
+		const float C = FMath::Cos(Rad);
+		const float S = FMath::Sin(Rad);
+		const double ScreenUp = static_cast<double>(WorldDir.X) * static_cast<double>(C) - static_cast<double>(WorldDir.Y) * static_cast<double>(S);
+		const double ScreenRight = static_cast<double>(WorldDir.X) * static_cast<double>(S) + static_cast<double>(WorldDir.Y) * static_cast<double>(C);
+		if (FMath::Abs(ScreenRight) >= FMath::Abs(ScreenUp))
+		{
+			return (ScreenRight >= 0.0) ? 2 : 3;
+		}
+		return (ScreenUp < 0.0) ? 0 : 1;
+	}
+
+	/** Converts screen-space (Up, Right) stick/WASD/mouse aim into world XY for a given camera Yaw. */
+	[[nodiscard]] inline FVector2D RotateScreenInputToWorldForCameraYaw(const FVector2D& ScreenUpRight, float CameraYawDeg) noexcept
+	{
+		const float Rad = FMath::DegreesToRadians(CameraYawDeg);
+		const float C = FMath::Cos(Rad);
+		const float S = FMath::Sin(Rad);
+		return FVector2D(
+			ScreenUpRight.X * static_cast<double>(C) - ScreenUpRight.Y * static_cast<double>(S),
+			ScreenUpRight.X * static_cast<double>(S) + ScreenUpRight.Y * static_cast<double>(C));
+	}
 }
 
 USTRUCT(BlueprintType)

@@ -1,14 +1,16 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `1.1.0` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `1.2.1` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
 
-## Completed Milestones (`v0.1.0` – `v1.1.0`)
+## Completed Milestones (`v0.1.0` – `v1.2.1`)
 
 | SemVer Tag | Milestone | Status | Key Modules & Verification |
 | :--- | :--- | :--- | :--- |
+| `v1.2.1` | 2.5D Visual Overhaul, Exposure/HISM Fix & M4 Release Integration (`TASK-1202`) | Done | Pixel-art Dungeon Floors/Walls/Doors atlases, `eco_cleanup_masks.json` de-haloing, `-45°` isometric diorama camera (`Pitch=-42°`, `FOV=35°`), `ELightUnits::Lumens` calibration (`DungeoneerCharacter` & `MenuDioramaStageActor`), `M_Dungeoneer_EcoInstanced` `EcoMatRev6`, HISM `BuildTreeIfOutdated`/`UpdateBounds`, `-CaptureShotAfterSec` hook, `16` UE 5.8.2 specs (`EXIT CODE: 0`), verified Entry Room & Main Menu captures |
+| `v1.2.0` | Living Dungeon Ecosystem — Lighting, Hydrology, Flora, Fauna & Acoustics (`TASK-1201`) | Done | `FDungeoneerEcoMaterialFactory` (`EEcoCPD::Count=8`, 32-bit `UnpackRGB24`), `UDungeonLightBudgetSubsystem` (`512` candidates / `32` Tier 1 / `16` Tier 2 / `2` Tier 3), `UDungeonWaterSubsystem` (`128 UU` O(1) surface grid, `0.88x` wading, `24` drips, `256`-slot `ISM_WaterFX`), `UDungeonFloraManagerComponent`, `UDungeonFaunaSubsystem` (`FFaunaSoA` `256`), `UDungeonAcousticSubsystem` + `UDungeoneerPCMSoundWave` (`42` foley WAVs) |
 | `v1.1.0` | Multi-Biome Floor Plans, 8-HISM Bucketing, Systemic Traps & Atmosphere (`TASK-1101`) | Done | `EDungeonBiomeType`/`EDungeonRoomShape` (`10` core + `2` Secret Phantasm Pockets + transition bleed), full 16-cell `AssetBootstrap` + Doors/Sanctuary procedural fallbacks, `8`-HISM buckets (`WetFloorHISM`, `DiagonalWedgeHISM`, `SconceHISM`, `ForegroundParallaxHISM`) + `4`-light `SconceLightPool`, `FDungeoneerTrapVentEntry` + `IgniteOrAccelerateFuse` + acoustic noise lures, `AmbientMotesHISM` (`64` instances) & `0.6s` fog blend, `10` UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
 | `v0.1.0` | Project & Config Bootstrap | Done | UE 5.8 C++20 `.uproject`, `.Target.cs` (`V7`), `DarkDungeoneer.Build.cs`, `Default*.ini`, rules/skills |
 | `v0.2.0` | Core 4-Axis & Split-Screen Isolation | Done | `ADungeoneerCharacter`, `UDungeoneerMovementComponent`, `UDungeoneerLocalPlayerSubsystem`, `FDungeoneerSensoryViewExtension` |
@@ -144,3 +146,15 @@
 - [x] **`TASK-1001` — End-to-End Dungeon Combat, Dodge, Loot Vault & Multi-Floor Loop**
   - **Files**: `Source/DarkDungeoneer/Public/Core/DungeoneerCharacter.h`, `Private/Core/DungeoneerCharacter.cpp`, `Public/Core/DungeoneerGameMode.h`, `Private/Core/DungeoneerGameMode.cpp`, `Public/AI/ZombieSpatialSubsystem.h`, `Private/AI/ZombieSpatialSubsystem.cpp`, `Public/AI/ZombieBase.h`, `Private/AI/ZombieBase.cpp`, `Private/AI/ZombieFastThrower.cpp`, `Public/Dungeon/DungeoneerTileMapInstancer.h`, `Private/Dungeon/DungeonGeneratorSubsystem.cpp`, `Public/UI/DungeoneerPlayerHUDWidget.h`, `Private/UI/DungeoneerPlayerHUDWidget.cpp`, `Private/Tests/DungeoneerVerificationSpecs.cpp`
   - **Scope**: Lantern Blade melee cleave + `SlashArcMesh` sweep & procedural lunge/follow-through, 4-axis Dodge Dash i-frames, Hit Stagger + entry respawn, Zombie hit flash/knockback/death gold+battery rewards, `[F]` Vendor purchase & Loot Vault unlock -> `AdvanceToNextDungeonFloor()` Floor `N -> N+1` progression, live HUD Floor/Gold/Kills/CombatState & `[F]` hints, plus full Editor/Game `UBT` builds and `9` passing UE 5.8.2 specs.
+
+### Milestone `v1.2.0` — Living Dungeon Ecosystem (`TASK-1201`)
+
+- [x] **`TASK-1201` — 4-Tier Light Budget, Hydrology, Interactive Flora, SoA Fauna & Surface Acoustics (M1–M3)**
+  - **Files**: `Public/Ecosystem/DungeonEcosystemTypes.h`, `Public/Lighting/DungeonLightBudgetSubsystem.h`, `Private/Lighting/DungeonLightBudgetSubsystem.cpp`, `Public/Rendering/DungeoneerEcoMaterialFactory.h`, `Private/Rendering/DungeoneerEcoMaterialFactory.cpp`, `Public/Ecosystem/DungeonWaterSubsystem.h`, `Private/Ecosystem/DungeonWaterSubsystem.cpp`, `Public/Ecosystem/DungeonFloraManagerComponent.h`, `Private/Ecosystem/DungeonFloraManagerComponent.cpp`, `Public/Ecosystem/DungeonFaunaSubsystem.h`, `Private/Ecosystem/DungeonFaunaSubsystem.cpp`, `Public/Audio/DungeonAcousticSubsystem.h`, `Private/Audio/DungeonAcousticSubsystem.cpp`, `Public/Audio/DungeoneerPCMSoundWave.h`, `Private/Audio/DungeoneerPCMSoundWave.cpp`, `scripts/synthesize_ecosystem_foley.py`, `Content/Audio/Foley/*.wav`
+  - **Scope**: Implement `M_Dungeoneer_EcoInstanced` with `EEcoCPD::Count == 8` and 32-bit `UnpackRGB24` Tier 1 shader distance-field glows (`MaxTier1 = 32`, `MaxTier2 = 16`, `MaxTier3World = 2`, `MaxCandidates = 512`), `UDungeonWaterSubsystem` (`128 UU` surface grid, `0.88x` wading speed + `FSavedMove_Dungeoneer::bSavedWading`, `24` ceiling drips, `256`-slot `ISM_WaterFX`), `UDungeonFloraManagerComponent` (`HISM_MagicalFlora`), `UDungeonFaunaSubsystem` (`FFaunaSoA::Capacity = 256`), `42` synthesized deterministic foley WAVs played safely via `UDungeoneerPCMSoundWave` (`MaxWalkers = 64`, `TotalVoicePoolSize = 22`), and `6` ecosystem automation specs in `DungeoneerVerificationSpecs.cpp`.
+
+### Milestone `v1.2.1` — 2.5D Visual Overhaul & Release Integration (`TASK-1202`)
+
+- [x] **`TASK-1202` — Pixel-Art Dungeon Atlases, De-Haloed Sprites, `-45°` Isometric Camera, HISM Builds & M4 Release**
+  - **Files**: `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`, `.agents/skills/sprite-sheet-25d-cutter/scripts/eco_cleanup_masks.json`, `Content/Art/Dungeon/*`, `Content/Art/Ecosystem/*`, `Private/Rendering/DungeoneerEcoMaterialFactory.cpp`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Private/Core/DungeoneerCharacter.cpp`, `Private/UI/MenuDioramaStageActor.cpp`, `Private/Core/DungeoneerGameMode.cpp`, `Private/Ecosystem/DungeonWaterSubsystem.cpp`, `VERSION`, `CHANGELOG.md`, `README.md`, `docs/TASKS.md`, `docs/DEVLOG.md`
+  - **Scope**: Replace geometric floor/wall/doorway sheets with generated pixel-art atlases + sticker-halo flooding cleanup, rebuild HISM cluster trees/bounds (`BuildTreeIfOutdated`, `UpdateBounds`), switch `SconceHISM` to upright cutout sprites and frame doorways cleanly, align gameplay and Menu Diorama cameras to `Pitch = -42°, Yaw = -45°, FOV = 35°` with calibrated `ELightUnits::Lumens` + clamped exposure (`0.42f`–`1.40f`), add Tick-based `-CaptureShotAfterSec`/`-QuitAfterShot`, verify both live Entry Room & Main Menu captures, pass `slice_normal_rig.py --self-test`, `verify_architecture_invariants.py` (`101` files), Editor & Standalone `Win64 Development` builds (`0` project warnings), all `16/16` headless UE `5.8.2` specs (`EXIT CODE: 0`), and cut `v1.2.1` release tag.

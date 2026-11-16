@@ -1,5 +1,7 @@
 #include "AI/ZombieBase.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Audio/DungeonAcousticSubsystem.h"
+#include "Ecosystem/DungeonWaterSubsystem.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Rendering/SensoryPerkComponent.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
@@ -129,6 +131,7 @@ void AZombieBase::EnsureVisualMeshInitialized()
 
 void AZombieBase::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept
 {
+	const int32 PrevColumn = ActiveWalkFrameColumn;
 	const float ClampedDist = FMath::Max(DeltaDistanceUU, 0.0f);
 	if (bIsMoving || ClampedDist > 0.1f)
 	{
@@ -141,6 +144,22 @@ void AZombieBase::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsM
 		// Lock to Column 0 (Contact / Idle Pose A) when stationary
 		ActiveWalkFrameColumn = 0;
 	}
+
+	if (ActiveWalkFrameColumn != PrevColumn)
+	{
+		if ((ActiveWalkFrameColumn == 1 || ActiveWalkFrameColumn == 3) && !bIsMirrorDecoy)
+		{
+			++WalkStepSequenceCount;
+			if (const UWorld* World = GetWorld())
+			{
+				if (UDungeonWaterSubsystem* WaterSub = World->GetSubsystem<UDungeonWaterSubsystem>())
+				{
+					WaterSub->NotifyWalkerStep(this, GetActorLocation(), CurrentHeadingOctant, false);
+				}
+			}
+		}
+		OnWalkColumnChanged.Broadcast(ActiveWalkFrameColumn);
+	}
 }
 
 void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, int32 FrameColumn) noexcept
@@ -150,7 +169,7 @@ void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, in
 		return;
 	}
 
-	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRow(HeadingOctant));
+	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(HeadingOctant, -45.0f));
 	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
 	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
 	if (DesiredCell == ActiveDirectionalCellIndex)
@@ -185,6 +204,10 @@ void AZombieBase::BeginPlay()
 		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 		{
 			SpatialSys->RegisterZombie(this);
+		}
+		if (UDungeonAcousticSubsystem* AcousticSys = World->GetSubsystem<UDungeonAcousticSubsystem>())
+		{
+			AcousticSys->RegisterWalker(this);
 		}
 	}
 }

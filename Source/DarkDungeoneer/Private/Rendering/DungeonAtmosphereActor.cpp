@@ -6,8 +6,10 @@
 
 #include "Rendering/DungeonAtmosphereActor.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -26,8 +28,8 @@ ADungeonAtmosphereActor::ADungeonAtmosphereActor()
 	FogComponent->bEnableVolumetricFog = true;
 	FogComponent->VolumetricFogScatteringDistribution = 0.45f;
 	FogComponent->VolumetricFogExtinctionScale = 1.0f;
-	FogComponent->SetFogDensity(0.05f);
-	FogComponent->SetVolumetricFogAlbedo(FColor(45, 55, 75));
+	FogComponent->SetFogDensity(0.055f);
+	FogComponent->SetVolumetricFogAlbedo(FColor(16, 10, 28));
 
 	WeatherNiagaraComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("WeatherNiagaraComponent"));
 	WeatherNiagaraComponent->SetupAttachment(RootComponent);
@@ -42,15 +44,15 @@ ADungeonAtmosphereActor::ADungeonAtmosphereActor()
 	AmbientMotesHISM->SetCullDistances(0, 3200);
 
 	// Setup atmospheric defaults for each weather preset
-	ColdDraftsConfig.FogDensity = 0.04f;
-	ColdDraftsConfig.FogAlbedo = FLinearColor(0.15f, 0.20f, 0.28f, 1.0f);
-	ColdDraftsConfig.VolumetricScatteringDistribution = 0.40f;
-	ColdDraftsConfig.VolumetricExtinctionScale = 0.9f;
+	ColdDraftsConfig.FogDensity = 0.048f;
+	ColdDraftsConfig.FogAlbedo = FLinearColor(0.06f, 0.04f, 0.11f, 1.0f);
+	ColdDraftsConfig.VolumetricScatteringDistribution = 0.42f;
+	ColdDraftsConfig.VolumetricExtinctionScale = 0.95f;
 
 	DrippingWaterConfig.FogDensity = 0.055f;
-	DrippingWaterConfig.FogAlbedo = FLinearColor(0.12f, 0.20f, 0.30f, 1.0f);
-	DrippingWaterConfig.VolumetricScatteringDistribution = 0.50f;
-	DrippingWaterConfig.VolumetricExtinctionScale = 1.05f;
+	DrippingWaterConfig.FogAlbedo = FLinearColor(0.06f, 0.04f, 0.12f, 1.0f);
+	DrippingWaterConfig.VolumetricScatteringDistribution = 0.52f;
+	DrippingWaterConfig.VolumetricExtinctionScale = 1.08f;
 
 	ToxicSporesConfig.FogDensity = 0.075f;
 	ToxicSporesConfig.FogAlbedo = FLinearColor(0.14f, 0.30f, 0.13f, 1.0f);
@@ -101,7 +103,7 @@ void ADungeonAtmosphereActor::InitializeAmbientMotesPool()
 		{
 			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
 			{
-				MID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(0.55f, 0.78f, 0.88f));
+				MID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(0.95f, 0.72f, 0.25f));
 				MID->SetScalarParameterValue(FName(TEXT("Roughness")), 0.25f);
 				AmbientMotesHISM->SetMaterial(0, MID);
 			}
@@ -111,7 +113,8 @@ void ADungeonAtmosphereActor::InitializeAmbientMotesPool()
 	MoteBaseOffsets.Reset();
 	MoteDriftVelocities.Reset();
 	FRandomStream SeededStream(90210);
-	const FRotator FacingRot(55.0f, 180.0f, 0.0f);
+	const FRotationMatrix CamBasis(FRotator(-42.0f, -45.0f, 0.0f));
+	const FRotator FacingRot = (-CamBasis.GetScaledAxis(EAxis::X)).Rotation() + FRotator(-90.0f, 0.0f, 0.0f);
 
 	for (int32 i = 0; i < NumAmbientMotes; ++i)
 	{
@@ -269,7 +272,17 @@ void ADungeonAtmosphereActor::UpdateAmbientMotesAroundFocus(const FVector& Focus
 	}
 
 	MoteTimeAccumulator += DeltaSeconds;
-	const FRotator FacingRot(55.0f, 180.0f, 0.0f);
+	FRotator FacingRot(48.0f, -45.0f, 0.0f);
+	if (const UWorld* WorldPtr = GetWorld())
+	{
+		if (const UGameInstance* GI = WorldPtr->GetGameInstance())
+		{
+			if (const UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>())
+			{
+				FacingRot = Bootstrap->GetCameraFacingSpritePlaneRotation();
+			}
+		}
+	}
 	const bool bEmberRising = (ActiveBiome == EDungeonBiomeType::EmberForge);
 	const bool bWaterFalling = (ActiveBiome == EDungeonBiomeType::Crypt);
 

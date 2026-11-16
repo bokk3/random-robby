@@ -52,6 +52,10 @@ public:
 	/** Resets Chrono-Leech slow cleanly to zero. */
 	void ClearChronoSlow() noexcept { ChronoSlowRatio = 0.0f; }
 
+	/** Applies / queries AnkleDeepStream wading state (uniform 0.88x speed multiplier). */
+	void SetWadingInStream(bool bInWading) noexcept { bIsWadingInStream = bInWading; }
+	bool IsWadingInStream() const noexcept { return bIsWadingInStream; }
+
 	float GetChronoSlowRatio() const noexcept { return ChronoSlowRatio; }
 	float GetBaseWalkSpeedConfig() const noexcept;
 	float GetMaxChronoSlowConfig() const noexcept;
@@ -78,6 +82,7 @@ private:
 
 	// Chrono-Leech debuff ratio S in [0.0, MaxSlowRatio]
 	float ChronoSlowRatio = 0.0f;
+	bool bIsWadingInStream = false;
 
 	// Fixed-step distance accumulator synced to the 4-axis step cycle
 	float StepDistanceAccumulator = 0.0f;
@@ -125,6 +130,7 @@ public:
 	virtual void PrepMoveFor(ACharacter* C) override;
 
 	uint8 SavedQuantizedChronoSlow = 0;
+	uint8 bSavedWading : 1 = 0;
 };
 
 class DARKDUNGEONEER_API FNetworkPredictionData_Client_Dungeoneer : public FNetworkPredictionData_Client_Character

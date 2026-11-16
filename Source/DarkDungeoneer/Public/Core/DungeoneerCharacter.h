@@ -162,6 +162,11 @@ public:
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCombatAttackPerformedSignature, ECompassOctant /*AttackOctant*/, int32 /*HitsLanded*/);
 	FOnCombatAttackPerformedSignature OnCombatAttackPerformed;
 
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnWalkColumnChangedSignature, int32 /*NewColumn*/);
+	FOnWalkColumnChangedSignature OnWalkColumnChanged;
+
+	int32 GetWalkStepSequenceCount() const noexcept { return WalkStepSequenceCount; }
+
 protected:
 	void HandleMoveInput(const FInputActionValue& Value);
 	void HandleMoveCompleted(const FInputActionValue& Value);
@@ -306,6 +311,7 @@ private:
 	float InteractScanAccumulator = 0.0f;
 	int32 ActiveDirectionalRow = -1;
 	int32 ActiveWalkFrameColumn = 0;
+	int32 WalkStepSequenceCount = 0;
 	int32 ActiveDirectionalCellIndex = -1;
 	int32 LastAttackHitsCount = 0;
 	bool bAttackDamageApplied = false;

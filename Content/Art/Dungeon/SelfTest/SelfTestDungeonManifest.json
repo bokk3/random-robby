@@ -4,7 +4,7 @@
   "TexelDensityStandard": "64 px / 100 UU",
   "Assets": {
     "ATLAS_Dungeon_Floors_4x4": {
-      "Timestamp": "2026-11-15T13:02:20.252319+00:00",
+      "Timestamp": "2026-11-15T23:16:06.838706+00:00",
       "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -31,7 +31,7 @@
       }
     },
     "PROP_Mirror_Palace_Maze_4x4": {
-      "Timestamp": "2026-11-15T13:02:20.509828+00:00",
+      "Timestamp": "2026-11-15T23:16:07.087759+00:00",
       "Provenance": "ProceduralSynthesis-PROP_Mirror_Palace_Maze_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -54,6 +54,52 @@
         "PROP_Mirror_Palace_Maze_4x4/AtlasMetadata.json": {
           "SHA256": "7b74df551532c9a4157f39069b8541d70d57aa30d8253a178075500f3676cff9",
           "Bytes": 9518
+        }
+      }
+    },
+    "SelfTest_Eco_4x4": {
+      "Timestamp": "2026-11-15T23:16:08.751214+00:00",
+      "Provenance": "EcoFloodFillKey-SelfTest_Eco_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Eco/SelfTest_Eco_4x4_D.png": {
+          "SHA256": "d0bf3ed93d61a674c358830a414a15f629beaafdf2203a99453a2fc570e935b9",
+          "Bytes": 42680
+        },
+        "Eco/SelfTest_Eco_4x4_N.png": {
+          "SHA256": "9a5c5890d5750823d95179e9b35db2101b845f07b4b92f046491b0a57b5a2e12",
+          "Bytes": 24097
+        },
+        "Eco/SelfTest_Eco_4x4_E.png": {
+          "SHA256": "464e6372fd2843c647258f0a97d62494fc1ebbe9dde5f0039c437c0e366dc445",
+          "Bytes": 24926
+        },
+        "Eco/AtlasMetadata.json": {
+          "SHA256": "df911409d8274f7b5412a0bfc1cef9cdbfd952bc1874e8f8ebf8db7c4f4fd5f9",
+          "Bytes": 8335
+        }
+      }
+    },
+    "SelfTest_Fauna_Strip_4x1": {
+      "Timestamp": "2026-11-15T23:16:08.832004+00:00",
+      "Provenance": "EcoFaunaStrip-SelfTest_Fauna_Strip_4x1-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "SelfTest_Fauna_Strip_4x1/SelfTest_Fauna_Strip_4x1_D.png": {
+          "SHA256": "ffd5f78c8271b4352d667c1c1f3ce4f3eb1db27320acbd49b18ae402832a8566",
+          "Bytes": 1210
+        },
+        "SelfTest_Fauna_Strip_4x1/SelfTest_Fauna_Strip_4x1_N.png": {
+          "SHA256": "17fc2578653479e43c2096adf3c7c6dd19fc6f4b03a6a7c927e8761497b465b4",
+          "Bytes": 964
+        },
+        "SelfTest_Fauna_Strip_4x1/SelfTest_Fauna_Strip_4x1_E.png": {
+          "SHA256": "c7c9eb9001da07f406471c62c59da5d0415affe18aa27719ae8dae3fc406433b",
+          "Bytes": 790
+        },
+        "SelfTest_Fauna_Strip_4x1/AtlasMetadata.json": {
+          "SHA256": "0ca1cfc0bf2ef75c5d0cdd6ccec3303e9938b2e888c31adeb3b52586dd433d29",
+          "Bytes": 2341
         }
       }
     }

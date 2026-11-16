@@ -6,8 +6,10 @@
 #include "DungeoneerTileMapInstancer.generated.h"
 
 class UHierarchicalInstancedStaticMeshComponent;
-class UPointLightComponent;
+class UInstancedStaticMeshComponent;
+class USceneComponent;
 class UStaticMesh;
+class UDungeonFloraManagerComponent;
 struct FHitResult;
 
 UENUM(BlueprintType)
@@ -270,6 +272,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Dungeon|HISM")
 	UHierarchicalInstancedStaticMeshComponent* GetForegroundParallaxHISM() const noexcept { return ForegroundParallaxHISM.Get(); }
 
+	UFUNCTION(BlueprintPure, Category = "Ecosystem|Water")
+	UHierarchicalInstancedStaticMeshComponent* GetWaterHISM() const noexcept { return HISM_Water.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Ecosystem|Water")
+	UInstancedStaticMeshComponent* GetWaterFxISM() const noexcept { return ISM_WaterFX.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Ecosystem|Flora")
+	UDungeonFloraManagerComponent* GetFloraManagerComponent() const noexcept { return FloraManager.Get(); }
+
+	UFUNCTION(BlueprintPure, Category = "Ecosystem|Fauna")
+	UInstancedStaticMeshComponent* GetFaunaISM() const noexcept { return ISM_Fauna.Get(); }
+
 	UFUNCTION(BlueprintPure, Category = "Dungeon|Encounters")
 	int32 GetSpawnedEncounterCount() const noexcept { return SpawnedEncounterActors.Num(); }
 
@@ -292,7 +306,6 @@ protected:
 	void ResetPendingCutaways() noexcept;
 	void AccumulateCutawayAlongSegment(const FVector& CameraLocation, const FVector& PlayerLocation) noexcept;
 	void ApplyPendingCutawayTransitions() noexcept;
-	void UpdateSconcePointLightPool() noexcept;
 	void SpawnEncountersForFloorGraph(const FDungeonFloorGraph& FloorGraph);
 	void AddWallInstance(
 		const FVector& WorldCenter,
@@ -328,8 +341,17 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|HISM")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ForegroundParallaxHISM;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Lighting")
-	TArray<TObjectPtr<UPointLightComponent>> SconceLightPool;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ecosystem|Water")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> HISM_Water;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ecosystem|Water")
+	TObjectPtr<UInstancedStaticMeshComponent> ISM_WaterFX;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ecosystem|Fauna")
+	TObjectPtr<UInstancedStaticMeshComponent> ISM_Fauna;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ecosystem|Flora")
+	TObjectPtr<UDungeonFloraManagerComponent> FloraManager;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Layout")
 	float TileSizeUU = 256.0f;
@@ -365,7 +387,6 @@ private:
 	int32 LastCorridorTileCount = 0;
 	bool bTexturedHISMApplied = false;
 	float TrapPollAccumulator = 0.0f;
-	float SconceFlickerPhase = 0.0f;
 
 	/** Pre-allocated byte mask parallel to WallEntries so Tick writes CustomData without heap allocation. */
 	TArray<uint8> PendingCutawayFlags;

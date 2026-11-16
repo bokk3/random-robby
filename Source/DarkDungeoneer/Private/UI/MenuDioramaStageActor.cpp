@@ -22,29 +22,42 @@ AMenuDioramaStageActor::AMenuDioramaStageActor()
 
 	DioramaCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("DioramaCamera"));
 	DioramaCamera->SetupAttachment(StageRoot);
-	DioramaCamera->SetRelativeLocationAndRotation(FVector(-620.0, 0.0, 980.0), FRotator(-60.0, 0.0, 0.0));
-	DioramaCamera->FieldOfView = 45.0f;
+	DioramaCamera->SetRelativeLocationAndRotation(FVector(-432.0, 552.0, 753.0), FRotator(-42.0, -45.0, 0.0));
+	DioramaCamera->FieldOfView = 35.0f;
 	DioramaCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
-	DioramaCamera->PostProcessSettings.AutoExposureMinBrightness = 0.25f;
+	DioramaCamera->PostProcessSettings.AutoExposureMinBrightness = 0.42f;
 	DioramaCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
-	DioramaCamera->PostProcessSettings.AutoExposureMaxBrightness = 2.0f;
+	DioramaCamera->PostProcessSettings.AutoExposureMaxBrightness = 1.40f;
+	DioramaCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
+	DioramaCamera->PostProcessSettings.AutoExposureBias = -0.10f;
+	DioramaCamera->PostProcessSettings.bOverride_BloomIntensity = true;
+	DioramaCamera->PostProcessSettings.BloomIntensity = 0.35f;
 
 	HeroFlashlightSpot = CreateDefaultSubobject<USpotLightComponent>(TEXT("HeroFlashlightSpot"));
 	HeroFlashlightSpot->SetupAttachment(StageRoot);
 	HeroFlashlightSpot->SetRelativeLocationAndRotation(FVector(-120.0, -40.0, 95.0), FRotator(-8.0, 0.0, 0.0));
-	HeroFlashlightSpot->InnerConeAngle = 14.0f;
-	HeroFlashlightSpot->OuterConeAngle = 28.0f;
-	HeroFlashlightSpot->AttenuationRadius = 2200.0f;
-	HeroFlashlightSpot->Intensity = 24000.0f;
-	HeroFlashlightSpot->SetLightColor(FLinearColor(1.0f, 0.88f, 0.62f));
+	HeroFlashlightSpot->SetIntensityUnits(ELightUnits::Lumens);
+	HeroFlashlightSpot->bUseInverseSquaredFalloff = true;
+	HeroFlashlightSpot->SetSourceRadius(22.0f);
+	HeroFlashlightSpot->SetSoftSourceRadius(32.0f);
+	HeroFlashlightSpot->InnerConeAngle = 12.0f;
+	HeroFlashlightSpot->OuterConeAngle = 26.0f;
+	HeroFlashlightSpot->AttenuationRadius = 920.0f;
+	HeroFlashlightSpot->Intensity = 480.0f;
+	HeroFlashlightSpot->SetLightColor(FLinearColor(1.0f, 0.74f, 0.34f));
+	HeroFlashlightSpot->VolumetricScatteringIntensity = 1.6f;
 	HeroFlashlightSpot->CastShadows = false;
 
 	DioramaAmbientFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("DioramaAmbientFillLight"));
 	DioramaAmbientFillLight->SetupAttachment(StageRoot);
-	DioramaAmbientFillLight->SetRelativeLocation(FVector(120.0, 0.0, 360.0));
-	DioramaAmbientFillLight->Intensity = 4500.0f;
-	DioramaAmbientFillLight->AttenuationRadius = 2400.0f;
-	DioramaAmbientFillLight->SetLightColor(FLinearColor(0.45f, 0.56f, 0.82f));
+	DioramaAmbientFillLight->SetRelativeLocation(FVector(120.0, 0.0, 260.0));
+	DioramaAmbientFillLight->SetIntensityUnits(ELightUnits::Lumens);
+	DioramaAmbientFillLight->bUseInverseSquaredFalloff = true;
+	DioramaAmbientFillLight->SetSourceRadius(32.0f);
+	DioramaAmbientFillLight->SetSoftSourceRadius(48.0f);
+	DioramaAmbientFillLight->Intensity = 95.0f;
+	DioramaAmbientFillLight->AttenuationRadius = 680.0f;
+	DioramaAmbientFillLight->SetLightColor(FLinearColor(0.42f, 0.56f, 0.85f));
 	DioramaAmbientFillLight->CastShadows = false;
 
 	ShowcaseFloorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShowcaseFloorMesh"));
@@ -129,6 +142,11 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 	};
 
 	InitProxyMesh(ShowcaseFloorMesh.Get(), PlaneMesh, FVector(18.0, 18.0, 1.0), FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor(0.18f, 0.21f, 0.28f), 0.72f);
+	if (ShowcaseFloorMesh)
+	{
+		ShowcaseFloorMesh->SetVisibility(false);
+		ShowcaseFloorMesh->SetHiddenInGame(true);
+	}
 	InitProxyMesh(ExploderShowcaseProxy.Get(), CylinderMesh, FVector(0.95, 0.95, 1.35), FName(TEXT("Exploder_Cell0_D")), FName(TEXT("Exploder_Cell0_N")), FLinearColor(0.95f, 0.38f, 0.08f), 0.45f);
 	InitProxyMesh(FastThrowerShowcaseProxy.Get(), CylinderMesh, FVector(0.70, 0.70, 1.45), FName(TEXT("Thrower_Cell0_D")), FName(TEXT("Thrower_Cell0_N")), FLinearColor(0.25f, 0.82f, 0.95f), 0.40f);
 	InitProxyMesh(PhantasmMirrorShowcaseProxy.Get(), CubeMesh, FVector(0.25, 2.20, 2.40), FName(TEXT("Mirror_Intact_D")), FName(TEXT("Mirror_Intact_N")), FLinearColor(0.55f, 0.90f, 1.0f), 0.10f);
