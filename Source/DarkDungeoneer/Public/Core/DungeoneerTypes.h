@@ -24,6 +24,35 @@ enum class EDungeoneerSensoryPerk : uint8
 	ScentThermal = 2 UMETA(DisplayName = "Scent / Thermal Sense")
 };
 
+UENUM(BlueprintType)
+enum class EDungeoneerRelicId : uint8
+{
+	None                = 0 UMETA(DisplayName = "None"),
+	SunGlassLens        = 1 UMETA(DisplayName = "Sun-Glass Lens"),
+	ChronoWardBoots     = 2 UMETA(DisplayName = "Chrono-Ward Boots"),
+	EchoTunedBlade      = 3 UMETA(DisplayName = "Echo-Tuned Blade"),
+	SolarFlashlightCore = 4 UMETA(DisplayName = "Solar Flashlight Core"),
+	VampireWick         = 5 UMETA(DisplayName = "Vampire Wick")
+};
+
+UENUM(BlueprintType)
+enum class EDungeoneerConsumableId : uint8
+{
+	None            = 0 UMETA(DisplayName = "None"),
+	LanternOilPhial = 1 UMETA(DisplayName = "Phial of Lantern Oil"),
+	AntidoteDraught = 2 UMETA(DisplayName = "Antidote Draught")
+};
+
+UENUM(BlueprintType)
+enum class EDungeoneerFloatingTextKind : uint8
+{
+	Damage     = 0,
+	CritDamage = 1,
+	Gold       = 2,
+	Relic      = 3,
+	Status     = 4
+};
+
 namespace DungeoneerMath
 {
 	inline constexpr float INV_SQRT_2 = 0.70710678f;

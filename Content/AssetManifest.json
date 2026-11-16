@@ -829,6 +829,95 @@
           "Bytes": 9519
         }
       }
+    },
+    "Rig_ZombieMirrorStalker_Raw": {
+      "Timestamp": "2026-11-16T01:43:37.749159+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/ZombieMirrorStalker/Rig_ZombieMirrorStalker_Raw_D.png": {
+          "SHA256": "52501de00691d461ad3f9416b090dc05f3160e84d84a67cf393e8e52fe0a9069",
+          "Bytes": 8144
+        },
+        "Art/Rigs/ZombieMirrorStalker/Rig_ZombieMirrorStalker_Raw_N.png": {
+          "SHA256": "53c66459e7e0bff6e43e695b0df6de4053b0ee49e06fb25e165329d3a365745c",
+          "Bytes": 33232
+        },
+        "Art/Rigs/ZombieMirrorStalker/Rig_ZombieMirrorStalker_Raw_E.png": {
+          "SHA256": "447bf8e62f1c95e72c5ab5bfaca1a373978b4aa2d451250e9e3fc6cd679e518e",
+          "Bytes": 2344
+        },
+        "Art/Rigs/ZombieMirrorStalker/Rig_ZombieMirrorStalker_Raw_ORM.png": {
+          "SHA256": "2063d5635cb085aec6f8b7e228a45c4bfb55ffe256b8ca72ffa69f898ca752cb",
+          "Bytes": 7861
+        },
+        "Art/Rigs/ZombieMirrorStalker/AtlasMetadata.json": {
+          "SHA256": "f27900231d8e9f76681947d14f64d16a43c4deffbf7f068d88d3a208691e5207",
+          "Bytes": 9139
+        },
+        "Art/Rigs/ZombieMirrorStalker/rig_sockets.json": {
+          "SHA256": "7ff0b64083d799ba6d571fce63fe6ce199ec6346cc8f72c8c9a7843ab9ea7e99",
+          "Bytes": 1075
+        }
+      }
+    },
+    "Rig_BossGuardian_Raw": {
+      "Timestamp": "2026-11-16T01:43:38.624712+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/BossGuardian/Rig_BossGuardian_Raw_D.png": {
+          "SHA256": "2d9247a216a0f03c429cd547f09db01313c820944ded9bf236e6f70290da5386",
+          "Bytes": 8255
+        },
+        "Art/Rigs/BossGuardian/Rig_BossGuardian_Raw_N.png": {
+          "SHA256": "27bd953b42fdfa8bd7f9044c1e903dd1dd790be44bdffbd062c81b6cfa5e5edb",
+          "Bytes": 35090
+        },
+        "Art/Rigs/BossGuardian/Rig_BossGuardian_Raw_E.png": {
+          "SHA256": "bcb22706555c0178777693abf983c060e27877aa0a7900a9d83ae5714f8e69ed",
+          "Bytes": 2814
+        },
+        "Art/Rigs/BossGuardian/Rig_BossGuardian_Raw_ORM.png": {
+          "SHA256": "3fbad3dbd53e2a08638f8a4e7f455ca9a6d589105f4bf42c8a81f12191d4829c",
+          "Bytes": 7973
+        },
+        "Art/Rigs/BossGuardian/AtlasMetadata.json": {
+          "SHA256": "6b95b5c07bb63a9310a335404b0eaff4af44164d9eca26cff70a2e004934a621",
+          "Bytes": 9092
+        },
+        "Art/Rigs/BossGuardian/rig_sockets.json": {
+          "SHA256": "2ae726ed562a562aea258abb376f1b5f306411f99be0e60df554343f17a38d23",
+          "Bytes": 1068
+        }
+      }
+    },
+    "PROP_Resting_Ground_Sanctuary_4x4": {
+      "Timestamp": "2026-11-16T01:43:40.260779+00:00",
+      "Provenance": "Imported-Dungeon-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Dungeon/PROP_Resting_Ground_Sanctuary_4x4/PROP_Resting_Ground_Sanctuary_4x4_D.png": {
+          "SHA256": "a8a93bed23f130dfb901122b19b0da8da0157561d7ee5254e85ed59f9a5b2430",
+          "Bytes": 5836
+        },
+        "Art/Dungeon/PROP_Resting_Ground_Sanctuary_4x4/PROP_Resting_Ground_Sanctuary_4x4_N.png": {
+          "SHA256": "dc16aefad35607c2c1ac3d1bd94e00e3fe07d07e97767715cf06a9b190d8ddcf",
+          "Bytes": 20025
+        },
+        "Art/Dungeon/PROP_Resting_Ground_Sanctuary_4x4/PROP_Resting_Ground_Sanctuary_4x4_ORM.png": {
+          "SHA256": "749dabe13b33e842d683e5510362618eb6417d0cba0e5ed4b117a5ee3db6c03e",
+          "Bytes": 5857
+        },
+        "Art/Dungeon/PROP_Resting_Ground_Sanctuary_4x4/PROP_Resting_Ground_Sanctuary_4x4_E.png": {
+          "SHA256": "7e609ed15a985bbdd13aceb304b1480c66222b2f84320788aa168f6c9b9743e5",
+          "Bytes": 2703
+        },
+        "Art/Dungeon/PROP_Resting_Ground_Sanctuary_4x4/AtlasMetadata.json": {
+          "SHA256": "aa2e194930418ca41a425b9129e17215c73bb002704b0561898f739820281f26",
+          "Bytes": 9500
+        }
+      }
     }
   },
   "assets": [

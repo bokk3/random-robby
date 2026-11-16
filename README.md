@@ -4,7 +4,7 @@ A top-down **2.5D cooperative dark dungeon crawler** built in **Unreal Engine 5.
 
 Players navigate pitch-black procedural multi-floor dungeons armed with a directional flashlight cone, sensory upgrades, 8-compass 2.5D sprite animation, and mirror-bouncing light mechanics while surviving proximity-exploding and elemental-throwing undead.
 
-> **Current Version:** `1.2.1` (Living Dungeon Ecosystem + 2.5D Visual Overhaul Release)
+> **Current Version:** `1.3.0` (Tactical Depth, Relics, Crypt Guardians & Gothic UI Release)
 
 ---
 

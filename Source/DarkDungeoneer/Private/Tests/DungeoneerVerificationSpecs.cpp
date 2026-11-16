@@ -3,15 +3,19 @@
 #include "Core/DungeoneerGameMode.h"
 #include "Core/DungeoneerMovementComponent.h"
 #include "Core/DungeoneerGameState.h"
+#include "AI/BossGuardianActor.h"
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieExploder.h"
+#include "AI/ZombieMirrorStalker.h"
 #include "AI/ZombieBase.h"
+#include "Dungeon/DungeonEncounterActors.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
 #include "Dungeon/MirrorMazeActors.h"
 #include "Rendering/DungeonAtmosphereActor.h"
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
+#include "Rendering/SensoryPerkComponent.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -377,7 +381,7 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 	if (Bootstrap)
 	{
 		const int32 RigCount = Bootstrap->ImportAllRigTexturesFromDisk();
-		TestEqual(TEXT("All 18 2.5D rig textures imported"), RigCount, 18);
+		TestEqual(TEXT("All 24 2.5D rig textures imported (8 rigs x 3 maps)"), RigCount, 24);
 
 		const int32 DungeonTexCount = Bootstrap->ImportAllDungeonTexturesFromDisk();
 		TestTrue(TEXT("All 2.5D dungeon atlas textures imported (>= 20 including Doors & Transitions)"), DungeonTexCount >= 20);
@@ -385,9 +389,9 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestNotNull(TEXT("PROP_Doors_And_Level_Transitions_4x4_D imported"), Bootstrap->GetLoadedDungeonTexture(FName(TEXT("PROP_Doors_And_Level_Transitions_4x4_D"))));
 
 		const int32 ExtractedCells = Bootstrap->ExtractDefaultSingleCellTiles();
-		TestTrue(TEXT("All 4x4 dungeon atlas cells, Doors/Sanctuary fallbacks & 16-cell rig walk frames extracted (>= 250)"), ExtractedCells >= 250);
+		TestTrue(TEXT("All 4x4 dungeon atlas cells, Doors/Sanctuary sheets & 16-cell rig walk frames extracted (>= 300)"), ExtractedCells >= 300);
 
-		static constexpr const TCHAR* WalkRigPrefixes[3] = { TEXT("Hero"), TEXT("Exploder"), TEXT("Thrower") };
+		static constexpr const TCHAR* WalkRigPrefixes[5] = { TEXT("Hero"), TEXT("Exploder"), TEXT("Thrower"), TEXT("MirrorStalker"), TEXT("BossGuardian") };
 		for (const TCHAR* Prefix : WalkRigPrefixes)
 		{
 			for (int32 Row = 0; Row < 4; ++Row)
@@ -1577,6 +1581,232 @@ bool FDungeoneerAcousticSurfaceLayersTest::RunTest(const FString& Parameters)
 	const float SporeFogHz = UDungeonAcousticSubsystem::ComputeOcclusionLowPassHz(0.0f, 0.72f);
 	TestTrue(TEXT("Occlusion LPF monotonically decreases with obstruction and dense fog"),
 		(ClearHz > PartialHz) && (PartialHz > FullOccHz) && (ClearHz > SporeFogHz));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerRelicsConsumablesAndSanctuaryPerksTest,
+	"DarkDungeoneer.Gameplay.RelicsConsumablesAndSanctuaryPerks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerRelicsConsumablesAndSanctuaryPerksTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Relics & Sanctuary test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(100.0, 100.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned Hero"), Hero);
+	if (Hero) { Hero->DispatchBeginPlay(); }
+
+	UDungeoneerInventoryComponent* Inv = Hero->GetInventoryComponent();
+	UDungeoneerMovementComponent* MoveComp = Hero->GetDungeoneerMovement();
+	USensoryPerkComponent* Perks = Hero->GetSensoryPerkComponent();
+	TestNotNull(TEXT("Inventory present"), Inv);
+	TestNotNull(TEXT("Movement present"), MoveComp);
+	TestNotNull(TEXT("SensoryPerk present"), Perks);
+
+	// 1. ChronoWardBoots boost wading multiplier from 0.88x -> 0.96x and halve ChronoSlow
+	MoveComp->SetWadingInStream(true);
+	const float BaseSpeed = MoveComp->GetBaseWalkSpeedConfig();
+	TestTrue(TEXT("Baseline wading speed is 0.88x"), FMath::IsNearlyEqual(MoveComp->GetMaxSpeed(), BaseSpeed * 0.88f, 0.5f));
+	TestTrue(TEXT("Granted ChronoWardBoots relic"), Inv->AuthorityGrantRelic(EDungeoneerRelicId::ChronoWardBoots));
+	TestTrue(TEXT("ChronoWardBoots improves wading speed to 0.96x"), FMath::IsNearlyEqual(MoveComp->GetMaxSpeed(), BaseSpeed * 0.96f, 0.5f));
+	MoveComp->SetChronoSlowRatio(0.40f);
+	TestTrue(TEXT("ChronoWardBoots halves ChronoSlow intake (0.40 -> 0.20)"), FMath::IsNearlyEqual(MoveComp->GetChronoSlowRatio(), 0.20f, 1e-3f));
+
+	// 2. Quick consumables (LanternOilPhial & AntidoteDraught)
+	Hero->ApplyDungeoneerDamage(40.0f, nullptr);
+	const float DamagedHP = Hero->GetCurrentHealth();
+	TestTrue(TEXT("Hero took 40 damage"), DamagedHP < Hero->GetMaxHealth());
+	TestTrue(TEXT("AntidoteDraught heals +35 and clears ChronoSlow"), Hero->TriggerQuickConsumable(EDungeoneerConsumableId::AntidoteDraught));
+	TestTrue(TEXT("Antidote cleared ChronoSlow to 0.0"), FMath::IsNearlyEqual(MoveComp->GetChronoSlowRatio(), 0.0f, 1e-4f));
+	TestTrue(TEXT("Hero HP restored after Antidote"), Hero->GetCurrentHealth() > DamagedHP);
+
+	// 3. Loot Pickup collection grants relic & gold
+	ADungeoneerLootPickupActor* Pickup = TestWorld->SpawnActor<ADungeoneerLootPickupActor>(FVector(120.0, 100.0, 44.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned LootPickup"), Pickup);
+	Pickup->DispatchBeginPlay();
+	Pickup->ConfigurePickup(EDungeoneerLootDropKind::Relic, 0, EDungeoneerConsumableId::None, EDungeoneerRelicId::SunGlassLens);
+	TestTrue(TEXT("Collected SunGlassLens pickup"), Pickup->CollectByPlayer(Hero));
+	TestTrue(TEXT("Inventory owns SunGlassLens"), Inv->HasRelic(EDungeoneerRelicId::SunGlassLens));
+
+	// 4. Sanctuary Altar upgrade raises lowest Sensory Perk for 90g
+	ARestingGroundActor* Sanctuary = TestWorld->SpawnActor<ARestingGroundActor>(FVector(400.0, 100.0, 0.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned RestingGround Sanctuary"), Sanctuary);
+	Sanctuary->DispatchBeginPlay();
+	const int32 GoldBefore = Inv->GetGoldBalance();
+	const int32 DVBefore = Perks->GetPerkLevel(EDungeoneerSensoryPerk::DarkVision);
+	TestTrue(TEXT("Sensory Altar upgrade succeeded"), Sanctuary->TriggerSensoryAltarUpgrade(Hero, 90));
+	TestEqual(TEXT("Gold deducted cleanly (-90g)"), Inv->GetGoldBalance(), GoldBefore - 90);
+	TestEqual(TEXT("DarkVision upgraded by +1 tier"), Perks->GetPerkLevel(EDungeoneerSensoryPerk::DarkVision), DVBefore + 1);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerMirrorStalkerAndBossTest,
+	"DarkDungeoneer.AI.MirrorStalkerLightRevealAndBossPhases",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerMirrorStalkerAndBossTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for MirrorStalker & Boss test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Hero) { Hero->DispatchBeginPlay(); }
+
+	// 1. Mirror Stalker starts cloaked behind player cone, reveals when aimed directly inside flashlight cone
+	AZombieMirrorStalker* Stalker = TestWorld->SpawnActor<AZombieMirrorStalker>(FVector(320.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned MirrorStalker"), Stalker);
+	Stalker->DispatchBeginPlay();
+
+	Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(-1.0, 0.0)); // aim West away from East stalker
+	Hero->Tick(0.25f);
+	Stalker->Tick(0.05f);
+	TestFalse(TEXT("MirrorStalker stays cloaked outside flashlight cone"), Stalker->IsRevealedByLight());
+
+	Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(1.0, 0.0)); // aim East directly at stalker
+	Hero->Tick(0.35f);
+	Stalker->Tick(0.05f);
+	TestTrue(TEXT("MirrorStalker reveals when pierced by flashlight cone"), Stalker->IsRevealedByLight());
+
+	// 2. Boss Guardian locks Terminal Vault, transitions Phase 1 -> 2 at <= 55% HP, and unlocks Vault + grants SolarCore on death
+	AMajorLootVaultActor* Vault = TestWorld->SpawnActor<AMajorLootVaultActor>(FVector(1200.0, 0.0, 0.0), FRotator::ZeroRotator);
+	ABossGuardianActor* Boss = TestWorld->SpawnActor<ABossGuardianActor>(FVector(1000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned Vault"), Vault);
+	TestNotNull(TEXT("Spawned BossGuardian"), Boss);
+	Vault->DispatchBeginPlay();
+	Boss->DispatchBeginPlay();
+	Boss->SetLinkedVault(Vault);
+
+	TestTrue(TEXT("Boss locks Vault while alive"), Vault->IsLockedByBossGuardian());
+	TestEqual(TEXT("Boss starts in Phase 1"), Boss->GetBossPhase(), 1);
+	Boss->ApplyZombieDamage(Boss->GetMaxHealth() * 0.50f, Hero); // drops to 50% HP (< 55%)
+	Boss->Tick(0.05f);
+	TestEqual(TEXT("Boss enters Phase 2 below 55% HP"), Boss->GetBossPhase(), 2);
+
+	Boss->ExecuteRadialBossSlam();
+	Boss->ApplyZombieDamage(Boss->GetMaxHealth(), Hero);
+	TestFalse(TEXT("Boss dies cleanly"), Boss->IsZombieAlive());
+	TestFalse(TEXT("Boss death unseals Terminal Vault"), Vault->IsLockedByBossGuardian());
+	TestTrue(TEXT("Slaying Boss grants SolarFlashlightCore relic"),
+		Hero->GetInventoryComponent()->HasRelic(EDungeoneerRelicId::SolarFlashlightCore));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerComboFlareChainTest,
+	"DarkDungeoneer.Gameplay.ComboChargedFlareAndChainReactions",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerComboFlareChainTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for Combo/Flare test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* Dummy = TestWorld->SpawnActor<AZombieExploder>(FVector(140.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* Adjacent = TestWorld->SpawnActor<AZombieExploder>(FVector(260.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Hero) { Hero->DispatchBeginPlay(); }
+	if (Dummy) { Dummy->DispatchBeginPlay(); }
+	if (Adjacent) { Adjacent->DispatchBeginPlay(); }
+
+	Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(1.0, 0.0));
+	Hero->Tick(0.20f);
+
+	// Test ChargedFlare before Combo kills Dummy (avoiding +8% kill siphon skewing the 25% drain assertion)
+	const float BatteryBeforeFlare = Hero->GetFlashlightBattery();
+	TestTrue(TEXT("ChargedFlare fires cleanly"), Hero->TriggerChargedFlare());
+	TestTrue(TEXT("ChargedFlare drains 25% battery"), FMath::IsNearlyEqual(Hero->GetFlashlightBattery(), BatteryBeforeFlare - 25.0f, 1e-2f));
+	TestTrue(TEXT("ChargedFlare activates flare flash state"), Hero->IsFlareFlashActive());
+	for (int32 f = 0; f < 12; ++f) { Hero->Tick(0.05f); } // clear flare duration
+
+	TestTrue(TEXT("Combo Step 0 triggers"), Hero->TriggerPrimaryAttack());
+	TestEqual(TEXT("ComboStepIndex is 0"), Hero->GetComboStepIndex(), 0);
+	for (int32 f = 0; f < 10; ++f) { Hero->Tick(0.04f); } // finish cooldown within combo buffer
+
+	TestTrue(TEXT("Combo Step 1 chains inside buffer"), Hero->TriggerPrimaryAttack());
+	TestEqual(TEXT("ComboStepIndex advanced to 1"), Hero->GetComboStepIndex(), 1);
+	for (int32 f = 0; f < 10; ++f) { Hero->Tick(0.04f); }
+
+	TestTrue(TEXT("Combo Step 2 chains inside buffer"), Hero->TriggerPrimaryAttack());
+	TestEqual(TEXT("ComboStepIndex advanced to 2"), Hero->GetComboStepIndex(), 2);
+
+	// Chain detonation check: ApplyRadialDetonationDamage near dormant Adjacent exploder ignites its fuse
+	if (UZombieSpatialSubsystem* SpatialSys = TestWorld->GetSubsystem<UZombieSpatialSubsystem>())
+	{
+		SpatialSys->ApplyRadialDetonationDamage(FVector(160.0, 0.0, 95.0), 320.0f, 30.0f, Dummy);
+		TestTrue(TEXT("Chain radial detonation ignites adjacent Exploder fuse"), Adjacent->IsFuseIgnited());
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerMinimapPopupsDioramaTest,
+	"DarkDungeoneer.UI.MinimapPopupsAndCutoutDiorama",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerMinimapPopupsDioramaTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless UWorld for UI/Diorama test"), TestWorld);
+	if (!TestWorld) { return false; }
+
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	// 1. Cutout Diorama verification (static meshes use Plane.Plane, zero Cylinders/Cubes)
+	AMenuDioramaStageActor* Stage = TestWorld->SpawnActor<AMenuDioramaStageActor>();
+	TestNotNull(TEXT("Spawned MenuDioramaStageActor"), Stage);
+	Stage->DispatchBeginPlay();
+	TestTrue(TEXT("ExploderShowcaseProxy uses Plane cutout mesh"),
+		Stage->GetExploderShowcaseProxy()->GetStaticMesh()->GetName().Contains(TEXT("Plane")));
+	TestTrue(TEXT("PhantasmMirrorShowcaseProxy uses Plane cutout mesh"),
+		Stage->GetPhantasmMirrorShowcaseProxy()->GetStaticMesh()->GetName().Contains(TEXT("Plane")));
+
+	// 2. Minimap sync & Floating Combat Popups
+	UDungeonGeneratorSubsystem* GenSub = TestWorld->GetSubsystem<UDungeonGeneratorSubsystem>();
+	GenSub->GenerateFloorGraph(1, 7744);
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	Hero->DispatchBeginPlay();
+
+	UDungeoneerPlayerHUDWidget* HUD = CreateWidget<UDungeoneerPlayerHUDWidget>(TestWorld);
+	TestNotNull(TEXT("Created HUD widget"), HUD);
+	HUD->RefreshHUDFromCharacter(Hero);
+	TestTrue(TEXT("Minimap synced 12 DAG rooms from FloorGraph"), HUD->GetMinimapRoomCount() >= 10);
+	TestFalse(TEXT("Boss bar collapsed when no boss is spawned"), HUD->IsBossBarVisible());
+
+	// Verify 32-slot floating popup ring buffer wraps cleanly without allocating
+	for (int32 i = 0; i < 40; ++i)
+	{
+		Hero->PushFloatingCombatPopup(FVector(0.0, 0.0, 80.0), FString::Printf(TEXT("-55_%d"), i), EDungeoneerFloatingTextKind::Damage);
+	}
+	TestTrue(TEXT("Popup ring slot 0 active cleanly after wrap"), Hero->GetFloatingPopupAt(0).bActive);
+
+	ABossGuardianActor* Boss = TestWorld->SpawnActor<ABossGuardianActor>(FVector(600.0, 0.0, 95.0), FRotator::ZeroRotator);
+	Boss->DispatchBeginPlay();
+	HUD->RefreshHUDFromCharacter(Hero);
+	TestTrue(TEXT("Boss bar automatically visible when BossGuardian is active"), HUD->IsBossBarVisible());
 
 	TestWorld->DestroyWorld(false);
 	return true;

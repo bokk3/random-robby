@@ -240,13 +240,16 @@ void ADungeoneerGameMode::Tick(float DeltaSeconds)
 			bPendingAutoShot = false;
 			if (UWorld* World = GetWorld())
 			{
+				const TCHAR* ShotCmd = FParse::Param(FCommandLine::Get(), TEXT("CaptureUI"))
+					? TEXT("Shot showui")
+					: TEXT("HighResShot 1280x720");
 				if (UGameViewportClient* GVC = World->GetGameViewport())
 				{
-					GVC->ConsoleCommand(TEXT("HighResShot 1280x720"));
+					GVC->ConsoleCommand(ShotCmd);
 				}
 				else if (GEngine)
 				{
-					GEngine->Exec(World, TEXT("HighResShot 1280x720"));
+					GEngine->Exec(World, ShotCmd);
 				}
 			}
 			if (FParse::Param(FCommandLine::Get(), TEXT("QuitAfterShot")))

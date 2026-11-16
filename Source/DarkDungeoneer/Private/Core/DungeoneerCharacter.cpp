@@ -14,6 +14,7 @@
 #include "Dungeon/DungeoneerTileMapInstancer.h"
 #include "Dungeon/MirrorLightBounceComponent.h"
 #include "Ecosystem/DungeonEcosystemTypes.h"
+#include "Ecosystem/DungeonFloraManagerComponent.h"
 #include "Ecosystem/DungeonWaterSubsystem.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
@@ -492,9 +493,19 @@ bool ADungeoneerCharacter::TriggerPrimaryAttack()
 		? MoveComp->GetAimOctant()
 		: ReplicatedAimOctant;
 
+	if (ComboResetRemaining > 0.0f)
+	{
+		ComboStepIndex = (ComboStepIndex + 1) % 3;
+	}
+	else
+	{
+		ComboStepIndex = 0;
+	}
+	ComboResetRemaining = 0.65f;
+
 	CombatActionState = EDungeoneerCombatActionState::LanternSlash;
 	AttackSwingElapsed = 0.0f;
-	AttackCooldownRemaining = PrimaryAttackCooldown;
+	AttackCooldownRemaining = (ComboStepIndex == 2) ? PrimaryAttackCooldown : (PrimaryAttackCooldown * 0.78f);
 	bAttackDamageApplied = false;
 	LastAttackHitsCount = 0;
 
@@ -508,6 +519,106 @@ bool ADungeoneerCharacter::TriggerPrimaryAttack()
 	}
 
 	return true;
+}
+
+bool ADungeoneerCharacter::TriggerChargedFlare()
+{
+	if (DownedRespawnRemaining > 0.0f ||
+		HitStaggerRemaining > 0.0f ||
+		FlareFlashRemaining > 0.0f ||
+		FlashlightBattery < 25.0f)
+	{
+		return false;
+	}
+
+	FlashlightBattery = FMath::Max(0.0f, FlashlightBattery - 25.0f);
+	FlareFlashRemaining = 0.40f;
+	CombatActionState = EDungeoneerCombatActionState::ChargedFlare;
+
+	if (UWorld* World = GetWorld())
+	{
+		const FVector Origin = GetActorLocation();
+		const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
+		const float SolarMult = (InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::SolarFlashlightCore)) ? 1.25f : 1.0f;
+
+		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+		{
+			SpatialSys->ApplyMeleeArcDamage(Origin, ForwardXY, 420.0f, -1.0f, 45.0f * SolarMult, this, 480.0f);
+		}
+
+		if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+		{
+			if (ADungeoneerTileMapInstancer* Instancer = GM->GetActiveTileMapInstancer())
+			{
+				Instancer->EvaluateEntityStepOnBreakables(Origin, 2.0f, 380.0f);
+				if (UDungeonFloraManagerComponent* Flora = Instancer->GetFloraManagerComponent())
+				{
+					Flora->IgnitePrismLiliesInRadius(Origin, 680.0f, 15.0f);
+				}
+			}
+		}
+
+		if (UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+		{
+			SensorySub->BroadcastNoiseEvent(Origin, 2.0f, 1100.0f, false);
+		}
+
+		PushFloatingCombatPopup(Origin + FVector(0.0, 0.0, 95.0), TEXT("SOLAR FLARE!"), EDungeoneerFloatingTextKind::Relic);
+		TriggerCombatCameraImpulse(-ForwardXY, 20.0f, 0.035f);
+	}
+
+	return true;
+}
+
+bool ADungeoneerCharacter::TriggerQuickConsumable(EDungeoneerConsumableId ConsumableId)
+{
+	if (!InventoryComponent || DownedRespawnRemaining > 0.0f)
+	{
+		return false;
+	}
+
+	if (!InventoryComponent->AuthorityConsumeQuickItem(ConsumableId))
+	{
+		return false;
+	}
+
+	const FVector MyLoc = GetActorLocation();
+	if (ConsumableId == EDungeoneerConsumableId::LanternOilPhial)
+	{
+		FlashlightBattery = FMath::Clamp(FlashlightBattery + 45.0f, 0.0f, 100.0f);
+		PushFloatingCombatPopup(MyLoc + FVector(0.0, 0.0, 90.0), TEXT("+45% OIL"), EDungeoneerFloatingTextKind::Gold);
+		return true;
+	}
+	if (ConsumableId == EDungeoneerConsumableId::AntidoteDraught)
+	{
+		CurrentHealth = FMath::Clamp(CurrentHealth + 35.0f, 0.0f, MaxHealth);
+		if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+		{
+			MoveComp->SetChronoSlowRatio(0.0f);
+		}
+		PushFloatingCombatPopup(MyLoc + FVector(0.0, 0.0, 90.0), TEXT("CLEANSED +35"), EDungeoneerFloatingTextKind::Relic);
+		return true;
+	}
+	return false;
+}
+
+void ADungeoneerCharacter::PushFloatingCombatPopup(const FVector& WorldLoc, const FString& Text, EDungeoneerFloatingTextKind Kind) noexcept
+{
+	FDungeoneerFloatingPopup& Slot = FloatingPopups[FloatingPopupCursor % MaxFloatingPopups];
+	FloatingPopupCursor = (FloatingPopupCursor + 1) % MaxFloatingPopups;
+	Slot.WorldLocation = WorldLoc;
+	Slot.Text = Text;
+	Slot.Kind = Kind;
+	Slot.AgeSeconds = 0.0f;
+	Slot.LifetimeSeconds = 0.90f;
+	Slot.bActive = true;
+}
+
+void ADungeoneerCharacter::TriggerCombatCameraImpulse(const FVector& ImpulseDirXY, const float StrengthUU, const float HitStopSec) noexcept
+{
+	const FVector Dir = ImpulseDirXY.GetSafeNormal2D();
+	CameraImpulseVelocity += FVector(Dir.X * StrengthUU * 12.0, Dir.Y * StrengthUU * 12.0, -StrengthUU * 4.0);
+	HitStopRemaining = FMath::Max(HitStopRemaining, HitStopSec);
 }
 
 bool ADungeoneerCharacter::TriggerDodgeDash()
@@ -576,6 +687,10 @@ void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBatter
 	if (InventoryComponent && BonusGold > 0)
 	{
 		InventoryComponent->AuthorityAdjustGold(BonusGold);
+		PushFloatingCombatPopup(
+			GetActorLocation() + FVector(0.0, 0.0, 86.0),
+			FString::Printf(TEXT("+%dg"), BonusGold),
+			EDungeoneerFloatingTextKind::Gold);
 	}
 	if (BonusBattery > 0.0f)
 	{
@@ -595,17 +710,55 @@ void ADungeoneerCharacter::ExecutePrimaryAttackAuthority()
 	const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
 	const FVector Origin = GetActorLocation();
 
+	static constexpr float ComboDamageMult[3] = { 1.0f, 1.15f, 1.45f };
+	static constexpr float ComboKnockback[3]  = { 360.0f, 410.0f, 540.0f };
+	const int32 Step = FMath::Clamp(ComboStepIndex, 0, 2);
+
+	float EffectiveDamage = PrimaryAttackDamage * ComboDamageMult[Step];
+	if (InventoryComponent)
+	{
+		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SolarFlashlightCore))
+		{
+			EffectiveDamage *= 1.20f;
+		}
+		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SunGlassLens))
+		{
+			if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+			{
+				if (const ADungeoneerTileMapInstancer* Instancer = GM->GetActiveTileMapInstancer())
+				{
+					if (const UDungeonFloraManagerComponent* Flora = Instancer->GetFloraManagerComponent())
+					{
+						if (Flora->IsPointInBloomRadius(Origin, 280.0f))
+						{
+							EffectiveDamage *= 1.35f;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 	{
 		// Wide 130-degree frontal cleave cone (cos(65 deg) ~= 0.4226)
 		LastAttackHitsCount = SpatialSys->ApplyMeleeArcDamage(
 			Origin,
 			ForwardXY,
-			PrimaryAttackRangeUU,
+			PrimaryAttackRangeUU + (Step == 2 ? 32.0f : 0.0f),
 			0.42f,
-			PrimaryAttackDamage,
+			EffectiveDamage,
 			this,
-			380.0f);
+			ComboKnockback[Step]);
+	}
+
+	if (LastAttackHitsCount > 0)
+	{
+		TriggerCombatCameraImpulse(ForwardXY, Step == 2 ? 22.0f : 12.0f, 0.035f);
+		if (InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::VampireWick))
+		{
+			CurrentHealth = FMath::Clamp(CurrentHealth + 6.0f * static_cast<float>(LastAttackHitsCount), 0.0f, MaxHealth);
+		}
 	}
 
 	if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
@@ -618,7 +771,10 @@ void ADungeoneerCharacter::ExecutePrimaryAttackAuthority()
 
 	if (UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
 	{
-		SensorySub->BroadcastNoiseEvent(Origin, LastAttackHitsCount > 0 ? 0.90f : 0.55f, 650.0f, false);
+		const bool bEchoBlade = InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::EchoTunedBlade);
+		const float NoiseLoudness = bEchoBlade ? 1.85f : (LastAttackHitsCount > 0 ? 0.90f : 0.55f);
+		const float NoiseRadius = bEchoBlade ? 1350.0f : 650.0f;
+		SensorySub->BroadcastNoiseEvent(Origin, NoiseLoudness, NoiseRadius, false);
 	}
 
 	OnCombatAttackPerformed.Broadcast(ActiveAttackOctant, LastAttackHitsCount);
@@ -659,6 +815,10 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 	double BestVaultDistSq = MaxInteractDistSq;
 	AVendorActor* NearestVendor = nullptr;
 	double BestVendorDistSq = MaxInteractDistSq;
+	ARestingGroundActor* NearestSanctuary = nullptr;
+	double BestSanctuaryDistSq = MaxInteractDistSq;
+	ADungeoneerLootPickupActor* NearestPickup = nullptr;
+	double BestPickupDistSq = MaxInteractDistSq;
 
 	const int32 EncounterCount = Instancer->GetSpawnedEncounterCount();
 	for (int32 i = 0; i < EncounterCount; ++i)
@@ -674,7 +834,15 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 			continue;
 		}
 
-		if (AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
+		if (ADungeoneerLootPickupActor* Pickup = Cast<ADungeoneerLootPickupActor>(Encounter))
+		{
+			if (!Pickup->IsCollected() && DistSq2D < BestPickupDistSq)
+			{
+				BestPickupDistSq = DistSq2D;
+				NearestPickup = Pickup;
+			}
+		}
+		else if (AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
 		{
 			if (DistSq2D < BestVaultDistSq)
 			{
@@ -690,10 +858,29 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 				NearestVendor = Vendor;
 			}
 		}
+		else if (ARestingGroundActor* Sanctuary = Cast<ARestingGroundActor>(Encounter))
+		{
+			if (DistSq2D < BestSanctuaryDistSq)
+			{
+				BestSanctuaryDistSq = DistSq2D;
+				NearestSanctuary = Sanctuary;
+			}
+		}
+	}
+
+	if (NearestPickup && NearestPickup->CollectByPlayer(this))
+	{
+		RefreshNearbyInteractCandidate();
+		return;
 	}
 
 	if (NearestVault)
 	{
+		if (NearestVault->IsLockedByBossGuardian())
+		{
+			PushFloatingCombatPopup(MyLoc + FVector(0.0, 0.0, 90.0), TEXT("VAULT SEALED BY COLOSSUS"), EDungeoneerFloatingTextKind::Status);
+			return;
+		}
 		if (!NearestVault->IsVaultUnlocked())
 		{
 			int32 FloorSeed = 424242 + GM->GetCurrentFloorIndex() * 97;
@@ -711,6 +898,7 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 					InventoryComponent->AuthorityAddItem(Loot[0].ItemGuid, Loot[0].ItemId, 1);
 				}
 			}
+			PushFloatingCombatPopup(MyLoc + FVector(0.0, 0.0, 96.0), TEXT("VAULT OPENED +120g"), EDungeoneerFloatingTextKind::Gold);
 			RestoreAtRestingGround(25.0f, 30.0f);
 			RefreshNearbyInteractCandidate();
 		}
@@ -749,11 +937,19 @@ void ADungeoneerCharacter::ExecuteInteractAuthority()
 							SensoryPerkComponent->UpgradePerk(EDungeoneerSensoryPerk::ScentThermal);
 						}
 					}
+					PushFloatingCombatPopup(MyLoc + FVector(0.0, 0.0, 90.0), TEXT("SUPPLY PURCHASED"), EDungeoneerFloatingTextKind::Relic);
 					RestoreAtRestingGround(25.0f, 25.0f);
 					break;
 				}
 			}
 		}
+		return;
+	}
+
+	if (NearestSanctuary && NearestSanctuary->TriggerSensoryAltarUpgrade(this, 90))
+	{
+		RestoreAtRestingGround(30.0f, 35.0f);
+		RefreshNearbyInteractCandidate();
 	}
 }
 
@@ -789,6 +985,39 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 	AttackCooldownRemaining = FMath::Max(0.0f, AttackCooldownRemaining - DeltaSeconds);
 	DodgeCooldownRemaining = FMath::Max(0.0f, DodgeCooldownRemaining - DeltaSeconds);
 	HitStaggerRemaining = FMath::Max(0.0f, HitStaggerRemaining - DeltaSeconds);
+	ComboResetRemaining = FMath::Max(0.0f, ComboResetRemaining - DeltaSeconds);
+	FlareFlashRemaining = FMath::Max(0.0f, FlareFlashRemaining - DeltaSeconds);
+	HitStopRemaining = FMath::Max(0.0f, HitStopRemaining - DeltaSeconds);
+
+	// Advance pre-allocated floating combat popups with zero allocations
+	for (int32 p = 0; p < MaxFloatingPopups; ++p)
+	{
+		if (FloatingPopups[p].bActive)
+		{
+			FloatingPopups[p].AgeSeconds += DeltaSeconds;
+			FloatingPopups[p].WorldLocation.Z += static_cast<double>(DeltaSeconds * 42.0f);
+			if (FloatingPopups[p].AgeSeconds >= FloatingPopups[p].LifetimeSeconds)
+			{
+				FloatingPopups[p].bActive = false;
+			}
+		}
+	}
+
+	// Deterministic critically-damped camera micro-impulse spring
+	if (CameraBoom)
+	{
+		const double Stiffness = 220.0;
+		const double Damping = 26.0;
+		const FVector SpringAccel = (-CameraImpulseOffset * Stiffness) - (CameraImpulseVelocity * Damping);
+		CameraImpulseVelocity += SpringAccel * static_cast<double>(DeltaSeconds);
+		CameraImpulseOffset += CameraImpulseVelocity * static_cast<double>(DeltaSeconds);
+		if (CameraImpulseOffset.SizeSquared() < 0.01 && CameraImpulseVelocity.SizeSquared() < 0.1)
+		{
+			CameraImpulseOffset = FVector::ZeroVector;
+			CameraImpulseVelocity = FVector::ZeroVector;
+		}
+		CameraBoom->SocketOffset = BaseCameraSocketOffset + CameraImpulseOffset;
+	}
 
 	if (DownedRespawnRemaining > 0.0f)
 	{
@@ -809,10 +1038,24 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 		}
 	}
 
+	if (CombatActionState == EDungeoneerCombatActionState::ChargedFlare)
+	{
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(920.0f * (FlareFlashRemaining / 0.40f) + 120.0f);
+		}
+		if (FlareFlashRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return;
+	}
+
 	if (CombatActionState == EDungeoneerCombatActionState::LanternSlash)
 	{
 		constexpr float SlashDuration = 0.22f;
-		AttackSwingElapsed += DeltaSeconds;
+		const float EffectiveDt = (HitStopRemaining > 0.0f) ? (DeltaSeconds * 0.12f) : DeltaSeconds;
+		AttackSwingElapsed += EffectiveDt;
 		const float Alpha = FMath::Clamp(AttackSwingElapsed / SlashDuration, 0.0f, 1.0f);
 		const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
 		const float AttackYaw = DungeoneerMath::GCompassYawDegrees[static_cast<uint8>(ActiveAttackOctant) & 7];
@@ -821,7 +1064,8 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 		if (HeroVisualMesh)
 		{
-			const float LungeDist = FMath::Sin(Alpha * PI) * 24.0f;
+			const float LungeAmp = (ComboStepIndex == 2) ? 38.0f : 24.0f;
+			const float LungeDist = FMath::Sin(Alpha * PI) * LungeAmp;
 			const FVector Offset(ForwardXY.X * LungeDist, ForwardXY.Y * LungeDist, FMath::Sin(Alpha * PI) * 10.0f);
 			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + Offset);
 			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.06, 0.94, 1.08));
@@ -829,11 +1073,13 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 		if (SlashArcMesh)
 		{
-			const float SweepYaw = AttackYaw + FMath::Lerp(-55.0f, 55.0f, Alpha);
-			const FVector ArcOffset = ForwardXY * (84.0f + 16.0f * Alpha);
+			const float StartOffset = (ComboStepIndex == 1) ? 55.0f : -55.0f;
+			const float EndOffset = (ComboStepIndex == 1) ? -55.0f : 55.0f;
+			const float SweepYaw = AttackYaw + FMath::Lerp(StartOffset, EndOffset, Alpha);
+			const FVector ArcOffset = ForwardXY * ((ComboStepIndex == 2 ? 104.0f : 84.0f) + 16.0f * Alpha);
 			SlashArcMesh->SetRelativeLocation(FVector(ArcOffset.X, ArcOffset.Y, 14.0));
 			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, SweepYaw, 0.0f));
-			const float ArcScale = FMath::Sin(Alpha * PI) * 1.35f + 0.35f;
+			const float ArcScale = FMath::Sin(Alpha * PI) * (ComboStepIndex == 2 ? 1.55f : 1.35f) + 0.35f;
 			SlashArcMesh->SetRelativeScale3D(FVector(1.45 * ArcScale, 0.92 * ArcScale, 1.0));
 			SlashArcMesh->SetVisibility(true);
 		}
@@ -960,7 +1206,15 @@ void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
 			continue;
 		}
 
-		if (const AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
+		if (const ADungeoneerLootPickupActor* Pickup = Cast<ADungeoneerLootPickupActor>(Encounter))
+		{
+			if (!Pickup->IsCollected())
+			{
+				BestDistSq = DistSq2D;
+				NearbyInteractType = EDungeoneerNearbyInteract::CollectPickup;
+			}
+		}
+		else if (const AMajorLootVaultActor* Vault = Cast<AMajorLootVaultActor>(Encounter))
 		{
 			BestDistSq = DistSq2D;
 			NearbyInteractType = Vault->IsVaultUnlocked()
@@ -971,6 +1225,11 @@ void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
 		{
 			BestDistSq = DistSq2D;
 			NearbyInteractType = EDungeoneerNearbyInteract::VendorTrade;
+		}
+		else if (Encounter->IsA<ARestingGroundActor>())
+		{
+			BestDistSq = DistSq2D;
+			NearbyInteractType = EDungeoneerNearbyInteract::SensoryAltar;
 		}
 	}
 }
@@ -1072,6 +1331,27 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 		TriggerInteract();
 	}
 	bPrevInteractKeyDown = bInteractKeyDown;
+
+	const bool bFlareKeyDown = !bMainMenuOpen && PC->IsInputKeyDown(EKeys::R);
+	if (bFlareKeyDown && !bPrevFlareKeyDown)
+	{
+		TriggerChargedFlare();
+	}
+	bPrevFlareKeyDown = bFlareKeyDown;
+
+	const bool bOilKeyDown = !bMainMenuOpen && (PC->IsInputKeyDown(EKeys::Q) || PC->IsInputKeyDown(EKeys::One));
+	if (bOilKeyDown && !bPrevOilKeyDown)
+	{
+		TriggerQuickConsumable(EDungeoneerConsumableId::LanternOilPhial);
+	}
+	bPrevOilKeyDown = bOilKeyDown;
+
+	const bool bAntidoteKeyDown = !bMainMenuOpen && (PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::Two));
+	if (bAntidoteKeyDown && !bPrevAntidoteKeyDown)
+	{
+		TriggerQuickConsumable(EDungeoneerConsumableId::AntidoteDraught);
+	}
+	bPrevAntidoteKeyDown = bAntidoteKeyDown;
 }
 
 void ADungeoneerCharacter::Tick(float DeltaSeconds)
@@ -1167,6 +1447,10 @@ void ADungeoneerCharacter::SyncFlashlightTransform(float DeltaSeconds) noexcept
 	const float AimYawRad = FMath::DegreesToRadians(CurrentFlashlightYawDeg);
 	FlashlightComponent->SetRelativeLocation(FVector(FMath::Cos(AimYawRad) * 42.0, FMath::Sin(AimYawRad) * 42.0, 32.0));
 	FlashlightComponent->SetWorldRotation(FRotator(-16.0f, CurrentFlashlightYawDeg, 0.0f));
+
+	const bool bSunGlass = InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::SunGlassLens);
+	FlashlightComponent->SetOuterConeAngle(bSunGlass ? 30.0f : 22.0f);
+	FlashlightComponent->SetInnerConeAngle(bSunGlass ? 12.0f : 8.0f);
 }
 
 void ADungeoneerCharacter::Server_UpdateOctants_Implementation(ECompassOctant NewMoveOctant, ECompassOctant NewAimOctant)

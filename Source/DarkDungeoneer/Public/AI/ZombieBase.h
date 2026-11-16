@@ -120,12 +120,13 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DirectionalZombieMIDs;
 
+	float HitFlashRemaining = 0.0f;
+
 private:
 	FVector PreviousLocation = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastDamageInstigator;
 	float StepDistanceAccumulator = 0.0f;
 	float WalkCycleDistanceUU = 0.0f;
-	float HitFlashRemaining = 0.0f;
 	float DeathHideCountdown = -1.0f;
 	int32 StepSequenceCounter = 0;
 	int32 ActiveDirectionalRow = -1;

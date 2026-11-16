@@ -143,12 +143,14 @@ int32 UDungeoneerAssetBootstrapSubsystem::ImportAllRigTexturesFromDisk()
 	};
 	static constexpr FRigDiskSpec RigSpecs[] =
 	{
-		{ TEXT("Hero"),              TEXT("Hero"),              TEXT("Rig_Hero") },
-		{ TEXT("Exploder"),          TEXT("Exploder"),          TEXT("Rig_Exploder") },
-		{ TEXT("Thrower"),           TEXT("Thrower"),           TEXT("Rig_Thrower") },
-		{ TEXT("DungeoneerHero"),    TEXT("DungeoneerHero"),    TEXT("Rig_DungeoneerHero_Raw") },
-		{ TEXT("ZombieExploder"),    TEXT("ZombieExploder"),    TEXT("Rig_ZombieExploder_Raw") },
-		{ TEXT("ZombieFastThrower"), TEXT("ZombieFastThrower"), TEXT("Rig_ZombieFastThrower_Raw") }
+		{ TEXT("Hero"),                TEXT("Hero"),                TEXT("Rig_Hero") },
+		{ TEXT("Exploder"),            TEXT("Exploder"),            TEXT("Rig_Exploder") },
+		{ TEXT("Thrower"),             TEXT("Thrower"),             TEXT("Rig_Thrower") },
+		{ TEXT("DungeoneerHero"),      TEXT("DungeoneerHero"),      TEXT("Rig_DungeoneerHero_Raw") },
+		{ TEXT("ZombieExploder"),      TEXT("ZombieExploder"),      TEXT("Rig_ZombieExploder_Raw") },
+		{ TEXT("ZombieFastThrower"),   TEXT("ZombieFastThrower"),   TEXT("Rig_ZombieFastThrower_Raw") },
+		{ TEXT("ZombieMirrorStalker"), TEXT("ZombieMirrorStalker"), TEXT("Rig_ZombieMirrorStalker_Raw") },
+		{ TEXT("BossGuardian"),        TEXT("BossGuardian"),        TEXT("Rig_BossGuardian_Raw") }
 	};
 
 	struct FRigChannelSpec
@@ -644,8 +646,14 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 	AliasCellKey(TEXT("Doors_Sconce_N"),      TEXT("Doors_Cell12_N"));
 	AliasCellKey(TEXT("Sanctuary_Brazier_D"), TEXT("Sanctuary_Cell0_D"));
 	AliasCellKey(TEXT("Sanctuary_Brazier_N"), TEXT("Sanctuary_Cell0_N"));
-	AliasCellKey(TEXT("Sanctuary_Rune_D"),    TEXT("Sanctuary_Cell12_D"));
-	AliasCellKey(TEXT("Sanctuary_Rune_N"),    TEXT("Sanctuary_Cell12_N"));
+	AliasCellKey(TEXT("Sanctuary_Shrine_D"),  TEXT("Sanctuary_Cell4_D"));
+	AliasCellKey(TEXT("Sanctuary_Shrine_N"),  TEXT("Sanctuary_Cell4_N"));
+	AliasCellKey(TEXT("Sanctuary_Vendor_D"),  TEXT("Sanctuary_Cell8_D"));
+	AliasCellKey(TEXT("Sanctuary_Vendor_N"),  TEXT("Sanctuary_Cell8_N"));
+	AliasCellKey(TEXT("Sanctuary_Chest_D"),   TEXT("Sanctuary_Cell12_D"));
+	AliasCellKey(TEXT("Sanctuary_Chest_N"),   TEXT("Sanctuary_Cell12_N"));
+	AliasCellKey(TEXT("Sanctuary_Rune_D"),    TEXT("Sanctuary_Cell4_D"));
+	AliasCellKey(TEXT("Sanctuary_Rune_N"),    TEXT("Sanctuary_Cell4_N"));
 
 	// Safe procedural fallbacks when optional PNG sheets (Doors / Sanctuary) are not yet on disk
 	const FColor FlatNorm(128, 128, 255, 255);
@@ -670,11 +678,13 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		const TCHAR* NormalFile;
 		const TCHAR* KeyPrefix;
 	};
-	const FRigExtractDef RigDefs[3] =
+	const FRigExtractDef RigDefs[5] =
 	{
-		{ TEXT("DungeoneerHero"),    TEXT("Rig_DungeoneerHero_Raw_D.png"),    TEXT("Rig_DungeoneerHero_Raw_N.png"),    TEXT("Hero") },
-		{ TEXT("ZombieExploder"),    TEXT("Rig_ZombieExploder_Raw_D.png"),    TEXT("Rig_ZombieExploder_Raw_N.png"),    TEXT("Exploder") },
-		{ TEXT("ZombieFastThrower"), TEXT("Rig_ZombieFastThrower_Raw_D.png"), TEXT("Rig_ZombieFastThrower_Raw_N.png"), TEXT("Thrower") }
+		{ TEXT("DungeoneerHero"),      TEXT("Rig_DungeoneerHero_Raw_D.png"),      TEXT("Rig_DungeoneerHero_Raw_N.png"),      TEXT("Hero") },
+		{ TEXT("ZombieExploder"),      TEXT("Rig_ZombieExploder_Raw_D.png"),      TEXT("Rig_ZombieExploder_Raw_N.png"),      TEXT("Exploder") },
+		{ TEXT("ZombieFastThrower"),   TEXT("Rig_ZombieFastThrower_Raw_D.png"),   TEXT("Rig_ZombieFastThrower_Raw_N.png"),   TEXT("Thrower") },
+		{ TEXT("ZombieMirrorStalker"), TEXT("Rig_ZombieMirrorStalker_Raw_D.png"), TEXT("Rig_ZombieMirrorStalker_Raw_N.png"), TEXT("MirrorStalker") },
+		{ TEXT("BossGuardian"),        TEXT("Rig_BossGuardian_Raw_D.png"),        TEXT("Rig_BossGuardian_Raw_N.png"),        TEXT("BossGuardian") }
 	};
 
 	for (const FRigExtractDef& Rig : RigDefs)

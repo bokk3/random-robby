@@ -11,8 +11,10 @@
 #include "Rendering/DungeoneerSensoryWorldSubsystem.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
+#include "AI/BossGuardianActor.h"
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieFastThrower.h"
+#include "AI/ZombieMirrorStalker.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -624,6 +626,47 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 			{
 				SpawnedEncounterActors.Add(Thrower);
 			}
+			if (Node.bIsSecretRoom)
+			{
+				if (AZombieMirrorStalker* Stalker = World->SpawnActor<AZombieMirrorStalker>(AZombieMirrorStalker::StaticClass(), Center + FVector(160.0, -140.0, 95.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					SpawnedEncounterActors.Add(Stalker);
+				}
+				if (ADungeoneerLootPickupActor* SecretRelic = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(-140.0, 120.0, 0.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					static constexpr EDungeoneerRelicId SecretPool[4] =
+					{
+						EDungeoneerRelicId::SunGlassLens,
+						EDungeoneerRelicId::ChronoWardBoots,
+						EDungeoneerRelicId::EchoTunedBlade,
+						EDungeoneerRelicId::VampireWick
+					};
+					SecretRelic->ConfigurePickup(EDungeoneerLootDropKind::Relic, 0, EDungeoneerConsumableId::None, SecretPool[Node.RoomSeed & 3]);
+					SpawnedEncounterActors.Add(SecretRelic);
+				}
+			}
+			else if ((Node.RoomSeed & 1) == 0)
+			{
+				if (ADungeoneerLootPickupActor* Supply = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(-220.0, 180.0, 0.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					const EDungeoneerConsumableId Kind = (Node.RoomSeed & 2) ? EDungeoneerConsumableId::AntidoteDraught : EDungeoneerConsumableId::LanternOilPhial;
+					Supply->ConfigurePickup(EDungeoneerLootDropKind::Consumable, 0, Kind, EDungeoneerRelicId::None);
+					SpawnedEncounterActors.Add(Supply);
+				}
+			}
+			break;
+		}
+		case EDungeonRoomType::MirrorPalaceMaze:
+		{
+			if (AZombieMirrorStalker* Stalker = World->SpawnActor<AZombieMirrorStalker>(AZombieMirrorStalker::StaticClass(), Center + FVector(190.0, 110.0, 95.0), FRotator::ZeroRotator, SpawnParams))
+			{
+				SpawnedEncounterActors.Add(Stalker);
+			}
+			if (ADungeoneerLootPickupActor* MirrorGold = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(-180.0, -140.0, 0.0), FRotator::ZeroRotator, SpawnParams))
+			{
+				MirrorGold->ConfigurePickup(EDungeoneerLootDropKind::GoldPouch, 65, EDungeoneerConsumableId::None, EDungeoneerRelicId::None);
+				SpawnedEncounterActors.Add(MirrorGold);
+			}
 			break;
 		}
 		case EDungeonRoomType::DeepFogGauntlet:
@@ -661,9 +704,18 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 		}
 		case EDungeonRoomType::MajorLootVault:
 		{
-			if (AMajorLootVaultActor* Vault = World->SpawnActor<AMajorLootVaultActor>(AMajorLootVaultActor::StaticClass(), Center, FRotator::ZeroRotator, SpawnParams))
+			AMajorLootVaultActor* Vault = World->SpawnActor<AMajorLootVaultActor>(AMajorLootVaultActor::StaticClass(), Center, FRotator::ZeroRotator, SpawnParams);
+			if (Vault)
 			{
 				SpawnedEncounterActors.Add(Vault);
+			}
+			if (FloorGraph.FloorIndex >= 3 && (FloorGraph.FloorIndex % 3) == 0)
+			{
+				if (ABossGuardianActor* Boss = World->SpawnActor<ABossGuardianActor>(ABossGuardianActor::StaticClass(), Center + FVector(140.0, 0.0, 95.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					Boss->SetLinkedVault(Vault);
+					SpawnedEncounterActors.Add(Boss);
+				}
 			}
 			break;
 		}
@@ -1678,6 +1730,11 @@ int32 ADungeoneerTileMapInstancer::EvaluateTrapVentsForEntities(const float Delt
 		if (bTriggeredThisVent)
 		{
 			Vent.ActiveCooldown = Vent.CooldownSeconds;
+			if (Vent.HazardType == EDungeoneerTrapHazardType::EmberFire)
+			{
+				EvaluateEntityStepOnBreakables(Vent.WorldCenter, 2.0f, 175.0f);
+				SpatialSys->ApplyRadialDetonationDamage(Vent.WorldCenter, 200.0f, 12.0f, this);
+			}
 			if (BreakableHISM && Vent.HISMInstanceIndex != INDEX_NONE)
 			{
 				BreakableHISM->SetCustomDataValue(Vent.HISMInstanceIndex, 3, 2.0f, true);
@@ -1715,5 +1772,33 @@ void ADungeoneerTileMapInstancer::Tick(float DeltaSeconds)
 	{
 		EvaluateTrapVentsForEntities(TrapPollAccumulator);
 		TrapPollAccumulator = 0.0f;
+
+		if (const UWorld* World = GetWorld())
+		{
+			if (const UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+			{
+				const int32 PlayerCount = SpatialSys->GetTrackedPlayerCount();
+				for (int32 e = 0; e < SpawnedEncounterActors.Num(); ++e)
+				{
+					ADungeoneerLootPickupActor* Pickup = Cast<ADungeoneerLootPickupActor>(SpawnedEncounterActors[e].Get());
+					if (!Pickup || Pickup->IsCollected())
+					{
+						continue;
+					}
+					const FVector PickupLoc = Pickup->GetActorLocation();
+					for (int32 p = 0; p < PlayerCount; ++p)
+					{
+						if (ADungeoneerCharacter* Player = SpatialSys->GetTrackedPlayerAt(p))
+						{
+							if (FVector::DistSquared2D(Player->GetActorLocation(), PickupLoc) <= FMath::Square(95.0))
+							{
+								Pickup->CollectByPlayer(Player);
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 }

@@ -271,3 +271,20 @@ When launching `Launch-DarkDungeoneer.bat` (`-game -Windowed -ResX=1600 -ResY=90
   - `python scripts/verify_architecture_invariants.py` passed (`101` tracked files, zero `Tick` allocations, zero banned symbols, math invariants & `Content/AssetManifest.json` SHA-256 hashes valid).
   - Compiled both `DarkDungeoneerEditor Win64 Development` and standalone `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings (`bTreatWarningsAsErrors = true`).
   - Executed all `16/16` headless UE `5.8.2` automation tests (`Automation RunTests DarkDungeoneer; Quit`), all passing with `EXIT CODE: 0`, and visually verified live Entry Room and Main Menu screenshots in `docs/assets/`.
+
+---
+
+## Devlog #17 — Relics, Mirror Stalker, Floor 3 Guardian Boss, Combos & Gothic HUD/Diorama (`v1.3.0`)
+
+### From Playable Vertical Slice to Tactical Roguelite Loop
+- **Pixel-Art Expansion (`scripts/synthesize_v13_art.py`, `Content/AssetManifest.json`)**:
+  - Generated crisp `2x`-pixel dark-fantasy sprite sheets for `Rig_ZombieMirrorStalker_Raw` (`47.9%–52.4%` stride variance), `Rig_BossGuardian_Raw` (`51.9%` stride variance), and `PROP_Resting_Ground_Sanctuary_4x4` (Campfire Brazier, Third-Eye Sensory Monolith, Apothecary Merchant Cart, Overflowing Gold Vault Chest), upgrading total imported rig textures to `24` (`8` rigs x `3` maps) cleanly in `UDungeoneerAssetBootstrapSubsystem`.
+- **Gothic UI Overhaul & Cutout Diorama (`AMenuDioramaStageActor`, `UDungeoneerMainMenuWidget`, `UDungeoneerPlayerHUDWidget`)**:
+  - Replaced cylinder/cube prototype showcase primitives on `AMenuDioramaStageActor` with animated camera-facing masked 2.5D cutout planes (`Exploder`, `Thrower`, `MirrorStalker`, `Mirror_Intact`).
+  - Styled `UDungeoneerMainMenuWidget` with obsidian & warm-gold gothic framing and active button highlights, and upgraded `UDungeoneerPlayerHUDWidget` with crimson HP / amber Lantern Oil `UProgressBar`s, a `MaxRooms = 16` zero-allocation `SLeafWidget` Floor Minimap (`SDungeoneerMinimapWidget`), automatic Boss Health Plate, Bottom Supplies & Relics Dock, and `32`-slot pooled world-to-screen Floating Combat Text (`SDungeoneerFloatingPopupWidget`).
+- **Relic Synergies, Stealth Stalker, Floor 3 Boss & Combat Feel**:
+  - Added replicated passive Relics (`SunGlassLens`, `ChronoWardBoots`, `EchoTunedBlade`, `SolarFlashlightCore`, `VampireWick`), quick-use Consumables (`[Q]` `LanternOilPhial`, `[C]` `AntidoteDraught`), collectible `ADungeoneerLootPickupActor` drops, Sanctuary Sensory Altar upgrades (`90g`), `AZombieMirrorStalker` stealth/light-reveal, `ABossGuardianActor` (*Cinder Colossus* with pre-allocated dormant Phase 2 adds & Vault seal), 3-hit melee combo (`1.0x -> 1.15x -> 1.45x`), `[R]` Charged Lantern Flare (`IgnitePrismLiliesInRadius`), `35 ms` hit-stop, damped `CameraBoom` micro-impulse, and radial/EmberFire chain ignition.
+- **Verification (`v1.3.0`)**:
+  - `python .agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --self-test` and `python scripts/verify_architecture_invariants.py` (`108` tracked files) passed cleanly.
+  - Built both `DarkDungeoneerEditor Win64 Development` and `DarkDungeoneer Win64 Development` (`Binaries/Win64/DarkDungeoneer.exe`) with zero project warnings (`bTreatWarningsAsErrors = true`).
+  - Executed all `20 / 20` headless UE `5.8.2` automation tests (`Automation RunTests DarkDungeoneer; Quit`, `EXIT CODE: 0`) and verified live `-CaptureUI` Entry Room HUD & Main Menu Cutout Diorama screenshots (`docs/assets/after_v1_3_0_gameplay_hud.png` and `docs/assets/after_v1_3_0_menu_diorama.png`).

@@ -66,21 +66,21 @@ AMenuDioramaStageActor::AMenuDioramaStageActor()
 
 	ExploderShowcaseProxy = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExploderShowcaseProxy"));
 	ExploderShowcaseProxy->SetupAttachment(StageRoot);
-	ExploderShowcaseProxy->SetRelativeLocation(FVector(210.0, -140.0, 67.5));
+	ExploderShowcaseProxy->SetRelativeLocation(FVector(190.0, -145.0, 62.0));
 
 	FastThrowerShowcaseProxy = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FastThrowerShowcaseProxy"));
 	FastThrowerShowcaseProxy->SetupAttachment(StageRoot);
-	FastThrowerShowcaseProxy->SetRelativeLocation(FVector(320.0, 170.0, 72.5));
+	FastThrowerShowcaseProxy->SetRelativeLocation(FVector(255.0, 175.0, 64.0));
 
 	PhantasmMirrorShowcaseProxy = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PhantasmMirrorShowcaseProxy"));
 	PhantasmMirrorShowcaseProxy->SetupAttachment(StageRoot);
-	PhantasmMirrorShowcaseProxy->SetRelativeLocation(FVector(460.0, 30.0, 120.0));
+	PhantasmMirrorShowcaseProxy->SetRelativeLocation(FVector(365.0, 40.0, 74.0));
 	PhantasmMirrorShowcaseProxy->SetRenderCustomDepth(true);
 	PhantasmMirrorShowcaseProxy->SetCustomDepthStencilValue(MirrorStencilIds::PhantasmMirrorStencil);
 
 	DecoyProjectionProxy = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DecoyProjectionProxy"));
 	DecoyProjectionProxy->SetupAttachment(StageRoot);
-	DecoyProjectionProxy->SetRelativeLocation(FVector(560.0, 30.0, 65.0));
+	DecoyProjectionProxy->SetRelativeLocation(FVector(420.0, -110.0, 64.0));
 	DecoyProjectionProxy->SetRenderCustomDepth(true);
 	DecoyProjectionProxy->SetCustomDepthStencilValue(MirrorStencilIds::DecoyZombieStencil);
 }
@@ -94,15 +94,13 @@ void AMenuDioramaStageActor::OnConstruction(const FTransform& Transform)
 void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 {
 	UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
-	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-	UStaticMesh* CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
 	const UWorld* World = GetWorld();
 	const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI ? GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>() : nullptr;
 
-	auto InitProxyMesh = [this, BaseShapeMat, Bootstrap](
+	auto InitCutoutProxy = [this, BaseShapeMat, Bootstrap](
 		UStaticMeshComponent* MeshComp,
 		UStaticMesh* MeshAsset,
 		const FVector& Scale,
@@ -120,14 +118,23 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 			MeshComp->SetStaticMesh(MeshAsset);
 		}
 		MeshComp->SetRelativeScale3D(Scale);
+		MeshComp->SetCastShadow(false);
 
-		if (Bootstrap && !bTexturedShowcaseApplied && !DiffuseKey.IsNone())
+		if (Bootstrap)
 		{
-			if (UMaterialInstanceDynamic* TexturedMID = Bootstrap->CreateDungeonOrRigMaterial(this, DiffuseKey, NormalKey, TintColor, RoughnessVal, false))
+			MeshComp->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
+			if (!bTexturedShowcaseApplied && !DiffuseKey.IsNone())
 			{
-				MeshComp->SetMaterial(0, TexturedMID);
-				return;
+				if (UMaterialInstanceDynamic* TexturedMID = Bootstrap->CreateDungeonOrRigMaterial(this, DiffuseKey, NormalKey, TintColor, RoughnessVal, false, true))
+				{
+					MeshComp->SetMaterial(0, TexturedMID);
+					return;
+				}
 			}
+		}
+		else
+		{
+			MeshComp->SetRelativeRotation(FRotator(48.0, 135.0, 0.0));
 		}
 
 		if (BaseShapeMat && !MeshComp->GetMaterial(0))
@@ -141,16 +148,17 @@ void AMenuDioramaStageActor::EnsureShowcaseMeshesInitialized()
 		}
 	};
 
-	InitProxyMesh(ShowcaseFloorMesh.Get(), PlaneMesh, FVector(18.0, 18.0, 1.0), FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor(0.18f, 0.21f, 0.28f), 0.72f);
+	InitCutoutProxy(ShowcaseFloorMesh.Get(), PlaneMesh, FVector(18.0, 18.0, 1.0), FName(TEXT("Floor_Tile0_D")), FName(TEXT("Floor_Tile0_N")), FLinearColor(0.18f, 0.21f, 0.28f), 0.72f);
 	if (ShowcaseFloorMesh)
 	{
+		ShowcaseFloorMesh->SetRelativeRotation(FRotator::ZeroRotator);
 		ShowcaseFloorMesh->SetVisibility(false);
 		ShowcaseFloorMesh->SetHiddenInGame(true);
 	}
-	InitProxyMesh(ExploderShowcaseProxy.Get(), CylinderMesh, FVector(0.95, 0.95, 1.35), FName(TEXT("Exploder_Cell0_D")), FName(TEXT("Exploder_Cell0_N")), FLinearColor(0.95f, 0.38f, 0.08f), 0.45f);
-	InitProxyMesh(FastThrowerShowcaseProxy.Get(), CylinderMesh, FVector(0.70, 0.70, 1.45), FName(TEXT("Thrower_Cell0_D")), FName(TEXT("Thrower_Cell0_N")), FLinearColor(0.25f, 0.82f, 0.95f), 0.40f);
-	InitProxyMesh(PhantasmMirrorShowcaseProxy.Get(), CubeMesh, FVector(0.25, 2.20, 2.40), FName(TEXT("Mirror_Intact_D")), FName(TEXT("Mirror_Intact_N")), FLinearColor(0.55f, 0.90f, 1.0f), 0.10f);
-	InitProxyMesh(DecoyProjectionProxy.Get(), CylinderMesh, FVector(0.75, 0.75, 1.30), NAME_None, NAME_None, FLinearColor(0.62f, 0.28f, 0.92f), 0.35f);
+	InitCutoutProxy(ExploderShowcaseProxy.Get(),       PlaneMesh, FVector(1.55, 1.55, 1.55), FName(TEXT("Exploder_R0_C0_D")),      FName(TEXT("Exploder_R0_C0_N")),      FLinearColor(0.95f, 0.42f, 0.14f), 0.45f);
+	InitCutoutProxy(FastThrowerShowcaseProxy.Get(),    PlaneMesh, FVector(1.50, 1.50, 1.50), FName(TEXT("Thrower_R3_C1_D")),       FName(TEXT("Thrower_R3_C1_N")),       FLinearColor(0.28f, 0.85f, 0.96f), 0.40f);
+	InitCutoutProxy(PhantasmMirrorShowcaseProxy.Get(), PlaneMesh, FVector(1.45, 1.45, 1.45), FName(TEXT("Mirror_Intact_D")),       FName(TEXT("Mirror_Intact_N")),       FLinearColor(0.55f, 0.90f, 1.00f), 0.14f);
+	InitCutoutProxy(DecoyProjectionProxy.Get(),        PlaneMesh, FVector(1.48, 1.48, 1.48), FName(TEXT("MirrorStalker_R0_C0_D")), FName(TEXT("MirrorStalker_R0_C0_N")), FLinearColor(0.32f, 0.88f, 1.00f), 0.35f);
 
 	if (Bootstrap)
 	{
@@ -244,10 +252,16 @@ void AMenuDioramaStageActor::Tick(float DeltaSeconds)
 	if (ExploderShowcaseProxy)
 	{
 		ExploderShowcaseProxy->SetCustomPrimitiveDataFloat(0, ExploderFusePulseAlpha);
+		ExploderShowcaseProxy->SetRelativeLocation(FVector(190.0, -145.0, 62.0 + 3.5f * FMath::Sin(DeterministicSweepAccumulator * 3.1f)));
 	}
 	if (FastThrowerShowcaseProxy)
 	{
 		FastThrowerShowcaseProxy->SetCustomPrimitiveDataFloat(1, ChronoGasHazeAlpha);
+		FastThrowerShowcaseProxy->SetRelativeLocation(FVector(255.0, 175.0, 64.0 + 3.5f * FMath::Cos(DeterministicSweepAccumulator * 2.8f)));
+	}
+	if (DecoyProjectionProxy)
+	{
+		DecoyProjectionProxy->SetRelativeLocation(FVector(420.0, -110.0, 64.0 + 4.0f * FMath::Sin(DeterministicSweepAccumulator * 2.3f)));
 	}
 
 	// Deterministic phase-accumulated Stencil 105 acoustic sonar ring emission (no FTimerHandle)

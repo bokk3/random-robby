@@ -884,3 +884,31 @@ void UDungeonFloraManagerComponent::TickComponent(
 		StepFloraSimulation(Step);
 	}
 }
+
+int32 UDungeonFloraManagerComponent::IgnitePrismLiliesInRadius(const FVector& Origin, const float RadiusUU, const float LeaseSeconds)
+{
+	const float RadSq = RadiusUU * RadiusUU;
+	int32 Ignited = 0;
+	for (int32 i = 0; i < Kinds.Num(); ++i)
+	{
+		if (Kinds[i] == EFloraKind::PrismLily && FVector::DistSquared2D(WorldPositions[i], Origin) <= RadSq)
+		{
+			IgnitePrismLily(i, LeaseSeconds);
+			++Ignited;
+		}
+	}
+	return Ignited;
+}
+
+bool UDungeonFloraManagerComponent::IsPointInBloomRadius(const FVector& WorldPos, const float RadiusUU) const noexcept
+{
+	const float RadSq = RadiusUU * RadiusUU;
+	for (int32 i = 0; i < Kinds.Num(); ++i)
+	{
+		if (Kinds[i] == EFloraKind::PrismLily && States[i] >= 2 && FVector::DistSquared2D(WorldPositions[i], WorldPos) <= RadSq)
+		{
+			return true;
+		}
+	}
+	return false;
+}

@@ -2,12 +2,21 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/DungeoneerTypes.h"
 #include "DungeonEncounterActors.generated.h"
 
 class UBoxComponent;
 class UPointLightComponent;
 class UStaticMeshComponent;
 class ADungeoneerCharacter;
+
+UENUM(BlueprintType)
+enum class EDungeoneerLootDropKind : uint8
+{
+	GoldPouch  = 0,
+	Consumable = 1,
+	Relic      = 2
+};
 
 USTRUCT(BlueprintType)
 struct DARKDUNGEONEER_API FVendorCatalogItem
@@ -47,6 +56,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RestingGround")
 	bool IsTradingAndLoadoutUnlocked() const noexcept { return true; }
 
+	/** Upgrades the interacting player's lowest Sensory Perk (Dark Vision -> Acute Hearing -> Scent/Thermal). */
+	UFUNCTION(BlueprintCallable, Category = "RestingGround|Altar")
+	bool TriggerSensoryAltarUpgrade(ADungeoneerCharacter* Player, int32 GoldCost = 90);
+
+	UFUNCTION(BlueprintPure, Category = "RestingGround|Visual")
+	UStaticMeshComponent* GetShrineMesh() const noexcept { return ShrineMesh.Get(); }
+
 protected:
 	UFUNCTION()
 	void HandleZoneOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -59,6 +75,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Visual")
 	TObjectPtr<UStaticMeshComponent> BrazierMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Visual")
+	TObjectPtr<UStaticMeshComponent> ShrineMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Lighting")
 	TObjectPtr<UPointLightComponent> CampfireLight;
@@ -156,4 +175,75 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Vault")
 	TArray<FVendorCatalogItem> VaultRewards;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Vault")
+	bool bLockedByBossGuardian = false;
+
+public:
+	void SetLockedByBossGuardian(bool bLocked) noexcept { bLockedByBossGuardian = bLocked; }
+	bool IsLockedByBossGuardian() const noexcept { return bLockedByBossGuardian; }
+};
+
+/**
+ * Collectible 2.5D Loot Pickup (`ADungeoneerLootPickupActor`).
+ * Dropped by Major Loot Vaults, Secret Phantasm rooms, Boss Guardians, and shattered breakables.
+ */
+UCLASS(Blueprintable)
+class DARKDUNGEONEER_API ADungeoneerLootPickupActor : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ADungeoneerLootPickupActor();
+
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	void ConfigurePickup(
+		EDungeoneerLootDropKind InKind,
+		int32 InGoldAmount,
+		EDungeoneerConsumableId InConsumableId,
+		EDungeoneerRelicId InRelicId);
+
+	bool CollectByPlayer(ADungeoneerCharacter* Collector);
+
+	UFUNCTION(BlueprintPure, Category = "Loot")
+	bool IsCollected() const noexcept { return bCollected; }
+
+	UFUNCTION(BlueprintPure, Category = "Loot")
+	EDungeoneerLootDropKind GetDropKind() const noexcept { return DropKind; }
+
+	UFUNCTION(BlueprintPure, Category = "Loot")
+	EDungeoneerRelicId GetRelicId() const noexcept { return RelicId; }
+
+protected:
+	void EnsurePickupVisualsInitialized();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot")
+	TObjectPtr<USceneComponent> PickupRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot|Visual")
+	TObjectPtr<UStaticMeshComponent> PickupSpriteMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot|Lighting")
+	TObjectPtr<UPointLightComponent> PickupGlowLight;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	EDungeoneerLootDropKind DropKind = EDungeoneerLootDropKind::GoldPouch;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	int32 GoldAmount = 45;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	EDungeoneerConsumableId ConsumableId = EDungeoneerConsumableId::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	EDungeoneerRelicId RelicId = EDungeoneerRelicId::None;
+
+private:
+	float HoverPhase = 0.0f;
+	float BaseZ = 44.0f;
+	bool bCollected = false;
+	bool bVisualsApplied = false;
 };

@@ -2,17 +2,35 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Containers/StaticArray.h"
 #include "Core/DungeoneerTypes.h"
+#include "Dungeon/DungeonTypes.h"
 #include "DungeoneerPlayerHUDWidget.generated.h"
 
 class ADungeoneerCharacter;
+class UBorder;
+class UNativeWidgetHost;
+class UProgressBar;
 class UTextBlock;
+class SDungeoneerMinimapWidget;
+class SDungeoneerFloatingPopupWidget;
+
+struct DARKDUNGEONEER_API FDungeoneerMinimapRoomSlot
+{
+	FVector2D CenterXY = FVector2D::ZeroVector;
+	FVector2D ExtentsXY = FVector2D(600.0, 600.0);
+	EDungeonRoomType RoomType = EDungeonRoomType::Combat;
+	uint16 OutgoingMask = 0;
+	bool bSecretRoom = false;
+	bool bDiscovered = false;
+	bool bActive = false;
+};
 
 /**
- * TASK-901: Per-Viewport Split-Screen Player HUD Widget.
- * Displays owning ULocalPlayer vitals (Health, Flashlight Battery), 8-compass movement/aim
- * octants, active Chrono-Leech slow ratio S in [0.0, MaxSlowRatio], and sensory perk tiers
- * isolated cleanly per split-screen pane.
+ * TASK-901 & TASK-1301: Per-Viewport Split-Screen Player HUD Widget.
+ * Renders Gothic Vitals (HP & Lantern Oil bars), 8-compass Move/Aim telemetry,
+ * Chrono-Leech ratio, Sensory Perk tiers, Boss Guardian HP bar, fixed-array Floor Minimap,
+ * Relic & Consumable Dock, and 32-slot pooled Floating Combat Text (zero Tick allocations).
  */
 UCLASS(Blueprintable)
 class DARKDUNGEONEER_API UDungeoneerPlayerHUDWidget : public UUserWidget
@@ -76,8 +94,38 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|HUD")
 	FString GetCachedCombatStateLabel() const { return CachedCombatStateLabel; }
 
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	int32 GetMinimapRoomCount() const noexcept { return MinimapRoomCount; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	bool IsBossBarVisible() const noexcept { return bBossActive; }
+
+	static constexpr int32 MaxMinimapRooms = 16;
+
+	const FDungeoneerMinimapRoomSlot& GetMinimapRoomAt(int32 Index) const noexcept { return MinimapRooms[Index]; }
+	FVector2D GetMinimapPlayerXY() const noexcept { return MinimapPlayerXY; }
+	FVector2D GetMinimapBoundsMin() const noexcept { return MinimapBoundsMin; }
+	FVector2D GetMinimapBoundsMax() const noexcept { return MinimapBoundsMax; }
+	const ADungeoneerCharacter* GetObservedCharacter() const noexcept { return ObservedCharacter.Get(); }
+
 protected:
 	void UpdateTextBlocks() noexcept;
+	void RefreshMinimapFromWorld(const ADungeoneerCharacter* Character) noexcept;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> PB_Health;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> PB_Battery;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> PB_BossHealth;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> BossBarContainer;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_BossTitle;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Txt_HealthReadout;
@@ -98,14 +146,38 @@ protected:
 	TObjectPtr<UTextBlock> Txt_CombatAndLoopReadout;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_RelicsAndSupplies;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Txt_InteractHint;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UNativeWidgetHost> MinimapSlateHost;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNativeWidgetHost> FloatingPopupSlateHost;
+
 private:
+	TSharedPtr<SDungeoneerMinimapWidget> MinimapSlateWidget;
+	TSharedPtr<SDungeoneerFloatingPopupWidget> FloatingPopupSlateWidget;
+	TWeakObjectPtr<const ADungeoneerCharacter> ObservedCharacter;
+
+	TStaticArray<FDungeoneerMinimapRoomSlot, MaxMinimapRooms> MinimapRooms;
+	int32 MinimapRoomCount = 0;
+	int32 CachedMinimapFloor = -1;
+	uint32 DiscoveredRoomMask = 0u;
+	FVector2D MinimapPlayerXY = FVector2D::ZeroVector;
+	FVector2D MinimapBoundsMin = FVector2D(-2000.0, -2000.0);
+	FVector2D MinimapBoundsMax = FVector2D(2000.0, 2000.0);
+
 	float CachedCurrentHealth = 100.0f;
 	float CachedMaxHealth = 100.0f;
 	float HealthPercent = 1.0f;
 	float BatteryPercent = 1.0f;
 	float ChronoSlowRatio = 0.0f;
+	float CachedBossHealthPercent = 0.0f;
+	int32 CachedBossPhase = 1;
+	bool bBossActive = false;
 	ECompassOctant MoveOctant = ECompassOctant::S;
 	ECompassOctant AimOctant = ECompassOctant::S;
 	int32 DarkVisionTier = 0;
@@ -114,6 +186,10 @@ private:
 	int32 CachedFloorIndex = 1;
 	int32 CachedGoldBalance = 250;
 	int32 CachedKillsCount = 0;
+	int32 CachedComboStep = 0;
+	int32 CachedOilPhials = 1;
+	int32 CachedAntidotes = 1;
+	uint8 CachedRelicMask = 0;
 	FString CachedCombatStateLabel = TEXT("READY");
 	FString CachedInteractHint;
 };

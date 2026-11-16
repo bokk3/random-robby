@@ -100,6 +100,12 @@ public:
 	/** Returns nearest Echo-Crystal location to QueryPos, or false if none exist. */
 	bool FindNearestEchoCrystal(const FVector& QueryPos, FVector& OutCrystalPos) const noexcept;
 
+	/** Blooms all Prism-Lilies within RadiusUU (triggered by Charged Lantern Flare). Returns count lit. */
+	int32 IgnitePrismLiliesInRadius(const FVector& Origin, float RadiusUU, float LeaseSeconds = 15.0f);
+
+	/** Zero-alloc query returning true if WorldPos lies inside any currently bloomed Prism-Lily aura. */
+	bool IsPointInBloomRadius(const FVector& WorldPos, float RadiusUU = 260.0f) const noexcept;
+
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnEchoCrystalChimeSignature, const FVector& /*CrystalPos*/, int32 /*ChordIndex*/);
 	FOnEchoCrystalChimeSignature OnEchoCrystalChime;
 

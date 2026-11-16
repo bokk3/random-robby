@@ -65,10 +65,10 @@
   - Wire `AHazardZone_Fire` / `EmberFire` floor vents to detonate oil/explosive barrels (`BreakableHISM`), chaining fire damage & `IgniteOrAccelerateFuse` across adjacent `AZombieExploder` clusters.
 
 ### `v1.3.0` Milestone Exit Criteria
-- [ ] Zero prototype primitive cylinders/cubes remaining on `AMenuDioramaStageActor` while passing `MenuNavigationAndFloorSeedDeterminism`.
-- [ ] All Relics, Consumables, 3-Hit Combo, Charged Flare, `AZombieMirrorStalker`, and Floor 3 Guardian Boss verified deterministically in `DungeoneerVerificationSpecs.cpp` (`20+` specs total).
-- [ ] `slice_normal_rig.py --self-test`, `verify_architecture_invariants.py`, `DarkDungeoneerEditor`, and `DarkDungeoneer` compile cleanly with zero warnings (`bTreatWarningsAsErrors = true`).
-- [ ] Live gameplay capture confirms readable Minimap HUD, Boss Arena, and Mirror Stalker light-reveal in action.
+- [x] Zero prototype primitive cylinders/cubes remaining on `AMenuDioramaStageActor` while passing `MenuNavigationAndFloorSeedDeterminism`.
+- [x] All Relics, Consumables, 3-Hit Combo, Charged Flare, `AZombieMirrorStalker`, and Floor 3 Guardian Boss verified deterministically in `DungeoneerVerificationSpecs.cpp` (`20` specs total).
+- [x] `slice_normal_rig.py --self-test`, `verify_architecture_invariants.py`, `DarkDungeoneerEditor`, and `DarkDungeoneer` compile cleanly with zero warnings (`bTreatWarningsAsErrors = true`).
+- [x] Live `-CaptureUI` gameplay & menu captures confirm readable Minimap HUD, Supplies Dock, Gothic Main Menu, and 2.5D Cutout Diorama in action.
 
 ---
 

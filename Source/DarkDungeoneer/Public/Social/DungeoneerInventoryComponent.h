@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Core/DungeoneerTypes.h"
 #include "DungeoneerInventoryComponent.generated.h"
 
 USTRUCT(BlueprintType)
@@ -61,10 +62,45 @@ public:
 	/** Server-only: extracts and removes a locked item during Phase-2 atomic swap. */
 	bool AuthorityExtractLockedItem(const FGuid& ItemGuid, FDungeoneerInventoryItem& OutExtracted);
 
+	/** Grants a passive Relic (idempotent bitmask storage, zero heap growth). */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Relics")
+	bool AuthorityGrantRelic(EDungeoneerRelicId RelicId) noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory|Relics")
+	bool HasRelic(EDungeoneerRelicId RelicId) const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory|Relics")
+	int32 GetActiveRelicCount() const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory|Relics")
+	uint8 GetRelicBitmask() const noexcept { return ReplicatedRelicMask; }
+
+	/** Quick-use Consumable helpers (`LanternOilPhial`, `AntidoteDraught`). */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumables")
+	void AuthorityAddConsumable(EDungeoneerConsumableId ConsumableId, int32 DeltaCount = 1) noexcept;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumables")
+	bool AuthorityConsumeQuickItem(EDungeoneerConsumableId ConsumableId) noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory|Consumables")
+	int32 GetConsumableCount(EDungeoneerConsumableId ConsumableId) const noexcept;
+
+	static const TCHAR* GetRelicDisplayName(EDungeoneerRelicId RelicId) noexcept;
+	static EDungeoneerRelicId MapItemIdToRelic(FName ItemId) noexcept;
+
 protected:
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Inventory")
 	TArray<FDungeoneerInventoryItem> Items;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	int32 GoldBalance = 250;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Inventory|Relics")
+	uint8 ReplicatedRelicMask = 0;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Consumables")
+	int32 OilPhialCount = 1;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Consumables")
+	int32 AntidoteCount = 1;
 };

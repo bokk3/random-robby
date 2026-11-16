@@ -1,5 +1,7 @@
 #include "AI/ZombieSpatialSubsystem.h"
+#include "AI/BossGuardianActor.h"
 #include "AI/ZombieBase.h"
+#include "AI/ZombieExploder.h"
 #include "AI/ZombieFastThrower.h"
 #include "AI/HazardZoneActors.h"
 #include "Core/DungeoneerCharacter.h"
@@ -16,6 +18,16 @@ void UZombieSpatialSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	{
 		SpatialGrid->Cells[i].Reset();
 	}
+}
+
+void UZombieSpatialSubsystem::SetActiveBossGuardian(ABossGuardianActor* InBoss) noexcept
+{
+	ActiveBossGuardian = InBoss;
+}
+
+ABossGuardianActor* UZombieSpatialSubsystem::GetActiveBossGuardian() const noexcept
+{
+	return ActiveBossGuardian.Get();
 }
 
 void UZombieSpatialSubsystem::Deinitialize()
@@ -289,6 +301,27 @@ void UZombieSpatialSubsystem::ApplyRadialDetonationDamage(const FVector& Epicent
 			}
 		}
 	}
+
+	// Chain-detonation reaction: accelerate nearby Exploder fuses cleanly (zero allocation)
+	for (int32 i = 0; i < NumTrackedZombies; ++i)
+	{
+		AZombieBase* Zombie = TrackedZombies[i].Get();
+		if (!Zombie || !Zombie->IsZombieAlive() || Zombie == InstigatorActor)
+		{
+			continue;
+		}
+		if (FVector::DistSquared2D(Epicenter, Zombie->GetActorLocation()) <= static_cast<double>(RadiusSq))
+		{
+			if (AZombieExploder* Exploder = Cast<AZombieExploder>(Zombie))
+			{
+				Exploder->IgniteOrAccelerateFuse(1.50f);
+			}
+			else if (InstigatorActor && !InstigatorActor->IsA<AZombieBase>())
+			{
+				Zombie->ApplyZombieDamage(MaxDamage * 0.45f, InstigatorActor);
+			}
+		}
+	}
 }
 
 void UZombieSpatialSubsystem::ActivatePooledScorchDecal(const FVector& WorldLocation) noexcept
@@ -341,6 +374,14 @@ int32 UZombieSpatialSubsystem::ApplyMeleeArcDamage(
 		{
 			Zombie->TriggerHitFeedback(DirXY, KnockbackImpulseUU);
 			Zombie->ApplyZombieDamage(DamageAmount, InstigatorActor);
+			if (ADungeoneerCharacter* Attacker = Cast<ADungeoneerCharacter>(InstigatorActor))
+			{
+				const bool bCrit = (DamageAmount >= 70.0f);
+				Attacker->PushFloatingCombatPopup(
+					Zombie->GetActorLocation() + FVector(0.0, 0.0, 82.0),
+					FString::Printf(TEXT("-%d%s"), FMath::RoundToInt(DamageAmount), bCrit ? TEXT("!") : TEXT("")),
+					bCrit ? EDungeoneerFloatingTextKind::CritDamage : EDungeoneerFloatingTextKind::Damage);
+			}
 			++HitsLanded;
 		}
 	}

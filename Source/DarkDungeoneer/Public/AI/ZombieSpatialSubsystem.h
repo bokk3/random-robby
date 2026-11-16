@@ -8,6 +8,7 @@
 class ADungeoneerCharacter;
 class AZombieBase;
 class AZombieFastThrower;
+class ABossGuardianActor;
 class AHazardZoneBase;
 class AHazardZone_Fire;
 class AHazardZone_Poison;
@@ -103,6 +104,10 @@ public:
 	/** Activates a pooled scorch decal at the explosion epicenter. */
 	void ActivatePooledScorchDecal(const FVector& WorldLocation) noexcept;
 
+	/** Registers/reads the active Floor 3 Guardian Boss without GetAllActorsOfClass. */
+	void SetActiveBossGuardian(ABossGuardianActor* InBoss) noexcept;
+	ABossGuardianActor* GetActiveBossGuardian() const noexcept;
+
 	static constexpr int32 GridDimension = 32; // 32 x 32 = 1024 fixed spatial cells
 	static constexpr float CellSizeUU = 250.0f;
 	static constexpr int32 MaxTrackedPlayers = 16;
@@ -124,6 +129,8 @@ private:
 
 	TStaticArray<TWeakObjectPtr<AZombieBase>, MaxTrackedZombies> TrackedZombies;
 	int32 NumTrackedZombies = 0;
+
+	TWeakObjectPtr<ABossGuardianActor> ActiveBossGuardian;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AHazardZone_Fire>> FirePool;

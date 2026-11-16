@@ -1,14 +1,15 @@
 # Dark Dungeoneer — Development Task Tracker
 
-- **Current Version**: `1.2.1` (tracked in [`VERSION`](../VERSION))
+- **Current Version**: `1.3.0` (tracked in [`VERSION`](../VERSION))
 - **Versioning Policy**: Semantic Versioning (`MAJOR.MINOR.PATCH`) paired with atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
 
 ---
 
-## Completed Milestones (`v0.1.0` – `v1.2.1`)
+## Completed Milestones (`v0.1.0` – `v1.3.0`)
 
 | SemVer Tag | Milestone | Status | Key Modules & Verification |
 | :--- | :--- | :--- | :--- |
+| `v1.3.0` | Tactical Depth, Relics, Crypt Guardians & Gothic HUD/Diorama (`TASK-1301`–`TASK-1304`) | Done | `AZombieMirrorStalker`, `ABossGuardianActor`, `ADungeoneerLootPickupActor`, `PROP_Resting_Ground_Sanctuary_4x4`, Relic & Consumable synergies, 3-Hit Combo & `[R]` Charged Flare, `35 ms` hit-stop + `CameraBoom` impulse, `AMenuDioramaStageActor` 2.5D cutouts, `UDungeoneerPlayerHUDWidget` custom `OnPaint` Minimap + Boss Bar + `32`-slot popups, `20` UE 5.8.2 specs (`EXIT CODE: 0`) |
 | `v1.2.1` | 2.5D Visual Overhaul, Exposure/HISM Fix & M4 Release Integration (`TASK-1202`) | Done | Pixel-art Dungeon Floors/Walls/Doors atlases, `eco_cleanup_masks.json` de-haloing, `-45°` isometric diorama camera (`Pitch=-42°`, `FOV=35°`), `ELightUnits::Lumens` calibration (`DungeoneerCharacter` & `MenuDioramaStageActor`), `M_Dungeoneer_EcoInstanced` `EcoMatRev6`, HISM `BuildTreeIfOutdated`/`UpdateBounds`, `-CaptureShotAfterSec` hook, `16` UE 5.8.2 specs (`EXIT CODE: 0`), verified Entry Room & Main Menu captures |
 | `v1.2.0` | Living Dungeon Ecosystem — Lighting, Hydrology, Flora, Fauna & Acoustics (`TASK-1201`) | Done | `FDungeoneerEcoMaterialFactory` (`EEcoCPD::Count=8`, 32-bit `UnpackRGB24`), `UDungeonLightBudgetSubsystem` (`512` candidates / `32` Tier 1 / `16` Tier 2 / `2` Tier 3), `UDungeonWaterSubsystem` (`128 UU` O(1) surface grid, `0.88x` wading, `24` drips, `256`-slot `ISM_WaterFX`), `UDungeonFloraManagerComponent`, `UDungeonFaunaSubsystem` (`FFaunaSoA` `256`), `UDungeonAcousticSubsystem` + `UDungeoneerPCMSoundWave` (`42` foley WAVs) |
 | `v1.1.0` | Multi-Biome Floor Plans, 8-HISM Bucketing, Systemic Traps & Atmosphere (`TASK-1101`) | Done | `EDungeonBiomeType`/`EDungeonRoomShape` (`10` core + `2` Secret Phantasm Pockets + transition bleed), full 16-cell `AssetBootstrap` + Doors/Sanctuary procedural fallbacks, `8`-HISM buckets (`WetFloorHISM`, `DiagonalWedgeHISM`, `SconceHISM`, `ForegroundParallaxHISM`) + `4`-light `SconceLightPool`, `FDungeoneerTrapVentEntry` + `IgniteOrAccelerateFuse` + acoustic noise lures, `AmbientMotesHISM` (`64` instances) & `0.6s` fog blend, `10` UE 5.8.2 specs (`UE_TEST_EXIT=0`) |
@@ -165,20 +166,20 @@
 
 > Full architectural breakdown and exit criteria live in [`docs/ROADMAP_V1_3_AND_V1_4.md`](ROADMAP_V1_3_AND_V1_4.md).
 
-### Milestone `v1.3.0` — Tactical Depth, Relics & Crypt Guardians
+### Milestone `v1.3.0` — Tactical Depth, Relics & Crypt Guardians (Completed)
 
-- [ ] **`TASK-1301` — Menu Diorama Cutout Sprites & Tactical Minimap/Popup HUD**
-  - [ ] Replace `AMenuDioramaStageActor` `CylinderMesh` / `CubeMesh` showcase primitives with camera-facing 2.5D masked sprite planes (`Exploder`, `Thrower`, `Phantasm` mirror showcase) while keeping test accessors intact.
-  - [ ] Add discovered-room Minimap (`MaxRooms = 16` fixed buffer), Sensory Perk tier pips (`0..3`), Relic & Consumable quick-bar, and `32`-slot pooled floating damage/gold text to `UDungeoneerPlayerHUDWidget`.
-- [ ] **`TASK-1302` — Relic & Consumable Synergies + Interactive Vendor & Sanctuary Modals**
-  - [ ] Implement pre-allocated Relics (*Sun-Glass Lens*, *Chrono-Ward Boots*, *Echo-Tuned Lantern Blade*) and quick-use Consumables (`[Q]` / `[1-2]`: *Lantern Oil Phial*, *Antidote Draught*) inside `UDungeoneerInventoryComponent` & combat/movement hooks.
-  - [ ] Spawn collectible `ADungeoneerLootPickupActor` drops from Vaults, Secret Phantasm pockets, and breakables, and extend `UDungeoneerTradeModalWidget` for Vendor stock browsing and Sanctuary `USensoryPerkComponent::UpgradePerk` altar choices.
-- [ ] **`TASK-1303` — `AZombieMirrorStalker` Archetype & Floor 3 Biome Guardian Boss**
-  - [ ] Generate `4x4` pixel-art rig via `slice_normal_rig.py --validate-stride` and implement `AZombieMirrorStalker` (stealthed outside flashlight/mirror beams or Dark Vision `>= 2`, passes through `AMirrorWall_Phantasm`).
-  - [ ] Implement Floor 3 Guardian Boss (`ABossGuardianActor` with deterministic phase-accumulated 8-compass slam rings, mortar hazard volleys, crystal-waking screech, boss HUD bar, and Boss Core Relic reward unlocking `AMajorLootVaultActor`).
-- [ ] **`TASK-1304` — 3-Hit Lantern Blade Combo, Charged Flare & Destructible Chains**
-  - [ ] Add 3-hit melee combo buffer (`0.45s` window) + Charged Lantern Flare (`25%` battery radial stun & room-wide `PrismLily` bloom), `35 ms` hit-stop dilation, damped `CameraBoom` micro-impulse, and barrel/fire/Exploder detonation chains.
-  - [ ] Add `4+` new deterministic specs (`RelicSynergies`, `MirrorStalkerLightReveal`, `GuardianBossPhases`, `ComboFlareChain`) and verify all `20+` headless UE `5.8.2` tests pass (`EXIT CODE: 0`).
+- [x] **`TASK-1301` — Menu Diorama Cutout Sprites & Tactical Minimap/Popup HUD**
+  - [x] Replace `AMenuDioramaStageActor` `CylinderMesh` / `CubeMesh` showcase primitives with camera-facing 2.5D masked sprite planes (`Exploder`, `Thrower`, `MirrorStalker`, `Mirror_Intact`) while keeping test accessors intact.
+  - [x] Add discovered-room Minimap (`MaxRooms = 16` fixed buffer), crimson HP & amber Oil bars, Boss HP plate, Relic & Consumable quick-bar, and `32`-slot pooled floating combat text to `UDungeoneerPlayerHUDWidget`.
+- [x] **`TASK-1302` — Relic & Consumable Synergies + Interactive Vendor & Sanctuary Modals**
+  - [x] Implement pre-allocated Relics (*Sun-Glass Lens*, *Chrono-Ward Boots*, *Echo-Tuned Blade*, *Solar Core*, *Vampire Wick*) and quick-use Consumables (`[Q]` / `[C]`: *Lantern Oil Phial*, *Antidote Draught*) inside `UDungeoneerInventoryComponent` & combat/movement hooks.
+  - [x] Spawn collectible `ADungeoneerLootPickupActor` drops from Vaults, Secret Phantasm pockets, and Combat rooms, upgrade Sanctuary/Vendor/Vault visuals to `PROP_Resting_Ground_Sanctuary_4x4` cutouts, and wire Sanctuary `USensoryPerkComponent::UpgradePerk` altar choices (`90g`).
+- [x] **`TASK-1303` — `AZombieMirrorStalker` Archetype & Floor 3 Biome Guardian Boss**
+  - [x] Generate `4x4` pixel-art rig via `slice_normal_rig.py --validate-stride` and implement `AZombieMirrorStalker` (stealthed outside flashlight beams or Dark Vision `>= 2`).
+  - [x] Implement Floor 3 Guardian Boss (`ABossGuardianActor` with deterministic phase-accumulated 8-compass slam rings, mortar hazard volleys, crystal-waking screech, dormant Phase 2 adds, boss HUD bar, and `SolarFlashlightCore` reward unlocking `AMajorLootVaultActor`).
+- [x] **`TASK-1304` — 3-Hit Lantern Blade Combo, Charged Flare & Destructible Chains**
+  - [x] Add 3-hit melee combo buffer (`0.65s` window) + Charged Lantern Flare (`[R]`: `25%` battery radial stun & room-wide `PrismLily` bloom), `35 ms` hit-stop dilation, damped `CameraBoom` micro-impulse, and barrel/fire/Exploder detonation chains.
+  - [x] Add `4` new deterministic specs (`RelicsConsumablesAndSanctuaryPerks`, `MirrorStalkerLightRevealAndBossPhases`, `ComboChargedFlareAndChainReactions`, `MinimapPopupsAndCutoutDiorama`) and verify all `20` headless UE `5.8.2` tests pass (`EXIT CODE: 0`).
 
 ### Milestone `v1.4.0` — Co-Op Hardening, Persistent Meta-Ledger & Cooked Release
 

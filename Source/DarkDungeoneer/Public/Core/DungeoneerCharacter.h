@@ -27,6 +27,7 @@ enum class EDungeoneerCombatActionState : uint8
 {
 	None         UMETA(DisplayName = "Ready"),
 	LanternSlash UMETA(DisplayName = "Lantern Blade Slash"),
+	ChargedFlare UMETA(DisplayName = "Charged Lantern Flare"),
 	DodgeDash    UMETA(DisplayName = "Compass Dodge Dash"),
 	HitStagger   UMETA(DisplayName = "Hit Stagger"),
 	Downed       UMETA(DisplayName = "Downed")
@@ -38,7 +39,19 @@ enum class EDungeoneerNearbyInteract : uint8
 	None             UMETA(DisplayName = "None"),
 	VendorTrade      UMETA(DisplayName = "Vendor Purchase"),
 	UnlockVault      UMETA(DisplayName = "Unlock Loot Vault"),
-	DescendNextFloor UMETA(DisplayName = "Descend Next Floor")
+	DescendNextFloor UMETA(DisplayName = "Descend Next Floor"),
+	SensoryAltar     UMETA(DisplayName = "Sanctuary Sensory Altar"),
+	CollectPickup    UMETA(DisplayName = "Collect Dropped Loot")
+};
+
+struct DARKDUNGEONEER_API FDungeoneerFloatingPopup
+{
+	FVector WorldLocation = FVector::ZeroVector;
+	FString Text;
+	EDungeoneerFloatingTextKind Kind = EDungeoneerFloatingTextKind::Damage;
+	float AgeSeconds = 0.0f;
+	float LifetimeSeconds = 0.85f;
+	bool bActive = false;
 };
 
 /**
@@ -130,16 +143,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	bool TriggerPrimaryAttack();
 
+	/** Triggers a 25% battery Charged Lantern Flare stun/bloom wave (`R`). */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool TriggerChargedFlare();
+
+	/** Uses a quick-slot consumable (`LanternOilPhial` `[Q]`, `AntidoteDraught` `[C]`). */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumables")
+	bool TriggerQuickConsumable(EDungeoneerConsumableId ConsumableId);
+
 	/** Triggers an evasive 4-axis/8-compass Dodge Dash with brief invulnerability frames. */
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	bool TriggerDodgeDash();
 
-	/** Interacts with nearby AVendorActor or AMajorLootVaultActor / floor portal within range. */
+	/** Interacts with nearby AVendorActor, Sanctuary Shrine, Loot Pickup, or AMajorLootVaultActor. */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Loop")
 	bool TriggerInteract();
 
 	/** Records a zombie kill and grants gold + battery siphon from slain targets. */
 	void RegisterEnemySlain(int32 BonusGold, float BonusBattery) noexcept;
+
+	/** Pushes a floating damage/gold/relic popup into the fixed 32-slot zero-alloc ring buffer. */
+	void PushFloatingCombatPopup(const FVector& WorldLoc, const FString& Text, EDungeoneerFloatingTextKind Kind) noexcept;
+
+	static constexpr int32 MaxFloatingPopups = 32;
+	const FDungeoneerFloatingPopup& GetFloatingPopupAt(int32 Index) const noexcept { return FloatingPopups[Index]; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	int32 GetComboStepIndex() const noexcept { return ComboStepIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsFlareFlashActive() const noexcept { return FlareFlashRemaining > 0.0f; }
+
+	/** Triggers deterministic hit-stop dilation & damped CameraBoom micro-impulse on heavy strikes. */
+	void TriggerCombatCameraImpulse(const FVector& ImpulseDirXY, float StrengthUU = 18.0f, float HitStopSec = 0.035f) noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	EDungeoneerCombatActionState GetCombatActionState() const noexcept { return CombatActionState; }
@@ -309,6 +345,15 @@ private:
 	float HitStaggerRemaining = 0.0f;
 	float DownedRespawnRemaining = 0.0f;
 	float InteractScanAccumulator = 0.0f;
+	float ComboResetRemaining = 0.0f;
+	float FlareFlashRemaining = 0.0f;
+	float HitStopRemaining = 0.0f;
+	FVector CameraImpulseOffset = FVector::ZeroVector;
+	FVector CameraImpulseVelocity = FVector::ZeroVector;
+	FVector BaseCameraSocketOffset = FVector::ZeroVector;
+	int32 ComboStepIndex = 0;
+	int32 FloatingPopupCursor = 0;
+	TStaticArray<FDungeoneerFloatingPopup, MaxFloatingPopups> FloatingPopups;
 	int32 ActiveDirectionalRow = -1;
 	int32 ActiveWalkFrameColumn = 0;
 	int32 WalkStepSequenceCount = 0;
@@ -316,6 +361,9 @@ private:
 	int32 LastAttackHitsCount = 0;
 	bool bAttackDamageApplied = false;
 	bool bPrevAttackKeyDown = false;
+	bool bPrevFlareKeyDown = false;
+	bool bPrevOilKeyDown = false;
+	bool bPrevAntidoteKeyDown = false;
 	bool bPrevDodgeKeyDown = false;
 	bool bPrevInteractKeyDown = false;
 	bool bHasMouseSample = false;

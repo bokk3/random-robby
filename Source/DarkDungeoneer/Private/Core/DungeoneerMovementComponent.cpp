@@ -1,7 +1,9 @@
 #include "Core/DungeoneerMovementComponent.h"
+#include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementConfig.h"
 #include "Ecosystem/DungeonEcosystemTypes.h"
 #include "Ecosystem/DungeonWaterSubsystem.h"
+#include "Social/DungeoneerInventoryComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 
@@ -57,7 +59,18 @@ void UDungeoneerMovementComponent::SetAimDirectionWorld(const FVector2D& InAimDe
 void UDungeoneerMovementComponent::SetChronoSlowRatio(float InSlowRatio) noexcept
 {
 	const float MaxSlow = GetMaxChronoSlowConfig();
-	ChronoSlowRatio = FMath::Clamp(InSlowRatio, 0.0f, MaxSlow);
+	float EffectiveInput = InSlowRatio;
+	if (const ADungeoneerCharacter* OwnerHero = Cast<ADungeoneerCharacter>(GetOwner()))
+	{
+		if (const UDungeoneerInventoryComponent* Inv = OwnerHero->GetInventoryComponent())
+		{
+			if (Inv->HasRelic(EDungeoneerRelicId::ChronoWardBoots))
+			{
+				EffectiveInput *= 0.50f;
+			}
+		}
+	}
+	ChronoSlowRatio = FMath::Clamp(EffectiveInput, 0.0f, MaxSlow);
 }
 
 float UDungeoneerMovementComponent::GetBaseWalkSpeedConfig() const noexcept
@@ -73,7 +86,20 @@ float UDungeoneerMovementComponent::GetMaxChronoSlowConfig() const noexcept
 float UDungeoneerMovementComponent::GetMaxSpeed() const
 {
 	const float BaseSpeed = GetBaseWalkSpeedConfig();
-	const float WadingMult = bIsWadingInStream ? EcoCells::WadingSpeedScalar : 1.0f;
+	float WadingMult = bIsWadingInStream ? EcoCells::WadingSpeedScalar : 1.0f;
+	if (bIsWadingInStream)
+	{
+		if (const ADungeoneerCharacter* OwnerHero = Cast<ADungeoneerCharacter>(GetOwner()))
+		{
+			if (const UDungeoneerInventoryComponent* Inv = OwnerHero->GetInventoryComponent())
+			{
+				if (Inv->HasRelic(EDungeoneerRelicId::ChronoWardBoots))
+				{
+					WadingMult = 0.96f;
+				}
+			}
+		}
+	}
 	// Chrono-Leech conservation law: V_player = V_base * (1.0f - S) * WadingMult
 	return BaseSpeed * FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * WadingMult;
 }

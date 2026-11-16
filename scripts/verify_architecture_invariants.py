@@ -129,6 +129,14 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Ecosystem/DungeonFaunaSubsystem.cpp",
     "Source/DarkDungeoneer/Public/Audio/DungeonAcousticSubsystem.h",
     "Source/DarkDungeoneer/Private/Audio/DungeonAcousticSubsystem.cpp",
+    "Source/DarkDungeoneer/Public/Audio/DungeoneerPCMSoundWave.h",
+    "Source/DarkDungeoneer/Private/Audio/DungeoneerPCMSoundWave.cpp",
+    # Task Group 14 (v1.3.0 Relics, Mirror Stalker, Guardian Boss, Visual Polish)
+    "Source/DarkDungeoneer/Public/AI/ZombieMirrorStalker.h",
+    "Source/DarkDungeoneer/Private/AI/ZombieMirrorStalker.cpp",
+    "Source/DarkDungeoneer/Public/AI/BossGuardianActor.h",
+    "Source/DarkDungeoneer/Private/AI/BossGuardianActor.cpp",
+    "scripts/synthesize_v13_art.py",
 ]
 
 

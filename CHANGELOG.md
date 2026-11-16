@@ -7,7 +7,31 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- Future post-1.2 content expansions (boss arenas, unique relic synergies, and online dedicated server hardening).
+- Future `v1.4.0` release: 2P split-screen drop-in & downed revive, online co-op soak hardening, run summary/save progression, and Shipping packaging.
+
+---
+
+## [1.3.0] - 2026-11-16
+
+### Added
+- **2.5D Rigs & Sanctuary Prop Pixel-Art Pipeline (`scripts/synthesize_v13_art.py`, `Content/AssetManifest.json`)**:
+  - Generated and sliced crisp 4x4 semi-pixelated sprite rigs (`Rig_ZombieMirrorStalker_Raw`, `Rig_BossGuardian_Raw`) passing `--validate-stride` (`47.9%–52.4%` lower-body stride variance) alongside `PROP_Resting_Ground_Sanctuary_4x4` (Sanctuary Brazier, Third-Eye Sensory Monolith, Apothecary Merchant Stall, and Overflowing Vault Chest), importing `24` rig textures across 8 registered rigs cleanly in `UDungeoneerAssetBootstrapSubsystem`.
+- **Menu Diorama Cutouts, Gothic Main Menu & Tactical HUD (`AMenuDioramaStageActor`, `UDungeoneerMainMenuWidget`, `UDungeoneerPlayerHUDWidget`)**:
+  - Replaced prototype cylinder/cube diorama meshes on `AMenuDioramaStageActor` with animated camera-facing masked 2.5D sprite planes (`Exploder`, `Thrower`, `MirrorStalker`, `Mirror_Intact`).
+  - Styled `UDungeoneerMainMenuWidget` with an obsidian slate & gold-trimmed gothic panel and active selection highlights.
+  - Upgraded `UDungeoneerPlayerHUDWidget` with crimson HP & amber Lantern Oil `UProgressBar`s, a `MaxRooms = 16` zero-allocation custom `OnPaint` Floor Minimap (`SDungeoneerMinimapWidget`), automatic top-center Boss Health Plate, Bottom Supplies/Relics/Interact Dock, and `32`-slot pooled world-to-screen Floating Combat Popups (`SDungeoneerFloatingPopupWidget`).
+- **Relic Synergies, Quick Consumables & World Drops (`UDungeoneerInventoryComponent`, `DungeonEncounterActors.h/.cpp`)**:
+  - Added replicated passive Relics (`SunGlassLens` +8° cone & +35% bloom cleave damage, `ChronoWardBoots` 0.96x wading & halved ChronoSlow, `EchoTunedBlade` stun waves, `SolarFlashlightCore` +20% damage, `VampireWick` +6 HP/hit) and quick-use Consumables (`[Q]` `LanternOilPhial` +45% battery, `[C]` `AntidoteDraught` +35 HP & cleanses ChronoSlow).
+  - Upgraded `ARestingGroundActor`, `AVendorActor`, and `AMajorLootVaultActor` from primitive blocks to masked 2.5D Sanctuary/Door sprite cutouts, wired Sanctuary Sensory Altar perk upgrades (`90g`), and added collectible `ADungeoneerLootPickupActor` drops in Secret Phantasm, Mirror-Palace, and Combat rooms.
+- **Stealth Mirror Stalker & Floor 3 Guardian Boss (`AZombieMirrorStalker`, `ABossGuardianActor`)**:
+  - Added `AZombieMirrorStalker` (310 UU/s cloaked stalker revealed by flashlight cones or Dark Vision `>= 2`).
+  - Added `ABossGuardianActor` (*Cinder Colossus* guarding every 3rd-floor `AMajorLootVaultActor`, alternating Phase 1/2 radial 8-compass slams, `Fire`/`ChronoGas` pooled mortar hazards, pre-allocated Phase 2 dormant `AZombieExploder` adds, and guaranteed `SolarFlashlightCore` Vault unlock).
+- **3-Hit Combo, Charged Lantern Flare & Chain Detonations (`ADungeoneerCharacter`, `UZombieSpatialSubsystem`, `ADungeoneerTileMapInstancer`)**:
+  - Implemented buffered 3-hit Lantern Blade combos (`1.0x -> 1.15x reverse arc -> 1.45x lunge`), `[R]` Charged Lantern Flare (`25%` battery radial stun & room-wide `PrismLily` bloom via `IgnitePrismLiliesInRadius`), `35 ms` hit-stop dilation, critically damped `CameraBoom` micro-impulse, and `EmberFire`/radial chain ignition of adjacent breakables & `AZombieExploder` fuses.
+
+### Changed & Verified
+- Updated `scripts/verify_architecture_invariants.py` (`108` tracked core/subsystem/tool files verified clean: zero `Tick` heap allocations, zero banned symbols, math invariants & `AssetManifest.json` SHA-256 valid).
+- Added 4 headless automation specs in `DungeoneerVerificationSpecs.cpp` (`RelicsConsumablesAndSanctuaryPerks`, `MirrorStalkerLightRevealAndBossPhases`, `ComboChargedFlareAndChainReactions`, `MinimapPopupsAndCutoutDiorama`); compiled `DarkDungeoneerEditor` and `DarkDungeoneer` (`Win64 Development`, zero project warnings), passed all `20 / 20` `DarkDungeoneer.*` tests (`EXIT CODE: 0`), and visually inspected live `-CaptureUI` Entry Room & Main Menu screenshots.
 
 ---
 

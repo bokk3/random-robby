@@ -4,7 +4,7 @@
   "TexelDensityStandard": "64 px / 100 UU",
   "Assets": {
     "ATLAS_Dungeon_Floors_4x4": {
-      "Timestamp": "2026-11-15T23:16:06.838706+00:00",
+      "Timestamp": "2026-11-16T01:52:55.874870+00:00",
       "Provenance": "ProceduralSynthesis-ATLAS_Dungeon_Floors_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -31,7 +31,7 @@
       }
     },
     "PROP_Mirror_Palace_Maze_4x4": {
-      "Timestamp": "2026-11-15T23:16:07.087759+00:00",
+      "Timestamp": "2026-11-16T01:52:56.570033+00:00",
       "Provenance": "ProceduralSynthesis-PROP_Mirror_Palace_Maze_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -58,7 +58,7 @@
       }
     },
     "SelfTest_Eco_4x4": {
-      "Timestamp": "2026-11-15T23:16:08.751214+00:00",
+      "Timestamp": "2026-11-16T01:53:00.334204+00:00",
       "Provenance": "EcoFloodFillKey-SelfTest_Eco_4x4-v1",
       "ComplianceVerified": true,
       "Files": {
@@ -81,7 +81,7 @@
       }
     },
     "SelfTest_Fauna_Strip_4x1": {
-      "Timestamp": "2026-11-15T23:16:08.832004+00:00",
+      "Timestamp": "2026-11-16T01:53:00.428315+00:00",
       "Provenance": "EcoFaunaStrip-SelfTest_Fauna_Strip_4x1-v1",
       "ComplianceVerified": true,
       "Files": {
