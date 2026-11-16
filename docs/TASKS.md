@@ -158,3 +158,39 @@
 - [x] **`TASK-1202` — Pixel-Art Dungeon Atlases, De-Haloed Sprites, `-45°` Isometric Camera, HISM Builds & M4 Release**
   - **Files**: `.agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py`, `.agents/skills/sprite-sheet-25d-cutter/scripts/eco_cleanup_masks.json`, `Content/Art/Dungeon/*`, `Content/Art/Ecosystem/*`, `Private/Rendering/DungeoneerEcoMaterialFactory.cpp`, `Private/Dungeon/DungeoneerTileMapInstancer.cpp`, `Private/Core/DungeoneerCharacter.cpp`, `Private/UI/MenuDioramaStageActor.cpp`, `Private/Core/DungeoneerGameMode.cpp`, `Private/Ecosystem/DungeonWaterSubsystem.cpp`, `VERSION`, `CHANGELOG.md`, `README.md`, `docs/TASKS.md`, `docs/DEVLOG.md`
   - **Scope**: Replace geometric floor/wall/doorway sheets with generated pixel-art atlases + sticker-halo flooding cleanup, rebuild HISM cluster trees/bounds (`BuildTreeIfOutdated`, `UpdateBounds`), switch `SconceHISM` to upright cutout sprites and frame doorways cleanly, align gameplay and Menu Diorama cameras to `Pitch = -42°, Yaw = -45°, FOV = 35°` with calibrated `ELightUnits::Lumens` + clamped exposure (`0.42f`–`1.40f`), add Tick-based `-CaptureShotAfterSec`/`-QuitAfterShot`, verify both live Entry Room & Main Menu captures, pass `slice_normal_rig.py --self-test`, `verify_architecture_invariants.py` (`101` files), Editor & Standalone `Win64 Development` builds (`0` project warnings), all `16/16` headless UE `5.8.2` specs (`EXIT CODE: 0`), and cut `v1.2.1` release tag.
+
+---
+
+## Roadmap & Active Tasklist (`v1.3.0` – `v1.4.0`)
+
+> Full architectural breakdown and exit criteria live in [`docs/ROADMAP_V1_3_AND_V1_4.md`](ROADMAP_V1_3_AND_V1_4.md).
+
+### Milestone `v1.3.0` — Tactical Depth, Relics & Crypt Guardians
+
+- [ ] **`TASK-1301` — Menu Diorama Cutout Sprites & Tactical Minimap/Popup HUD**
+  - [ ] Replace `AMenuDioramaStageActor` `CylinderMesh` / `CubeMesh` showcase primitives with camera-facing 2.5D masked sprite planes (`Exploder`, `Thrower`, `Phantasm` mirror showcase) while keeping test accessors intact.
+  - [ ] Add discovered-room Minimap (`MaxRooms = 16` fixed buffer), Sensory Perk tier pips (`0..3`), Relic & Consumable quick-bar, and `32`-slot pooled floating damage/gold text to `UDungeoneerPlayerHUDWidget`.
+- [ ] **`TASK-1302` — Relic & Consumable Synergies + Interactive Vendor & Sanctuary Modals**
+  - [ ] Implement pre-allocated Relics (*Sun-Glass Lens*, *Chrono-Ward Boots*, *Echo-Tuned Lantern Blade*) and quick-use Consumables (`[Q]` / `[1-2]`: *Lantern Oil Phial*, *Antidote Draught*) inside `UDungeoneerInventoryComponent` & combat/movement hooks.
+  - [ ] Spawn collectible `ADungeoneerLootPickupActor` drops from Vaults, Secret Phantasm pockets, and breakables, and extend `UDungeoneerTradeModalWidget` for Vendor stock browsing and Sanctuary `USensoryPerkComponent::UpgradePerk` altar choices.
+- [ ] **`TASK-1303` — `AZombieMirrorStalker` Archetype & Floor 3 Biome Guardian Boss**
+  - [ ] Generate `4x4` pixel-art rig via `slice_normal_rig.py --validate-stride` and implement `AZombieMirrorStalker` (stealthed outside flashlight/mirror beams or Dark Vision `>= 2`, passes through `AMirrorWall_Phantasm`).
+  - [ ] Implement Floor 3 Guardian Boss (`ABossGuardianActor` with deterministic phase-accumulated 8-compass slam rings, mortar hazard volleys, crystal-waking screech, boss HUD bar, and Boss Core Relic reward unlocking `AMajorLootVaultActor`).
+- [ ] **`TASK-1304` — 3-Hit Lantern Blade Combo, Charged Flare & Destructible Chains**
+  - [ ] Add 3-hit melee combo buffer (`0.45s` window) + Charged Lantern Flare (`25%` battery radial stun & room-wide `PrismLily` bloom), `35 ms` hit-stop dilation, damped `CameraBoom` micro-impulse, and barrel/fire/Exploder detonation chains.
+  - [ ] Add `4+` new deterministic specs (`RelicSynergies`, `MirrorStalkerLightReveal`, `GuardianBossPhases`, `ComboFlareChain`) and verify all `20+` headless UE `5.8.2` tests pass (`EXIT CODE: 0`).
+
+### Milestone `v1.4.0` — Co-Op Hardening, Persistent Meta-Ledger & Cooked Release
+
+- [ ] **`TASK-1401` — Complete 2-Player Local Split-Screen Drop-In & Co-Op Revive**
+  - [ ] Wire P2 dynamic split-screen drop-in (`Menu` + `[F2]`/Gamepad `Start`), isolated `FDungeoneerSensoryViewExtension` viewports, and per-camera `WallHISM` cutaway evaluation.
+  - [ ] Add `18s` Co-Op Downed Bleeding state with `[Hold F]` `2.0s` ally rescue revive and shared Sanctuary Party Stash (`ARestingGroundActor`).
+- [ ] **`TASK-1402` — Online Co-Op Hardening, Seed Parity & P2P Trading**
+  - [ ] Verify Listen/Dedicated server deterministic replication parity across `UDungeonGeneratorSubsystem`, `UDungeonWaterSubsystem`, `UDungeonFloraManagerComponent`, and `FSavedMove_Dungeoneer` (`PktLag=150`, `PktLoss=3`), plus `AZombieBase::IsNetRelevantFor` fog culling.
+  - [ ] Wire live `[T]` nearby-player Trade Request -> `UDungeoneerTradeModalWidget` 2PC swap via `UTradeManagerComponent`, plus `UDungeoneerCoopLobbyWidget` session/chat polish.
+- [ ] **`TASK-1403` — End-of-Run Crypt Ledger, Bestiary & Sanctuary Persistent Save**
+  - [ ] Implement `UDungeoneerRunSummaryWidget` displaying per-run telemetry (`Floor`, `Kills`, `Relics`, `Secrets`, `Seed`, `Duration`) with `[Retry Same Seed]` and `[Return to Sanctuary]`.
+  - [ ] Implement `UDungeoneerSaveGame` (`Saved/SaveGames/`) persisting unlocked Bestiary entries, cosmetic/starting Lantern Trims, Best Records, and deterministic `Daily Seed` runs (`YYYYMMDD`).
+- [ ] **`TASK-1404` — Cooked Windows `Shipping` Packaging, Profiling & Release**
+  - [ ] Configure `DefaultEngine.ini` / `DefaultGame.ini` asset cooking rules and pass `RunUAT BuildCookRun -platform=Win64 -clientconfig=Shipping -cook -stage -pak`, updating `Launch-DarkDungeoneer.bat` to launch cooked binaries seamlessly.
+  - [ ] Verify `stat unit` / `stat scenerendering` Intel HD 520 frame/draw-call budgets across Floor 3 Boss Arena and 2P Split-Screen, pass `24+` headless automation tests, update docs (`VERSION 1.4.0`), and tag `v1.4.0`.
