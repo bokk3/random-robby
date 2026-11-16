@@ -249,7 +249,7 @@ void UDungeonWaterSubsystem::OnFloorBuilt(const FWaterFloorBuildInput& Input)
 					4,
 					0.08f,
 					4.0f,
-					0.0f);
+					0.78f);
 				FxISM->SetMaterial(0, FxMID);
 			}
 		}

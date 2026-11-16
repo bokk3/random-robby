@@ -106,14 +106,20 @@ void ADungeoneerGameMode::StartPlay()
 	if (HasAuthority())
 	{
 		CurrentFloorIndex = 1;
+		int32 ForcedStartFloor = 1;
+		if (FParse::Value(FCommandLine::Get(), TEXT("StartFloor="), ForcedStartFloor) && ForcedStartFloor >= 1)
+		{
+			CurrentFloorIndex = ForcedStartFloor;
+		}
+
 		if (ADungeoneerGameState* DungeoneerState = GetGameState<ADungeoneerGameState>())
 		{
 			DungeoneerState->AuthorityResetRunLedger(bDailySeedModeActive, ActiveDailySeedDayKey);
-			DungeoneerState->AuthoritySetFloorSeed(1, InitialFloorSeed, 0);
+			DungeoneerState->AuthoritySetFloorSeed(CurrentFloorIndex, InitialFloorSeed, 0);
 		}
 		else if (UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
 		{
-			DungeonSys->GenerateFloorGraph(1, InitialFloorSeed);
+			DungeonSys->GenerateFloorGraph(CurrentFloorIndex, InitialFloorSeed);
 		}
 	}
 
@@ -348,6 +354,8 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 	}
 
 	FVector TargetRoomCenter = FVector::ZeroVector;
+	FString ForcedStartRoom;
+	FParse::Value(FCommandLine::Get(), TEXT("StartRoom="), ForcedStartRoom);
 	if (const UDungeonGeneratorSubsystem* DungeonSys = World->GetSubsystem<UDungeonGeneratorSubsystem>())
 	{
 		const FDungeonFloorGraph& Graph = DungeonSys->GetActiveFloorGraph();
@@ -357,6 +365,41 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 			EntrySpawnLocation = Graph.Nodes[0].WorldCenter;
 			for (const FDungeonNode& Node : Graph.Nodes)
 			{
+				if (!ForcedStartRoom.IsEmpty())
+				{
+					if (ForcedStartRoom.Equals(TEXT("Combat"), ESearchCase::IgnoreCase) && Node.RoomType == EDungeonRoomType::Combat && !Node.bIsSecretRoom)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(40.0, -20.0, 0.0);
+						break;
+					}
+					if (ForcedStartRoom.Equals(TEXT("Mirror"), ESearchCase::IgnoreCase) && Node.RoomType == EDungeonRoomType::MirrorPalaceMaze)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(-40.0, -40.0, 0.0);
+						break;
+					}
+					if (ForcedStartRoom.Equals(TEXT("Gauntlet"), ESearchCase::IgnoreCase) && Node.RoomType == EDungeonRoomType::DeepFogGauntlet)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(-20.0, -195.0, 0.0);
+						break;
+					}
+					if (ForcedStartRoom.Equals(TEXT("Sanctuary"), ESearchCase::IgnoreCase) && Node.RoomType == EDungeonRoomType::RestingGround)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(-80.0, -60.0, 0.0);
+						break;
+					}
+					if (ForcedStartRoom.Equals(TEXT("Vendor"), ESearchCase::IgnoreCase) && Node.RoomType == EDungeonRoomType::Vendor)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(-80.0, -60.0, 0.0);
+						break;
+					}
+					if ((ForcedStartRoom.Equals(TEXT("Vault"), ESearchCase::IgnoreCase) || ForcedStartRoom.Equals(TEXT("Boss"), ESearchCase::IgnoreCase))
+						&& Node.RoomType == EDungeonRoomType::MajorLootVault)
+					{
+						TargetRoomCenter = Node.WorldCenter + FVector(-175.0, -45.0, 0.0);
+						break;
+					}
+					continue;
+				}
 				if (Action == EDungeoneerMenuAction::MirrorTrial && Node.RoomType == EDungeonRoomType::MirrorPalaceMaze)
 				{
 					TargetRoomCenter = Node.WorldCenter;

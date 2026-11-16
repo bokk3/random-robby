@@ -372,11 +372,12 @@ AMajorLootVaultActor::AMajorLootVaultActor()
 	VaultBeaconLight->SetLightColor(FLinearColor(1.0f, 0.82f, 0.24f));
 	VaultBeaconLight->SetUseInverseSquaredFalloff(true);
 	VaultBeaconLight->SetIntensityUnits(ELightUnits::Lumens);
-	VaultBeaconLight->SetSourceRadius(28.0f);
-	VaultBeaconLight->SetSoftSourceRadius(42.0f);
-	VaultBeaconLight->SetIntensity(580.0f);
-	VaultBeaconLight->SetAttenuationRadius(920.0f);
-	VaultBeaconLight->VolumetricScatteringIntensity = 1.35f;
+	VaultBeaconLight->SetSourceRadius(0.0f);
+	VaultBeaconLight->SetSoftSourceRadius(0.0f);
+	VaultBeaconLight->SetSpecularScale(0.05f);
+	VaultBeaconLight->SetIntensity(95.0f);
+	VaultBeaconLight->SetAttenuationRadius(720.0f);
+	VaultBeaconLight->VolumetricScatteringIntensity = 0.85f;
 	VaultBeaconLight->CastShadows = false;
 }
 

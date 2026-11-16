@@ -1303,10 +1303,10 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			if (Node.RoomType == EDungeonRoomType::RestingGround)
 			{
 				FDungeonLightCandidate C;
-				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 75.0);
+				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 95.0);
 				C.Color = EcoPalette::AmberFire;
-				C.RadiusUU = 820.0f;
-				C.BaseIntensity = 1250.0f;
+				C.RadiusUU = 720.0f;
+				C.BaseIntensity = 260.0f;
 				C.PriorityBoost = 2.0f;
 				C.RequestedTier = EDungeonLightTier::Tier3_Hero;
 				LightBudget->RegisterCandidate(C);
@@ -1314,10 +1314,10 @@ void ADungeoneerTileMapInstancer::BuildDungeonFromFloorGraph(const FDungeonFloor
 			else if (Node.RoomType == EDungeonRoomType::MajorLootVault)
 			{
 				FDungeonLightCandidate C;
-				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 85.0);
+				C.WorldPosition = Node.WorldCenter + FVector(0.0, 0.0, 110.0);
 				C.Color = EcoPalette::GoldenRune;
-				C.RadiusUU = 760.0f;
-				C.BaseIntensity = 1200.0f;
+				C.RadiusUU = 680.0f;
+				C.BaseIntensity = 240.0f;
 				C.PriorityBoost = 1.5f;
 				C.RequestedTier = EDungeonLightTier::Tier3_Hero;
 				LightBudget->RegisterCandidate(C);

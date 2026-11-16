@@ -458,7 +458,7 @@ void UDungeoneerAssetBootstrapSubsystem::ExtractAllGridCellsFromPng(
 			FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(CellTex, bIsNormalMap, bSRGB);
 			ExtractedCellTextures.Add(CacheKey, CellTex);
 
-			if (bIsCharacterSprite && !bIsNormalMap)
+			if (!bIsNormalMap)
 			{
 				if (UTexture2D* MaskTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8))
 				{
@@ -532,11 +532,24 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
 		return nullptr;
 	}
 
+	UTexture2D* MaskTex = nullptr;
+	uint8* MaskBytes = nullptr;
+	if (!bIsNormalMap && PatternKind == 3)
+	{
+		MaskTex = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
+		if (MaskTex && MaskTex->GetPlatformData() && MaskTex->GetPlatformData()->Mips.Num() > 0)
+		{
+			MaskBytes = static_cast<uint8*>(MaskTex->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE));
+		}
+	}
+
 	for (int32 Y = 0; Y < Size; ++Y)
 	{
 		for (int32 X = 0; X < Size; ++X)
 		{
 			bool bUseSecondary = false;
+			uint8 Alpha = 255;
+
 			if (PatternKind == 0) // Checker / masonry bevel
 			{
 				const bool bBorder = (X < 4 || X >= Size - 4 || Y < 4 || Y >= Size - 4);
@@ -549,11 +562,26 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
 				const int32 DY = Y - Size / 2;
 				bUseSecondary = (DX * DX + DY * DY) < (18 * 18);
 			}
-			else // Runic sanctuary / hanging chain silhouette
+			else if (PatternKind == 2) // Runic sanctuary / hanging chain silhouette
 			{
 				const int32 DX = FMath::Abs(X - Size / 2);
 				const int32 DY = FMath::Abs(Y - Size / 2);
 				bUseSecondary = (DX + DY == 20) || (DX + DY == 19) || ((Y % 12 < 6) && DX < 6);
+			}
+			else // PatternKind == 3: Semi-pixelated radial scorch crater & ember cracks
+			{
+				const int32 QX = (X / 2) * 2;
+				const int32 QY = (Y / 2) * 2;
+				const int32 DX = QX - Size / 2;
+				const int32 DY = QY - Size / 2;
+				const int32 DistSq = DX * DX + DY * DY;
+				const int32 JitterHash = ((QX * 73856093) ^ (QY * 19349663)) & 7;
+				const int32 OuterLimitSq = (23 + JitterHash) * (23 + JitterHash);
+				Alpha = (DistSq <= OuterLimitSq) ? 255 : 0;
+
+				const bool bCrossCrack = (FMath::Abs(DX) <= 2 && DistSq < 260) || (FMath::Abs(DY) <= 2 && DistSq < 260)
+					|| (FMath::Abs(FMath::Abs(DX) - FMath::Abs(DY)) <= 2 && DistSq < 210);
+				bUseSecondary = (DistSq < 64) || bCrossCrack;
 			}
 
 			const FColor& C = bUseSecondary ? SecondaryColor : PrimaryColor;
@@ -561,13 +589,28 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
 			Bytes[Idx + 0] = C.B;
 			Bytes[Idx + 1] = C.G;
 			Bytes[Idx + 2] = C.R;
-			Bytes[Idx + 3] = 255;
+			Bytes[Idx + 3] = Alpha;
+
+			if (MaskBytes)
+			{
+				MaskBytes[Idx + 0] = Alpha;
+				MaskBytes[Idx + 1] = Alpha;
+				MaskBytes[Idx + 2] = Alpha;
+				MaskBytes[Idx + 3] = 255;
+			}
 		}
 	}
 
 	Mip.BulkData.Unlock();
 	FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(ProcTex, bIsNormalMap, bSRGB);
 	ExtractedCellTextures.Add(CacheKey, ProcTex);
+
+	if (MaskTex && MaskBytes)
+	{
+		MaskTex->GetPlatformData()->Mips[0].BulkData.Unlock();
+		FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(MaskTex, false, false);
+		SpriteMaskTextures.Add(CacheKey, MaskTex);
+	}
 	return ProcTex;
 }
 
@@ -669,6 +712,8 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 	RegisterProceduralTileFallback(FName(TEXT("Sanctuary_Rune_N")),    FlatNorm,           FColor(128, 168, 245), true, false, 2);
 	RegisterProceduralTileFallback(FName(TEXT("Wall_Chain_D")),        FColor(24, 26, 34),  FColor(68, 72, 86),    false, true, 2);
 	RegisterProceduralTileFallback(FName(TEXT("Wall_Chain_N")),        FlatNorm,           FColor(148, 148, 240), true, false, 2);
+	RegisterProceduralTileFallback(FName(TEXT("ScorchCrater_D")),      FColor(18, 16, 18),  FColor(125, 42, 16),   false, true, 3);
+	RegisterProceduralTileFallback(FName(TEXT("ScorchCrater_N")),      FlatNorm,           FColor(128, 152, 240), true, false, 3);
 
 	// Extract all 16 directional walk-cycle cells (4 rows x 4 alternating stride frames) per character/zombie rig cleanly in 1 PNG decode per file
 	struct FRigExtractDef
@@ -822,7 +867,7 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::ExtractAtlasCellTexture(
 	FDungeoneer25DMaterialBuilder::ConfigureTextureFor25D(CellTex, bIsNormalMap, bSRGB);
 	ExtractedCellTextures.Add(CacheKey, CellTex);
 
-	if (bIsCharacterSprite && !bIsNormalMap)
+	if (!bIsNormalMap)
 	{
 		if (UTexture2D* MaskTex = UTexture2D::CreateTransient(CellWidth, CellHeight, PF_B8G8R8A8))
 		{
@@ -931,7 +976,7 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 					{
 						const FLinearColor SubtleTint = FMath::Lerp(FLinearColor::White, FallbackTint, 0.08f);
 						MID->SetVectorParameterValue(FName(TEXT("DiffuseColor")), SubtleTint);
-						MID->SetScalarParameterValue(FName(TEXT("Roughness")), RoughnessVal);
+						MID->SetScalarParameterValue(FName(TEXT("Roughness")), FMath::Max(RoughnessVal, 0.88f));
 						return MID;
 					}
 				}

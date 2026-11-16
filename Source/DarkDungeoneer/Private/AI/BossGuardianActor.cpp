@@ -196,7 +196,7 @@ void ABossGuardianActor::Tick(float DeltaSeconds)
 		SlamTelegraphRemaining = FMath::Max(0.0f, SlamTelegraphRemaining - DeltaSeconds);
 		if (ZombieEmissiveLight)
 		{
-			ZombieEmissiveLight->SetIntensity(950.0f);
+			ZombieEmissiveLight->SetIntensity(280.0f);
 		}
 		if (SlamTelegraphRemaining <= 0.0f)
 		{
@@ -205,7 +205,7 @@ void ABossGuardianActor::Tick(float DeltaSeconds)
 	}
 	else if (ZombieEmissiveLight && HitFlashRemaining <= 0.0f)
 	{
-		ZombieEmissiveLight->SetIntensity(420.0f);
+		ZombieEmissiveLight->SetIntensity(140.0f);
 	}
 }
 

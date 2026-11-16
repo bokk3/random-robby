@@ -132,9 +132,9 @@ AHazardZone_Fire::AHazardZone_Fire()
 	FlickerLight->SetIntensityUnits(ELightUnits::Lumens);
 	FlickerLight->SetSourceRadius(24.0f);
 	FlickerLight->SetSoftSourceRadius(36.0f);
-	FlickerLight->SetIntensity(850.0f);
-	FlickerLight->SetAttenuationRadius(520.0f);
-	FlickerLight->VolumetricScatteringIntensity = 1.2f;
+	FlickerLight->SetIntensity(220.0f);
+	FlickerLight->SetAttenuationRadius(420.0f);
+	FlickerLight->VolumetricScatteringIntensity = 0.85f;
 	FlickerLight->SetVisibility(false);
 }
 
@@ -144,7 +144,7 @@ void AHazardZone_Fire::ApplyHazardTick(float DeltaSeconds)
 	{
 		FlickerLight->SetVisibility(true);
 		FlickerPhase += DeltaSeconds * 16.0f;
-		const float Flicker = 780.0f + 240.0f * FMath::Sin(FlickerPhase) * FMath::Cos(FlickerPhase * 0.43f);
+		const float Flicker = 180.0f + 70.0f * FMath::Sin(FlickerPhase) * FMath::Cos(FlickerPhase * 0.43f);
 		FlickerLight->SetIntensity(Flicker);
 	}
 

@@ -35,7 +35,8 @@ AZombieBase::AZombieBase()
 	ZombieEmissiveLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ZombieEmissiveLight"));
 	ZombieEmissiveLight->SetupAttachment(RootComponent);
 	ZombieEmissiveLight->SetRelativeLocation(FVector(-45.0, 0.0, 65.0));
-	ZombieEmissiveLight->SetIntensity(1100.0f);
+	ZombieEmissiveLight->SetIntensityUnits(ELightUnits::Lumens);
+	ZombieEmissiveLight->SetIntensity(120.0f);
 	ZombieEmissiveLight->SetAttenuationRadius(360.0f);
 	ZombieEmissiveLight->CastShadows = false;
 
@@ -247,7 +248,7 @@ void AZombieBase::Tick(float DeltaSeconds)
 			}
 			if (ZombieEmissiveLight)
 			{
-				ZombieEmissiveLight->SetIntensity(3600.0f + 7200.0f * Alpha);
+				ZombieEmissiveLight->SetIntensity(240.0f + 320.0f * Alpha);
 			}
 		}
 

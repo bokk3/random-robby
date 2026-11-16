@@ -4,9 +4,15 @@
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieFastThrower.h"
 #include "AI/HazardZoneActors.h"
+#include "Components/DecalComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Engine/DecalActor.h"
+#include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 void UZombieSpatialSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -294,10 +300,52 @@ void UZombieSpatialSubsystem::PreallocateHazardPools(int32 PerTypeCapacity)
 		}
 	}
 
+	UStaticMesh* ScorchPlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
+	UDungeoneerAssetBootstrapSubsystem* Bootstrap = nullptr;
+	if (const UGameInstance* GI = World->GetGameInstance())
+	{
+		Bootstrap = GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>();
+	}
+
 	for (int32 i = 0; i < MaxScorchDecals; ++i)
 	{
-		if (ADecalActor* Decal = World->SpawnActor<ADecalActor>(ADecalActor::StaticClass(), ParkLocation, FRotator(-90.0f, 0.0f, 0.0f), SpawnParams))
+		if (ADecalActor* Decal = World->SpawnActor<ADecalActor>(ADecalActor::StaticClass(), ParkLocation, FRotator::ZeroRotator, SpawnParams))
 		{
+			// Disable UE's unassigned DefaultDeferredDecalMaterial (which projects pale streaked artifacts onto sprites)
+			// and render a crisp masked 2.5D charcoal scorch crater quad on the floor plane instead.
+			if (UDecalComponent* DecalComp = Decal->GetDecal())
+			{
+				DecalComp->SetVisibility(false);
+				DecalComp->SetHiddenInGame(true);
+			}
+			if (ScorchPlaneMesh)
+			{
+				UStaticMeshComponent* ScorchMesh = NewObject<UStaticMeshComponent>(Decal, *FString::Printf(TEXT("ScorchQuad_%d"), i));
+				ScorchMesh->SetStaticMesh(ScorchPlaneMesh);
+				ScorchMesh->SetupAttachment(Decal->GetRootComponent());
+				ScorchMesh->RegisterComponent();
+				ScorchMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				ScorchMesh->SetCastShadow(false);
+				ScorchMesh->SetReceivesDecals(false);
+				ScorchMesh->SetRelativeLocation(FVector::ZeroVector);
+				ScorchMesh->SetRelativeRotation(FRotator::ZeroRotator);
+				ScorchMesh->SetRelativeScale3D(FVector(1.85f, 1.85f, 1.0f));
+				if (Bootstrap)
+				{
+					UMaterialInstanceDynamic* ScorchMID = Bootstrap->CreateDungeonOrRigMaterial(
+						Decal,
+						FName(TEXT("ScorchCrater_D")),
+						FName(TEXT("ScorchCrater_N")),
+						FLinearColor(0.32f, 0.28f, 0.26f),
+						0.94f,
+						false,
+						true);
+					if (ScorchMID)
+					{
+						ScorchMesh->SetMaterial(0, ScorchMID);
+					}
+				}
+			}
 			Decal->SetActorHiddenInGame(true);
 			ScorchDecalPool.Add(Decal);
 		}
@@ -394,6 +442,10 @@ void UZombieSpatialSubsystem::ApplyRadialDetonationDamage(const FVector& Epicent
 
 void UZombieSpatialSubsystem::ActivatePooledScorchDecal(const FVector& WorldLocation) noexcept
 {
+	if (!bPoolsPreallocated)
+	{
+		PreallocateHazardPools(PoolPerHazardType);
+	}
 	if (ScorchDecalPool.Num() == 0)
 	{
 		return;
@@ -403,7 +455,8 @@ void UZombieSpatialSubsystem::ActivatePooledScorchDecal(const FVector& WorldLoca
 	DecalPoolCursor = (DecalPoolCursor + 1) % ScorchDecalPool.Num();
 	if (Decal)
 	{
-		Decal->SetActorLocation(WorldLocation);
+		const double FloorZ = (WorldLocation.Z > 40.0) ? (WorldLocation.Z - 93.0) : FMath::Max(2.0, WorldLocation.Z - 5.0);
+		Decal->SetActorLocation(FVector(WorldLocation.X, WorldLocation.Y, FloorZ));
 		Decal->SetActorHiddenInGame(false);
 	}
 }
