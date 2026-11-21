@@ -1,4 +1,5 @@
 #include "AI/HazardZoneActors.h"
+#include "Rendering/DungeoneerFxPoolSubsystem.h"
 #include "AI/ZombieFastThrower.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementComponent.h"
@@ -117,6 +118,20 @@ void AHazardZoneBase::Tick(float DeltaSeconds)
 		if (OnHazardTickCue.IsBound())
 		{
 			OnHazardTickCue.Broadcast(GetActorLocation());
+		}
+	}
+
+	// A few drifting puffs every second so the zone can be seen (there are no Niagara assets).
+	PuffAccumulator += DeltaSeconds;
+	if (PuffAccumulator >= 0.22f)
+	{
+		PuffAccumulator -= 0.22f;
+		if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+		{
+			const float Angle = static_cast<float>(FMath::Fmod(RemainingLifetime * 137.0, 360.0));
+			const float Radius = ZoneRadius * (0.25f + 0.45f * FMath::Frac(RemainingLifetime * 3.1f));
+			const FVector Offset = FRotator(0.0f, Angle, 0.0f).Vector() * Radius;
+			Fx->SpawnPuff(GetActorLocation() + Offset + FVector(0.0, 0.0, 15.0), GetHazardPuffColor(), 1.0f, 1.3f);
 		}
 	}
 

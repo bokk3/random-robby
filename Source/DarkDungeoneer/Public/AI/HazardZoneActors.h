@@ -31,6 +31,9 @@ public:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnHazardTickCue, const FVector& /*Location*/);
 	FOnHazardTickCue OnHazardTickCue;
 
+	/** Colour of the cloud puffs this hazard gives off (they make the zone visible). */
+	virtual FLinearColor GetHazardPuffColor() const noexcept { return FLinearColor(0.6f, 0.6f, 0.6f); }
+
 protected:
 	UFUNCTION()
 	void HandleSphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -59,6 +62,7 @@ protected:
 	bool bHazardActive = false;
 	float RemainingLifetime = 0.0f;
 	float AudioCueAccumulator = 0.0f;
+	float PuffAccumulator = 0.0f;
 };
 
 /** Fire Hazard Zone: Burn DoT + flickering orange point light illuminating volumetric fog. */
@@ -69,6 +73,8 @@ class DARKDUNGEONEER_API AHazardZone_Fire : public AHazardZoneBase
 
 public:
 	AHazardZone_Fire();
+
+	virtual FLinearColor GetHazardPuffColor() const noexcept override { return FLinearColor(1.0f, 0.45f, 0.12f); }
 
 protected:
 	virtual void ApplyHazardTick(float DeltaSeconds) override;
@@ -92,6 +98,8 @@ class DARKDUNGEONEER_API AHazardZone_Poison : public AHazardZoneBase
 
 public:
 	AHazardZone_Poison();
+
+	virtual FLinearColor GetHazardPuffColor() const noexcept override { return FLinearColor(0.45f, 1.0f, 0.3f); }
 
 protected:
 	virtual void ApplyHazardTick(float DeltaSeconds) override;
@@ -117,6 +125,8 @@ public:
 	AHazardZone_ChronoGas();
 
 	void SetOwningThrower(AZombieFastThrower* InThrower) noexcept { OwningThrower = InThrower; }
+
+	virtual FLinearColor GetHazardPuffColor() const noexcept override { return FLinearColor(0.6f, 0.45f, 1.0f); }
 
 protected:
 	virtual void ApplyHazardTick(float DeltaSeconds) override;

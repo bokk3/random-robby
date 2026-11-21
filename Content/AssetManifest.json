@@ -1168,6 +1168,246 @@
           "Bytes": 1081
         }
       }
+    },
+    "Rig_ZombieExploder_Attack": {
+      "Timestamp": "2026-11-21T06:24:13.348958+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/ZombieExploderMoves/Attack/Rig_ZombieExploder_Attack_D.png": {
+          "SHA256": "ee508faafdb9d5198f034711e7edfc981616fcc8892b0528d9ae318f2cde19f9",
+          "Bytes": 995845
+        },
+        "Art/Rigs/ZombieExploderMoves/Attack/Rig_ZombieExploder_Attack_N.png": {
+          "SHA256": "ad7337ecfa78b77c7e423d9084b9e955723a1b13eb46ed3ec28dc33277abdc83",
+          "Bytes": 587353
+        },
+        "Art/Rigs/ZombieExploderMoves/Attack/Rig_ZombieExploder_Attack_E.png": {
+          "SHA256": "ef1ebe038010c9cd1fa993eeea138253486084192187d042a4f3ff81793c5c9a",
+          "Bytes": 109069
+        },
+        "Art/Rigs/ZombieExploderMoves/Attack/Rig_ZombieExploder_Attack_ORM.png": {
+          "SHA256": "5ba67e31505e366509bc000585758bce087bc1bafd4d6697818e5cc50fd8fd60",
+          "Bytes": 340723
+        },
+        "Art/Rigs/ZombieExploderMoves/Attack/AtlasMetadata.json": {
+          "SHA256": "2f393bc3d39ab598cb89a14325a6b23571303ad38aa9abe8c2fa33a4eab0c374",
+          "Bytes": 8311
+        },
+        "Art/Rigs/ZombieExploderMoves/Attack/rig_sockets.json": {
+          "SHA256": "17ba5ef9e3f43f1573786d4e5c775940e1b67ac8d30d7abf0587354a7166240a",
+          "Bytes": 1079
+        }
+      }
+    },
+    "Rig_ZombieMirrorStalker_Attack": {
+      "Timestamp": "2026-11-21T06:24:16.484723+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/Rig_ZombieMirrorStalker_Attack_D.png": {
+          "SHA256": "005d866c2ee9c40c974d5f0faad8b34dfb2aaccfe0c7bce27e29b513e7e5e17a",
+          "Bytes": 691102
+        },
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/Rig_ZombieMirrorStalker_Attack_N.png": {
+          "SHA256": "a508ed3df92db496d9d22d77cb716244895d3c8851f300e9fd8a7c521a0a55ea",
+          "Bytes": 447646
+        },
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/Rig_ZombieMirrorStalker_Attack_E.png": {
+          "SHA256": "169ca9834661f96d3d3b37c486100796be3c4ce234b9698cb2f59d32e5725871",
+          "Bytes": 3182
+        },
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/Rig_ZombieMirrorStalker_Attack_ORM.png": {
+          "SHA256": "5fb315dc8afacb9a5bdbd92754f4acfa2d755e9796a27a8f77fa00f69479b91a",
+          "Bytes": 280476
+        },
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/AtlasMetadata.json": {
+          "SHA256": "d0171b9794619ac87b848b2c09f9a6a4e40a989dec294e37934edcfc5ff0e3a4",
+          "Bytes": 8316
+        },
+        "Art/Rigs/ZombieMirrorStalkerMoves/Attack/rig_sockets.json": {
+          "SHA256": "cd7a152ff8018c3107a9067e0cd2065ab26b0cf97620cdb9805ecdb55aeed7ba",
+          "Bytes": 1084
+        }
+      }
+    },
+    "Rig_BossGuardian_Attack": {
+      "Timestamp": "2026-11-21T06:24:19.412844+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/BossGuardianMoves/Attack/Rig_BossGuardian_Attack_D.png": {
+          "SHA256": "20b24b259781cbc19e6ceaf8cf960ea8e51fb527889ad540b05e709edc45bf00",
+          "Bytes": 934238
+        },
+        "Art/Rigs/BossGuardianMoves/Attack/Rig_BossGuardian_Attack_N.png": {
+          "SHA256": "fa9dac530c7c9cc7543034a83e1be3f48b23845d1a0df73191ae3470f76cdf57",
+          "Bytes": 524368
+        },
+        "Art/Rigs/BossGuardianMoves/Attack/Rig_BossGuardian_Attack_E.png": {
+          "SHA256": "36a7ef1ad595883bffb653f77284d79388c7ea98a07941ad7cbc605ef6d7e6f7",
+          "Bytes": 101439
+        },
+        "Art/Rigs/BossGuardianMoves/Attack/Rig_BossGuardian_Attack_ORM.png": {
+          "SHA256": "dab0bca6dd3e4856515187f09f170a9b969ce7692efa655294d50a3858991123",
+          "Bytes": 307034
+        },
+        "Art/Rigs/BossGuardianMoves/Attack/AtlasMetadata.json": {
+          "SHA256": "0f51a5be3529d1cce2791c019918de5b67589adb6bb4ace02efe793dd9eb4104",
+          "Bytes": 8304
+        },
+        "Art/Rigs/BossGuardianMoves/Attack/rig_sockets.json": {
+          "SHA256": "3ccb6ea15dc3dfd3467e744dec2ebbbdb32adf50313b17b7d8fe4a123717f1c8",
+          "Bytes": 1077
+        }
+      }
+    },
+    "Rig_Glazier_Walk": {
+      "Timestamp": "2026-11-21T06:31:35.226291+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/GlazierMoves/Walk/Rig_Glazier_Walk_D.png": {
+          "SHA256": "db383992e42a1326e6ea80528eaa2be5dec18ed92e220817b2f9dacaff96fcd9",
+          "Bytes": 955854
+        },
+        "Art/Rigs/GlazierMoves/Walk/Rig_Glazier_Walk_N.png": {
+          "SHA256": "ce364bbb5ebcfda15b6fe61bc7e0f77a60b30e6895e961ee7929545d56a161a0",
+          "Bytes": 522305
+        },
+        "Art/Rigs/GlazierMoves/Walk/Rig_Glazier_Walk_E.png": {
+          "SHA256": "d69112264db6c2c1b6f6bc930b7d7cf38c27a4fead1b5000259265c5405c66ef",
+          "Bytes": 3129
+        },
+        "Art/Rigs/GlazierMoves/Walk/Rig_Glazier_Walk_ORM.png": {
+          "SHA256": "9ad3c917b35b21891ff3b7bad29ca08521de9bee89d21f2e221d6a7f936289b7",
+          "Bytes": 324247
+        },
+        "Art/Rigs/GlazierMoves/Walk/AtlasMetadata.json": {
+          "SHA256": "36eb0049cd17c5346c3a8467e23af654d2deb491bb8f2a2394ff005552d257e0",
+          "Bytes": 9144
+        },
+        "Art/Rigs/GlazierMoves/Walk/rig_sockets.json": {
+          "SHA256": "af9163963f22fa053e667fadef99129ef8b8254f06b0e36369dffbf5959269be",
+          "Bytes": 1070
+        }
+      }
+    },
+    "Rig_Glazier_Attack": {
+      "Timestamp": "2026-11-21T06:31:37.844020+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/GlazierMoves/Attack/Rig_Glazier_Attack_D.png": {
+          "SHA256": "a97906d324393203c17076a7e9cd4944c8668c374eacceaeec092d606f7a3fac",
+          "Bytes": 991699
+        },
+        "Art/Rigs/GlazierMoves/Attack/Rig_Glazier_Attack_N.png": {
+          "SHA256": "8efaa631ff823f9f303b842221f37771b3265f13edf5e53870476b416f93b96d",
+          "Bytes": 558324
+        },
+        "Art/Rigs/GlazierMoves/Attack/Rig_Glazier_Attack_E.png": {
+          "SHA256": "09192b9858712f6723d7ac42cd57677b694d166e65a2e0388229fcb9dc229d4f",
+          "Bytes": 10722
+        },
+        "Art/Rigs/GlazierMoves/Attack/Rig_Glazier_Attack_ORM.png": {
+          "SHA256": "444e06e2ba3d966534fbc932a10018dc5725cbced7faa45e117a30fb0fd504fc",
+          "Bytes": 354690
+        },
+        "Art/Rigs/GlazierMoves/Attack/AtlasMetadata.json": {
+          "SHA256": "2796a9e24486393859fb026c0d4e5d312497ccdfa480a9f16fb9837001228376",
+          "Bytes": 8298
+        },
+        "Art/Rigs/GlazierMoves/Attack/rig_sockets.json": {
+          "SHA256": "df844d515a0280c66dcceaf4d3edd2e381e12551a8d576b30e7fe4219450d555",
+          "Bytes": 1072
+        }
+      }
+    },
+    "Rig_NPC_Tamsin": {
+      "Timestamp": "2026-11-21T06:31:40.736329+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/NPC_Tamsin/Rig_NPC_Tamsin_D.png": {
+          "SHA256": "f1df9181ff436f110f591168bc132bd2c5793de24993d06bed444f3654e796f8",
+          "Bytes": 1010019
+        },
+        "Art/Rigs/NPC_Tamsin/Rig_NPC_Tamsin_N.png": {
+          "SHA256": "41bfc4578b78094a741a22ae1abfc3e06e7e5451c8499bb4cccd453170038671",
+          "Bytes": 545555
+        },
+        "Art/Rigs/NPC_Tamsin/Rig_NPC_Tamsin_E.png": {
+          "SHA256": "36a7116e8bb4018457367d74af83a809f468285e00cdd78a641785fe42ba8451",
+          "Bytes": 107301
+        },
+        "Art/Rigs/NPC_Tamsin/Rig_NPC_Tamsin_ORM.png": {
+          "SHA256": "b3318adeb4997710330ece8d3ed0f384377cae9d02d48ead5199e4df18e6afe1",
+          "Bytes": 327863
+        },
+        "Art/Rigs/NPC_Tamsin/AtlasMetadata.json": {
+          "SHA256": "11bd858ccb7db1b5a28dda0f90831456cf3fceec04094375a49dc5fffdfa7c98",
+          "Bytes": 8228
+        },
+        "Art/Rigs/NPC_Tamsin/rig_sockets.json": {
+          "SHA256": "4175836bc289fa8e7bf824a7831a1fa115cd5d3346ba5c89d574943fc9103cbc",
+          "Bytes": 1068
+        }
+      }
+    },
+    "Rig_NPC_Nibbot": {
+      "Timestamp": "2026-11-21T06:31:43.903631+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/NPC_Nibbot/Rig_NPC_Nibbot_D.png": {
+          "SHA256": "726b6ad1eaa5353f52b40fdb5098e76798386c70c54621d2dbb3740dbeb3c14c",
+          "Bytes": 1420430
+        },
+        "Art/Rigs/NPC_Nibbot/Rig_NPC_Nibbot_N.png": {
+          "SHA256": "4b15bc9d870af237b39e33796ea99d07f3e8d778895506fe7ea21d21098c4935",
+          "Bytes": 703136
+        },
+        "Art/Rigs/NPC_Nibbot/Rig_NPC_Nibbot_E.png": {
+          "SHA256": "d38395fb5c92187f20f228726de2eecc1c61ddff82f91b06a054967c71eeeeb1",
+          "Bytes": 131299
+        },
+        "Art/Rigs/NPC_Nibbot/Rig_NPC_Nibbot_ORM.png": {
+          "SHA256": "8fe3bc4b35cd69ee1880626d4d391e2d9e3c7c189135209ed116cd536689d86f",
+          "Bytes": 461495
+        },
+        "Art/Rigs/NPC_Nibbot/AtlasMetadata.json": {
+          "SHA256": "9346e18e49d366b443f951d8014bc12824b61d2cca60352905f1c1525a512e9b",
+          "Bytes": 8288
+        },
+        "Art/Rigs/NPC_Nibbot/rig_sockets.json": {
+          "SHA256": "f837592f863472e1357f9810d8a88576ae5f495a408865adf886a87e4f7baee7",
+          "Bytes": 1068
+        }
+      }
+    },
+    "VFX_Combat_4x4": {
+      "Timestamp": "2026-11-21T06:31:49.816525+00:00",
+      "Provenance": "EcoFloodFillKey-VFX_Combat_4x4-v1",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Ecosystem/VFX_Combat_4x4/VFX_Combat_4x4_D.png": {
+          "SHA256": "d1ce503eebe82a8bdcfe309f79e4f4a9054feb0621fba0e98c05484367da4dd1",
+          "Bytes": 386503
+        },
+        "Art/Ecosystem/VFX_Combat_4x4/VFX_Combat_4x4_N.png": {
+          "SHA256": "e1dc175323add6e4ba087f1378396ae730ec32d834699dc8de4aec85fe56c0a8",
+          "Bytes": 240083
+        },
+        "Art/Ecosystem/VFX_Combat_4x4/VFX_Combat_4x4_E.png": {
+          "SHA256": "b9b983d458018ad07aa29e2f72bf43a2d0a9b8b312e18138525cb0fa0c659e1b",
+          "Bytes": 131639
+        },
+        "Art/Ecosystem/VFX_Combat_4x4/AtlasMetadata.json": {
+          "SHA256": "8adf867bc5692163d15071dc4d8c363922c82ca4044c38a165790b0b50a4f286",
+          "Bytes": 8343
+        }
+      }
     }
   },
   "assets": [

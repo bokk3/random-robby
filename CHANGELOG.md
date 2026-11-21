@@ -23,6 +23,23 @@ Work toward 1.6.0 (plan milestones M0, M1 and most of M2).
 - Elites (seeded, about 1 in 6) and per-floor health/damage scaling.
 - `AI.EnemyTelegraphParryAndTokens` and `AI.ThrowerFlaskFlightDeflect` automation tests.
 
+### Added (Glazier, Tamsin, Nibbot, visible hazards)
+- New enemy `AZombieGlazier`: a mirror pane that blocks frontal melee hits (`AZombieBase::TryBlockMeleeHit`),
+  broken by hits with at least 0.25 s stun (finisher, heavy smash, dash strike) or by hitting it from behind;
+  slow uninterruptible shield bash. Spawns in mirror mazes and, from floor 2, in the gauntlet. Fifth bestiary entry.
+- `UDungeoneerSheetSpriteComponent` plays one row of a 4x4 sheet as a flipbook. Tamsin (sanctuary) and Nibbot
+  (vendor) use it: idle, talk when the hero is near with a greeting line, Tamsin hands over sense upgrades and
+  fades back into the fire.
+- Hazard pools give off coloured gas puffs (fire, poison, stillsmoke) from the new combat VFX sheet, so they are
+  visible; the Thrower's flask uses the sheet's flask frame.
+- `AI.GlazierShieldAndGuardBreak` automation test.
+
+### Added (enemy and NPC art, M6)
+- Exploder attack frames in game (wind-up, shoulder barge, white-hot fuse). Slip and Colossus attack sheets
+  are sliced but wait for matching walk sheets, because they redesign both enemies (silver mirror-man; firebrick
+  kiln giant). Enemies pick frames through `AZombieBase::ResolveAttackFrame`; the Colossus sheet's rows are attacks.
+- Sliced, not yet used by game code: Glazier walk and attack, Tamsin, Nibbot, combat VFX sheet.
+
 ### Added (hero animation, M6)
 - Five hero move sheets (combo, heavy, evade, skills, hurt/idle), generated with Gemini, cleaned and sliced
   into `Content/Art/Rigs/DungeoneerHeroMoves/`. The hero now shows real frames for every move: combo wind-up,

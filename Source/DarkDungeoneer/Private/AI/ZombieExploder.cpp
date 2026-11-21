@@ -145,6 +145,18 @@ void AZombieExploder::Tick(float DeltaSeconds)
 	}
 }
 
+bool AZombieExploder::ResolveAttackFrame(const int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept
+{
+	// Sheet columns: wind-up, shoulder lunge, fuse lit (white-hot belly), burst.
+	if (IsZombieAlive() && bFuseIgnited)
+	{
+		OutRow = FacingRow;
+		OutCol = 2;
+		return true;
+	}
+	return Super::ResolveAttackFrame(FacingRow, OutRow, OutCol);
+}
+
 void AZombieExploder::IgniteFuse() noexcept
 {
 	bFuseIgnited = true;

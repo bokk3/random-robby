@@ -10,6 +10,7 @@
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieMirrorStalker.h"
+#include "AI/ZombieGlazier.h"
 #include "AI/ZombieBase.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
@@ -2512,6 +2513,59 @@ bool FDungeoneerThrowerFlaskFlightTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Returned flask is done"), Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::None);
 	TestTrue(TEXT("Thrower is hurt by its own flask"), Thrower->GetCurrentHealth() < ThrowerHp);
 	TestTrue(TEXT("Thrower is stunned"), Thrower->IsStunned());
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerGlazierShieldTest,
+	"DarkDungeoneer.AI.GlazierShieldAndGuardBreak",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerGlazierShieldTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+	UZombieSpatialSubsystem* Spatial = TestWorld->GetSubsystem<UZombieSpatialSubsystem>();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieGlazier* Glazier = TestWorld->SpawnActor<AZombieGlazier>(FVector(150.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestTrue(TEXT("Spawned hero, Glazier and spatial subsystem"), Hero && Glazier && Spatial);
+	if (!Hero || !Glazier || !Spatial) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+	Glazier->DispatchBeginPlay();
+	Glazier->FaceLocation(Hero->GetActorLocation()); // shield toward the hero
+
+	const float FullHp = Glazier->GetCurrentHealth();
+	const FVector HeroLoc = Hero->GetActorLocation();
+
+	// 1. A light hit from the front is turned aside.
+	const int32 LightHits = Spatial->ApplyMeleeArcDamage(HeroLoc, FVector(1.0, 0.0, 0.0), 260.0f, 0.2f, 40.0f, Hero, 300.0f, 0.0f);
+	TestEqual(TEXT("Front light hit is blocked"), LightHits, 0);
+	TestNearlyEqual(TEXT("Blocked hit does no damage"), Glazier->GetCurrentHealth(), FullHp, 0.01f);
+	TestFalse(TEXT("Guard holds against a light hit"), Glazier->IsGuardBroken());
+
+	// 2. A heavy hit (with stun) cracks the pane and lands.
+	const int32 HeavyHits = Spatial->ApplyMeleeArcDamage(HeroLoc, FVector(1.0, 0.0, 0.0), 260.0f, 0.2f, 99.0f, Hero, 700.0f, 0.8f);
+	TestEqual(TEXT("Heavy hit lands through the guard"), HeavyHits, 1);
+	TestTrue(TEXT("Heavy hit damages the Glazier"), Glazier->GetCurrentHealth() < FullHp);
+	TestTrue(TEXT("Heavy hit breaks the guard"), Glazier->IsGuardBroken());
+
+	// 3. A light hit from behind is never blocked.
+	AZombieGlazier* Flanked = TestWorld->SpawnActor<AZombieGlazier>(FVector(5000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Flanked)
+	{
+		Flanked->DispatchBeginPlay();
+		Flanked->FaceLocation(FVector(4000.0, 0.0, 95.0)); // shield faces west
+		const float FlankHp = Flanked->GetCurrentHealth();
+		const int32 BackHits = Spatial->ApplyMeleeArcDamage(FVector(5150.0, 0.0, 95.0), FVector(-1.0, 0.0, 0.0), 260.0f, 0.2f, 40.0f, Hero, 300.0f, 0.0f);
+		TestEqual(TEXT("Hit from behind lands"), BackHits, 1);
+		TestTrue(TEXT("Hit from behind does damage"), Flanked->GetCurrentHealth() < FlankHp);
+	}
 
 	TestWorld->DestroyWorld(false);
 	return true;

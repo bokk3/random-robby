@@ -29,6 +29,11 @@ public:
 
 protected:
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("MirrorStalker"); }
+	virtual const TCHAR* GetAttackSheetPrefix() const noexcept override { return TEXT("MirrorStalkerAttack"); }
+	virtual const TCHAR* GetRedesignedWalkPrefix() const noexcept override { return TEXT("MirrorStalkerWalk"); }
+	virtual bool AttackSheetNeedsRedesignedWalk() const noexcept override { return true; }
+	virtual bool UsesDeathFrame() const noexcept override { return true; }
+	virtual bool ResolveAttackFrame(int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept override;
 	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("MirrorStalker_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("MirrorStalker_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(0.24f, 0.85f, 1.0f); }

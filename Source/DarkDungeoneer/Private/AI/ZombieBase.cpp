@@ -85,23 +85,31 @@ void AZombieBase::EnsureVisualMeshInitialized()
 				{
 					ZombieVisualMesh->SetRelativeRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
 
-					const TCHAR* Prefix = GetArchetypeKeyPrefix();
-					DirectionalZombieMIDs.Reset();
-					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
+					// Walk cells 0-15 (a redesigned walk sheet wins when present), attack cells 16-31 when available.
+					auto HasCells = [Bootstrap](const TCHAR* CellPrefix)
 					{
-						for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+						return CellPrefix && Bootstrap->GetExtractedCellTexture(FName(*FString::Printf(TEXT("%s_R0_C0_D"), CellPrefix))) != nullptr;
+					};
+					const TCHAR* Redesign = GetRedesignedWalkPrefix();
+					const bool bRedesignedWalk = HasCells(Redesign);
+					const TCHAR* WalkPrefix = bRedesignedWalk ? Redesign : GetArchetypeKeyPrefix();
+					const TCHAR* AttackPrefix = GetAttackSheetPrefix();
+					bHasAttackFrames = HasCells(AttackPrefix) && (!AttackSheetNeedsRedesignedWalk() || bRedesignedWalk);
+
+					DirectionalZombieMIDs.Reset();
+					DirectionalZombieMIDs.SetNum(bHasAttackFrames ? 32 : 16);
+					for (int32 Sheet = 0; Sheet < (bHasAttackFrames ? 2 : 1); ++Sheet)
+					{
+						const TCHAR* Prefix = (Sheet == 0) ? WalkPrefix : AttackPrefix;
+						for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
 						{
-							const FName DiffKey(*FString::Printf(TEXT("%s_R%d_C%d_D"), Prefix, RowIdx, ColIdx));
-							const FName NormKey(*FString::Printf(TEXT("%s_R%d_C%d_N"), Prefix, RowIdx, ColIdx));
-							UMaterialInstanceDynamic* Mat = Bootstrap->CreateDungeonOrRigMaterial(
-								this,
-								DiffKey,
-								NormKey,
-								Tint,
-								0.45f,
-								false,
-								true);
-							DirectionalZombieMIDs.Add(Mat);
+							for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+							{
+								const FName DiffKey(*FString::Printf(TEXT("%s_R%d_C%d_D"), Prefix, RowIdx, ColIdx));
+								const FName NormKey(*FString::Printf(TEXT("%s_R%d_C%d_N"), Prefix, RowIdx, ColIdx));
+								DirectionalZombieMIDs[Sheet * 16 + RowIdx * 4 + ColIdx] = Bootstrap->CreateDungeonOrRigMaterial(
+									this, DiffKey, NormKey, Tint, 0.45f, false, true);
+							}
 						}
 					}
 
@@ -130,6 +138,31 @@ void AZombieBase::EnsureVisualMeshInitialized()
 			}
 		}
 	}
+}
+
+bool AZombieBase::ResolveAttackFrame(const int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept
+{
+	OutRow = FacingRow;
+	if (!IsZombieAlive())
+	{
+		if (!UsesDeathFrame())
+		{
+			return false;
+		}
+		OutCol = 3;
+		return true;
+	}
+	if (AttackPhase == EZombieAttackPhase::Windup)
+	{
+		OutCol = 0;
+		return true;
+	}
+	if (AttackPhase == EZombieAttackPhase::Recover && AttackPhaseRemaining > MeleeAttack.RecoverSec * 0.4f)
+	{
+		OutCol = 1; // the strike pose holds through the first part of the recovery
+		return true;
+	}
+	return false;
 }
 
 void AZombieBase::AdvanceWalkFlipbookByDistance(float DeltaDistanceUU, bool bIsMoving) noexcept
@@ -174,7 +207,13 @@ void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, in
 
 	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(HeadingOctant, -45.0f));
 	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
-	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
+	int32 DesiredCell = DesiredRow * 4 + DesiredCol;
+	int32 AttackRow = 0;
+	int32 AttackCol = 0;
+	if (bHasAttackFrames && ResolveAttackFrame(DesiredRow, AttackRow, AttackCol))
+	{
+		DesiredCell = 16 + FMath::Clamp(AttackRow, 0, 3) * 4 + FMath::Clamp(AttackCol, 0, 3);
+	}
 	if (DesiredCell == ActiveDirectionalCellIndex)
 	{
 		return;
@@ -184,7 +223,10 @@ void AZombieBase::UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, in
 	{
 		ZombieVisualMesh->SetMaterial(0, DirectionalZombieMIDs[DesiredCell].Get());
 		ActiveDirectionalRow = DesiredRow;
-		ActiveWalkFrameColumn = DesiredCol;
+		if (DesiredCell < 16)
+		{
+			ActiveWalkFrameColumn = DesiredCol;
+		}
 		ActiveDirectionalCellIndex = DesiredCell;
 	}
 }
@@ -297,6 +339,7 @@ void AZombieBase::Tick(float DeltaSeconds)
 	}
 	else if (DeathHideCountdown > 0.0f)
 	{
+		SecondsSinceDeath += DeltaSeconds;
 		DeathHideCountdown = FMath::Max(0.0f, DeathHideCountdown - DeltaSeconds);
 		if (DeathHideCountdown <= 0.0f)
 		{
@@ -737,9 +780,14 @@ void AZombieBase::OnZombieDied()
 	}
 	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_ZombieDeath_0")), GetActorLocation(), 0.85f, 0.1f);
 
-	if (ZombieVisualMesh)
+	if (ZombieVisualMesh && bHasAttackFrames && UsesDeathFrame())
 	{
-		// Collapse billboard onto the flagstone floor cleanly
+		DeathHideCountdown = 1.4f; // the death frame plays upright, then the body is gone
+		ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale());
+	}
+	else if (ZombieVisualMesh)
+	{
+		// No death art: fold the sprite flat onto the floor.
 		ZombieVisualMesh->SetRelativeLocation(FVector(0.0, 0.0, -48.0));
 		ZombieVisualMesh->SetRelativeRotation(FRotator(85.0f, 0.0f, 0.0f));
 	}

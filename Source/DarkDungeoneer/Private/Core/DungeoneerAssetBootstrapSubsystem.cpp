@@ -775,6 +775,18 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		{ TEXT("DungeoneerHeroMoves/Evade"),    TEXT("Rig_DungeoneerHero_Evade_D.png"),    TEXT("Rig_DungeoneerHero_Evade_N.png"),    TEXT("HeroEvade") },
 		{ TEXT("DungeoneerHeroMoves/Skills"),   TEXT("Rig_DungeoneerHero_Skills_D.png"),   TEXT("Rig_DungeoneerHero_Skills_N.png"),   TEXT("HeroSkills") },
 		{ TEXT("DungeoneerHeroMoves/HurtIdle"), TEXT("Rig_DungeoneerHero_HurtIdle_D.png"), TEXT("Rig_DungeoneerHero_HurtIdle_N.png"), TEXT("HeroHurtIdle") },
+		// Enemy move sheets. "Walk" entries are redesigned walk cycles that replace the original sheet when present.
+		{ TEXT("ZombieExploderMoves/Attack"),      TEXT("Rig_ZombieExploder_Attack_D.png"),      TEXT("Rig_ZombieExploder_Attack_N.png"),      TEXT("ExploderAttack") },
+		{ TEXT("ZombieFastThrowerMoves/Attack"),   TEXT("Rig_ZombieFastThrower_Attack_D.png"),   TEXT("Rig_ZombieFastThrower_Attack_N.png"),   TEXT("ThrowerAttack") },
+		{ TEXT("ZombieMirrorStalkerMoves/Attack"), TEXT("Rig_ZombieMirrorStalker_Attack_D.png"), TEXT("Rig_ZombieMirrorStalker_Attack_N.png"), TEXT("MirrorStalkerAttack") },
+		{ TEXT("ZombieMirrorStalkerMoves/Walk"),   TEXT("Rig_ZombieMirrorStalker_Walk_D.png"),   TEXT("Rig_ZombieMirrorStalker_Walk_N.png"),   TEXT("MirrorStalkerWalk") },
+		{ TEXT("BossGuardianMoves/Attack"),        TEXT("Rig_BossGuardian_Attack_D.png"),        TEXT("Rig_BossGuardian_Attack_N.png"),        TEXT("BossGuardianAttack") },
+		{ TEXT("BossGuardianMoves/Walk"),          TEXT("Rig_BossGuardian_Walk_D.png"),          TEXT("Rig_BossGuardian_Walk_N.png"),          TEXT("BossGuardianWalk") },
+		{ TEXT("GlazierMoves/Walk"),               TEXT("Rig_Glazier_Walk_D.png"),               TEXT("Rig_Glazier_Walk_N.png"),               TEXT("GlazierWalk") },
+		{ TEXT("GlazierMoves/Attack"),             TEXT("Rig_Glazier_Attack_D.png"),             TEXT("Rig_Glazier_Attack_N.png"),             TEXT("GlazierAttack") },
+		// NPC sheets: one action per row (see UDungeoneerSheetSpriteComponent).
+		{ TEXT("NPC_Tamsin"),                      TEXT("Rig_NPC_Tamsin_D.png"),                 TEXT("Rig_NPC_Tamsin_N.png"),                 TEXT("NpcTamsin") },
+		{ TEXT("NPC_Nibbot"),                      TEXT("Rig_NPC_Nibbot_D.png"),                 TEXT("Rig_NPC_Nibbot_N.png"),                 TEXT("NpcNibbot") },
 		{ TEXT("ZombieExploder"),      TEXT("Rig_ZombieExploder_Raw_D.png"),      TEXT("Rig_ZombieExploder_Raw_N.png"),      TEXT("Exploder") },
 		{ TEXT("ZombieFastThrower"),   TEXT("Rig_ZombieFastThrower_Raw_D.png"),   TEXT("Rig_ZombieFastThrower_Raw_N.png"),   TEXT("Thrower") },
 		{ TEXT("ZombieMirrorStalker"), TEXT("Rig_ZombieMirrorStalker_Raw_D.png"), TEXT("Rig_ZombieMirrorStalker_Raw_N.png"), TEXT("MirrorStalker") },
@@ -804,6 +816,9 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 			}
 		}
 	}
+
+	// Combat effects sheet: row 0 flask and shatter, row 1 sparks, row 2 gas puffs, row 3 dust and blast ring.
+	ExtractAllGridCellsFromPng(FPaths::ProjectContentDir() / TEXT("Art/Ecosystem/VFX_Combat_4x4/VFX_Combat_4x4_D.png"), TEXT("VfxCombat"), 4, 4, false, true, false, TEXT("D"));
 
 	return ExtractedCellTextures.Num();
 }

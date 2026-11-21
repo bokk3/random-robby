@@ -13,8 +13,8 @@ the new sprite/FX materials, effect rings and sparks. Details are in CHANGELOG [
 Still open in M2: HUD restyle (skill icons with radial cooldowns, boss bar phase notch, biome title card).
 In editor `-game` runs the first effect of a session hitches about 3 s while a shader compiles ("Preparing
 Shaders (1)" stays on screen); cooked builds precompile shaders. M3 (telegraphed enemy attacks, elites, floor scaling)
-is done and verified: 30 automation specs pass. Not yet done in M3: the new "Glazier" shield enemy (waiting on
-its sprite sheets) and a Colossus sweep/charge. Enemies only notice a hero who makes noise or lights them,
+is done and verified: 30 automation specs pass. The Glazier shield enemy is in (31 specs pass). Not yet done in M3: a Colossus
+sweep/charge. Enemies only notice a hero who makes noise or lights them,
 so a hero standing still in a combat room is left alone; that is the existing stealth design. Next is M4
 (branching floors, arena locks, waves, choices, weapons). M6 has started: the five hero move sheets are in and used in game (see CHANGELOG); enemy, NPC
 and effect sheets from docs/TO_GENERATE.md are still to come. Slice each sheet into its own folder.

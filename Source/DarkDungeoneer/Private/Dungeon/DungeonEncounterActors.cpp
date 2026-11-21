@@ -1,4 +1,6 @@
 #include "Dungeon/DungeonEncounterActors.h"
+#include "AI/ZombieSpatialSubsystem.h"
+#include "Rendering/DungeoneerSheetSpriteComponent.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
@@ -105,6 +107,54 @@ ARestingGroundActor::ARestingGroundActor()
 	CampfireLight->SetAttenuationRadius(880.0f);
 	CampfireLight->VolumetricScatteringIntensity = 1.25f;
 	CampfireLight->CastShadows = false;
+
+	TamsinSprite = CreateDefaultSubobject<UDungeoneerSheetSpriteComponent>(TEXT("TamsinSprite"));
+	TamsinSprite->SetupAttachment(RootComponent);
+	TamsinSprite->SetRelativeLocation(FVector(0.0, 0.0, 95.0));
+	TamsinSprite->SetRelativeScale3D(FVector(2.2, 2.2, 2.2));
+}
+
+namespace NpcPrivate
+{
+	/** Nearest living hero to a point, and its distance (2D). */
+	ADungeoneerCharacter* NearestHero(const UWorld* World, const FVector& From, double& OutDist)
+	{
+		OutDist = 1.0e9;
+		ADungeoneerCharacter* Best = nullptr;
+		const UZombieSpatialSubsystem* Spatial = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+		for (int32 i = 0; Spatial && i < Spatial->GetTrackedPlayerCount(); ++i)
+		{
+			ADungeoneerCharacter* Hero = Spatial->GetTrackedPlayerAt(i);
+			if (Hero && !Hero->IsDowned())
+			{
+				const double Dist = FVector::Dist2D(From, Hero->GetActorLocation());
+				if (Dist < OutDist)
+				{
+					OutDist = Dist;
+					Best = Hero;
+				}
+			}
+		}
+		return Best;
+	}
+
+	// Tamsin: dry, practical, kind (docs/STORY.md).
+	static const TCHAR* const TamsinLines[] =
+	{
+		TEXT("Sit. It's the same fire in every hearth down here."),
+		TEXT("Back again. The Ledger says you're stubborn."),
+		TEXT("The Third Eye wants gold. It always does."),
+		TEXT("Keep it lit, Bearer. That's the whole job."),
+	};
+
+	// Nibbot speaks backwards: each word reversed, in the right order.
+	static const TCHAR* const NibbotLines[] =
+	{
+		TEXT("emocleW kcab, reraeB."),
+		TEXT("dloG rof serusaert."),
+		TEXT("yuB gnihtemos, esaelp."),
+		TEXT("dniM eht ssalg."),
+	};
 }
 
 void ARestingGroundActor::BeginPlay()
@@ -119,6 +169,11 @@ void ARestingGroundActor::BeginPlay()
 		FVector(1.50, 1.50, 1.50),
 		FLinearColor(1.0f, 0.58f, 0.18f),
 		0.42f);
+
+	if (TamsinSprite && TamsinSprite->InitSheet(TEXT("NpcTamsin")) && BrazierMesh)
+	{
+		BrazierMesh->SetVisibility(false); // her sheet includes the brazier
+	}
 
 	EncounterVisualHelper::ApplyEncounter25DSpriteVisual(
 		this,
@@ -183,6 +238,11 @@ bool ARestingGroundActor::TriggerSensoryAltarUpgrade(ADungeoneerCharacter* Playe
 	}
 
 	Perks->UpgradePerk(BestPerk);
+	if (TamsinSprite && TamsinSprite->HasSheet())
+	{
+		TamsinMood = 2;
+		TamsinSprite->PlayRow(2, 6.0f, false); // she hands the gift over
+	}
 	Player->PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 120.0), TEXT("THE THIRD EYE OPENS A LITTLE WIDER"), EDungeoneerFloatingTextKind::Relic);
 	return true;
 }
@@ -226,8 +286,11 @@ void ARestingGroundActor::Tick(float DeltaSeconds)
 	if (CampfireLight)
 	{
 		CampfirePhase += DeltaSeconds * 7.5f;
-		CampfireLight->SetIntensity(680.0f + 130.0f * FMath::Sin(CampfirePhase));
+		// Tamsin's sprite sits right in the fire; at full strength the light washes her out to white.
+		const float BaseLumens = (TamsinSprite && TamsinSprite->HasSheet()) ? 260.0f : 680.0f;
+		CampfireLight->SetIntensity(BaseLumens * (1.0f + 0.19f * FMath::Sin(CampfirePhase)));
 	}
+	TickTamsin(DeltaSeconds);
 
 	if (!HasAuthority())
 	{
@@ -240,6 +303,46 @@ void ARestingGroundActor::Tick(float DeltaSeconds)
 		{
 			Player->RestoreAtRestingGround(HealthRestorePerSecond * DeltaSeconds, BatteryRestorePerSecond * DeltaSeconds);
 		}
+	}
+}
+
+void ARestingGroundActor::TickTamsin(const float DeltaSeconds) noexcept
+{
+	if (!TamsinSprite || !TamsinSprite->HasSheet())
+	{
+		return;
+	}
+	double Dist = 0.0;
+	ADungeoneerCharacter* Hero = NpcPrivate::NearestHero(GetWorld(), GetActorLocation(), Dist);
+	const bool bNear = Hero && Dist < 380.0;
+
+	if (TamsinMood == 2 && TamsinSprite->IsFinished())
+	{
+		TamsinMood = 1;
+		TamsinSprite->PlayRow(1, 5.0f, true);
+	}
+	else if (TamsinMood == 3 && TamsinSprite->IsFinished())
+	{
+		TamsinMood = 0;
+		TamsinSprite->PlayRow(0, 5.0f, true);
+	}
+	else if (bNear && (TamsinMood == 0 || TamsinMood == 3))
+	{
+		TamsinMood = 1;
+		TamsinSprite->PlayRow(1, 5.0f, true);
+		if (!bTamsinGreeted && Hero)
+		{
+			bTamsinGreeted = true;
+			const int32 Count = UE_ARRAY_COUNT(NpcPrivate::TamsinLines);
+			Hero->PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 230.0), NpcPrivate::TamsinLines[TamsinLineIndex % Count], EDungeoneerFloatingTextKind::Status);
+			++TamsinLineIndex;
+		}
+	}
+	else if (!bNear && Dist > 650.0 && TamsinMood == 1)
+	{
+		TamsinMood = 3;
+		bTamsinGreeted = false;
+		TamsinSprite->PlayRow(3, 4.0f, false); // sinks back into the coals
 	}
 }
 
@@ -266,6 +369,11 @@ AVendorActor::AVendorActor()
 	MerchantLanternLight->SetIntensity(520.0f);
 	MerchantLanternLight->SetAttenuationRadius(700.0f);
 	MerchantLanternLight->CastShadows = false;
+
+	NibbotSprite = CreateDefaultSubobject<UDungeoneerSheetSpriteComponent>(TEXT("NibbotSprite"));
+	NibbotSprite->SetupAttachment(VendorRoot);
+	NibbotSprite->SetRelativeLocation(FVector(0.0, 0.0, 105.0));
+	NibbotSprite->SetRelativeScale3D(FVector(2.3, 2.3, 2.3));
 }
 
 void AVendorActor::OnConstruction(const FTransform& Transform)
@@ -284,6 +392,10 @@ void AVendorActor::OnConstruction(const FTransform& Transform)
 void AVendorActor::BeginPlay()
 {
 	Super::BeginPlay();
+	if (NibbotSprite && NibbotSprite->InitSheet(TEXT("NpcNibbot")) && StallMesh)
+	{
+		StallMesh->SetVisibility(false); // his sheet includes the mirror frame he stands in
+	}
 	EncounterVisualHelper::ApplyEncounter25DSpriteVisual(
 		this,
 		StallMesh.Get(),
@@ -302,6 +414,36 @@ void AVendorActor::Tick(float DeltaSeconds)
 		LanternSwayPhase += DeltaSeconds * 3.2f;
 		MerchantLanternLight->SetRelativeLocation(FVector(FMath::Sin(LanternSwayPhase) * 14.0, FMath::Cos(LanternSwayPhase * 0.7f) * 8.0, 165.0));
 		MerchantLanternLight->SetIntensity(520.0f + 95.0f * FMath::Sin(LanternSwayPhase * 2.1f));
+	}
+	TickNibbot();
+}
+
+void AVendorActor::TickNibbot() noexcept
+{
+	if (!NibbotSprite || !NibbotSprite->HasSheet())
+	{
+		return;
+	}
+	double Dist = 0.0;
+	ADungeoneerCharacter* Hero = NpcPrivate::NearestHero(GetWorld(), GetActorLocation(), Dist);
+	const bool bNear = Hero && Dist < 400.0;
+	if (bNear && !bNibbotTalking)
+	{
+		bNibbotTalking = true;
+		NibbotSprite->PlayRow(1, 5.0f, true);
+		if (!bNibbotGreeted && Hero)
+		{
+			bNibbotGreeted = true;
+			const int32 Count = UE_ARRAY_COUNT(NpcPrivate::NibbotLines);
+			Hero->PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 240.0), NpcPrivate::NibbotLines[NibbotLineIndex % Count], EDungeoneerFloatingTextKind::Status);
+			++NibbotLineIndex;
+		}
+	}
+	else if (!bNear && Dist > 650.0 && bNibbotTalking)
+	{
+		bNibbotTalking = false;
+		bNibbotGreeted = false;
+		NibbotSprite->PlayRow(0, 4.0f, true);
 	}
 }
 

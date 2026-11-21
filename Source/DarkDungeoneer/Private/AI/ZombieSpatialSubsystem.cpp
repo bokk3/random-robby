@@ -559,6 +559,14 @@ int32 UZombieSpatialSubsystem::ApplyMeleeArcDamage(
 		const float Dot = static_cast<float>(FVector::DotProduct(SafeFwd, DirXY));
 		if (Dot >= MinCosHalfAngle || DistSq2D <= (72.0 * 72.0))
 		{
+			if (Zombie->TryBlockMeleeHit(Origin, StunSeconds))
+			{
+				if (ADungeoneerCharacter* Blocked = Cast<ADungeoneerCharacter>(InstigatorActor))
+				{
+					Blocked->PushFloatingCombatPopup(Zombie->GetActorLocation() + FVector(0.0, 0.0, 90.0), TEXT("BLOCKED"), EDungeoneerFloatingTextKind::Status);
+				}
+				continue;
+			}
 			Zombie->TriggerHitFeedback(DirXY, KnockbackImpulseUU);
 			Zombie->ApplyZombieDamage(DamageAmount, InstigatorActor);
 			if (StunSeconds > 0.0f)

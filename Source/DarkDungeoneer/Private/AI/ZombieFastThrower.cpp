@@ -64,7 +64,8 @@ void AZombieFastThrower::BeginPlay()
 		const UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 		if (UDungeoneerAssetBootstrapSubsystem* Bootstrap = GI ? GI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>() : nullptr)
 		{
-			FlaskMesh->SetMaterial(0, Bootstrap->CreateFxMaterial(this, FName(TEXT("FxSpark_D")), FLinearColor::White, 3.0f));
+			const bool bHasFlaskFrame = Bootstrap->GetExtractedCellTexture(FName(TEXT("VfxCombat_R0_C0_D"))) != nullptr;
+			FlaskMesh->SetMaterial(0, Bootstrap->CreateFxMaterial(this, FName(bHasFlaskFrame ? TEXT("VfxCombat_R0_C0_D") : TEXT("FxSpark_D")), FLinearColor::White, bHasFlaskFrame ? 1.6f : 3.0f));
 			FlaskMesh->SetWorldRotation(Bootstrap->GetCameraFacingSpritePlaneRotation());
 			bFlaskMaterialApplied = true;
 		}
@@ -84,6 +85,37 @@ namespace ThrowerPrivate
 		default:                    return FLinearColor(0.55f, 0.45f, 1.0f); // stillsmoke
 		}
 	}
+}
+
+bool AZombieFastThrower::ResolveAttackFrame(const int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept
+{
+	// Sheet columns: flask wind-up, throw release, knife draw, knife slash.
+	OutRow = FacingRow;
+	if (!IsZombieAlive())
+	{
+		return false;
+	}
+	if (FlaskPhase == EFlaskPhase::Windup)
+	{
+		OutCol = 0;
+		return true;
+	}
+	if (FlaskPhase == EFlaskPhase::Flight && FlaskTimer > FlaskFlightSec - 0.2f)
+	{
+		OutCol = 1;
+		return true;
+	}
+	if (GetAttackPhase() == EZombieAttackPhase::Windup)
+	{
+		OutCol = 2;
+		return true;
+	}
+	if (GetAttackPhase() == EZombieAttackPhase::Recover && GetAttackPhaseRemaining() > MeleeAttack.RecoverSec * 0.4f)
+	{
+		OutCol = 3;
+		return true;
+	}
+	return false;
 }
 
 void AZombieFastThrower::BeginFlaskThrow(const FVector& TargetLocation) noexcept

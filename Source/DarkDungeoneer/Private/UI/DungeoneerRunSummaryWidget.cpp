@@ -214,7 +214,7 @@ void UDungeoneerRunSummaryWidget::RefreshDisplayTexts()
 
 		Txt_LedgerBody->SetText(FText::FromString(FString::Printf(
 			TEXT("PERSISTENT META-LEDGER\n")
-			TEXT("BEST FLOOR: %d   |   FASTEST CLEAR: %s   |   BESTIARY: %d / 4   |   RELICS: %d / 5"),
+			TEXT("BEST FLOOR: %d   |   FASTEST CLEAR: %s   |   BESTIARY: %d / 5   |   RELICS: %d / 5"),
 			FMath::Max(1, CachedPayload.BestFloorRecord),
 			*BestTime,
 			BestiaryCount,

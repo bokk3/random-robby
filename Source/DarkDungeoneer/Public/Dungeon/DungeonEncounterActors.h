@@ -43,6 +43,8 @@ struct DARKDUNGEONEER_API FVendorCatalogItem
  * - Provides warm campfire dynamic lighting, restores health/battery, and unlocks
  *   Party Stash / Ability Loadout tuning / Player-to-Player trading.
  */
+class UDungeoneerSheetSpriteComponent;
+
 UCLASS(Blueprintable)
 class DARKDUNGEONEER_API ARestingGroundActor : public AActor
 {
@@ -82,6 +84,16 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Lighting")
 	TObjectPtr<UPointLightComponent> CampfireLight;
+
+	/** Tamsin Vell sitting in the coals. Replaces the plain brazier sprite when her sheet exists. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RestingGround|Visual")
+	TObjectPtr<UDungeoneerSheetSpriteComponent> TamsinSprite;
+
+	/** Tamsin's rows: 0 idle, 1 talking, 2 handing something over, 3 sinking back into the fire. */
+	void TickTamsin(float DeltaSeconds) noexcept;
+	int32 TamsinMood = 0;      // 0 idle, 1 talking, 2 giving, 3 fading
+	int32 TamsinLineIndex = 0;
+	bool bTamsinGreeted = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RestingGround")
 	float HealthRestorePerSecond = 12.0f;
@@ -128,6 +140,16 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vendor|Lighting")
 	TObjectPtr<UPointLightComponent> MerchantLanternLight;
+
+	/** Nibbot in his mirror frame. Replaces the stall sprite when his sheet exists. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vendor|Visual")
+	TObjectPtr<UDungeoneerSheetSpriteComponent> NibbotSprite;
+
+	/** Nibbot's rows 0 (idle) and 1 (talking); rows 2-3 wait for a redrawn sheet. */
+	void TickNibbot() noexcept;
+	int32 NibbotLineIndex = 0;
+	bool bNibbotTalking = false;
+	bool bNibbotGreeted = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vendor")
 	TArray<FVendorCatalogItem> VendorCatalog;

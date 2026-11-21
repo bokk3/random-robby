@@ -48,6 +48,14 @@ public:
 protected:
 	virtual void OnZombieDied() override;
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("BossGuardian"); }
+	virtual const TCHAR* GetAttackSheetPrefix() const noexcept override { return TEXT("BossGuardianAttack"); }
+	virtual const TCHAR* GetRedesignedWalkPrefix() const noexcept override { return TEXT("BossGuardianWalk"); }
+	virtual bool AttackSheetNeedsRedesignedWalk() const noexcept override { return true; }
+	virtual bool UsesDeathFrame() const noexcept override { return true; }
+	virtual bool ResolveAttackFrame(int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept override;
+
+	/** Seconds since the last slam landed; drives the impact and recovery frames. */
+	float SlamAfterglow = 0.0f;
 	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("BossGuardian_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("BossGuardian_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(1.0f, 0.44f, 0.14f); }

@@ -128,3 +128,26 @@ void AZombieMirrorStalker::Tick(float DeltaSeconds)
 		}
 	}
 }
+
+bool AZombieMirrorStalker::ResolveAttackFrame(const int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept
+{
+	// Sheet columns: crouch, lunge, bite at full stretch, shattering into shards (death).
+	OutRow = FacingRow;
+	if (!IsZombieAlive())
+	{
+		OutCol = 3;
+		return true;
+	}
+	if (GetAttackPhase() == EZombieAttackPhase::Windup)
+	{
+		const float Windup = FMath::Max(MeleeAttack.WindupSec * (IsElite() ? 0.75f : 1.0f), 0.01f);
+		OutCol = (GetAttackPhaseRemaining() > Windup * 0.4f) ? 0 : 1;
+		return true;
+	}
+	if (GetAttackPhase() == EZombieAttackPhase::Recover && GetAttackPhaseRemaining() > MeleeAttack.RecoverSec * 0.5f)
+	{
+		OutCol = 2;
+		return true;
+	}
+	return false;
+}

@@ -122,6 +122,10 @@ Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid mag
 
 ### Priority 2: enemies that telegraph their attacks (needed for M3)
 
+**Done (2026-11-21):** sheets 6 (Exploder), 8 (Slip) and 9 (Colossus) are sliced into
+`Content/Art/Rigs/<Enemy>Moves/Attack/`. Sheets 8 and 9 came back as new designs, so 8b and 9b below ask for
+matching walk sheets; the game only uses those attack frames once the matching walk sheet exists.
+
 #### 6. `Rig_ZombieExploder_Attack` (folder `ZombieExploder`), the Tapper
 
 | Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
@@ -163,6 +167,26 @@ Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid mag
 
 ```text
 Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art, front three-quarter view (facing the camera) in every cell. Character: the Cinder Colossus, a huge walking glass kiln: firebrick and black slag body, slumped melted shapes of old workers and tools fused into it, a glowing heart in the chest in #FF5500. Row 0 (ground slam): arms raised; arms high with the heart blazing; fists slammed into the ground with a flat ring of fire (impact); recovering with slag dripping. Row 1 (sweep): one arm drawn back to the side; sweeping across; arm at the end of the sweep with a curved fire trail (impact); recovering. Row 2 (mortar): chest vents opening; a glob of molten glass launched upward; a second glob launched; vents closing. Row 3: charging head-down; mid-charge; collapsing into a heap of slag; only a small glowing glass bead left on the floor. Feet on a shared baseline, the Colossus fills about 90% of the cell height.
+```
+
+#### 8b. `Rig_ZombieMirrorStalker_Walk` (folder `ZombieMirrorStalkerMoves/Walk`), new Slip walk cycle
+
+The Slip was redesigned by its attack sheet (sheet 8): a silvered, cracked mirror-man instead of the old
+hooded blue wraith. This walk sheet replaces the old one so both match. Standard walk layout (rows S, N, E, W;
+columns contact, left step, passing, right step). Slice with `--validate-stride --repair-stride`.
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, no grid lines, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: a "Slip", the reflection of a dead person that stayed behind in a mirror: a lean, hairless humanoid made of polished silver mirror-glass, smooth chrome surface with dark crack lines across the body like a broken mirror, glowing pale white eyes, long fingers. Same design and proportions as a crouching, lunging mirror-man attack sheet. Animation: a prowling, hunched walk cycle, 4 frames per row. Col 0: contact, feet together, torso high. Col 1: left foot forward, torso dipped. Col 2: passing pose, legs crossing, torso high. Col 3: right foot forward, torso dipped. Rows: Row 0 facing the camera (south), Row 1 facing away (north), Row 2 right side profile walking right (east), Row 3 left side profile walking left (west). Feet on the same baseline in every cell, figure fills about 70% of the cell height, identical proportions and silver palette in all cells. No grid lines, no borders, no labels. Keep every figure fully inside its own 256x256 cell. 1:1 square image.
+```
+
+#### 9b. `Rig_BossGuardian_Walk` (folder `BossGuardianMoves/Walk`), new Cinder Colossus walk cycle
+
+The Colossus was redesigned by its attack sheet (sheet 9): a firebrick-and-slag kiln giant instead of the
+old blocky horned robot. This walk sheet replaces the old one. Standard walk layout. Slice with
+`--validate-stride --repair-stride`.
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, no grid lines, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: the Cinder Colossus, a huge walking glass kiln: a hulking giant with a torso of dark red firebrick held together by iron straps, black slag and charred skin on its arms and legs, a small bald slag head with glowing orange eyes, a glowing cracked heart of molten glass in the middle of its brick chest in #FF5500, a ragged leather apron, iron chimney stubs on its back. Animation: a slow, heavy stomping walk cycle, 4 frames per row. Col 0: contact, feet planted wide, body high. Col 1: left foot forward, body sinks, embers drop. Col 2: passing pose, body high. Col 3: right foot forward, body sinks. Rows: Row 0 facing the camera (south), Row 1 facing away (north, showing the chimney stubs), Row 2 right side profile walking right (east), Row 3 left side profile walking left (west). Feet on the same baseline in every cell, the Colossus fills about 90% of the cell height, identical proportions and palette in all cells. No grid lines, no borders, no labels. Keep every figure fully inside its own 256x256 cell. 1:1 square image.
 ```
 
 ### Priority 3: new enemy, NPCs, doors and effects

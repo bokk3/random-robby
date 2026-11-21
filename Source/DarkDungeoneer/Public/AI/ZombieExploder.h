@@ -46,6 +46,8 @@ protected:
 	void IgniteFuse() noexcept;
 	void ExecuteDetonation();
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("Exploder"); }
+	virtual const TCHAR* GetAttackSheetPrefix() const noexcept override { return TEXT("ExploderAttack"); }
+	virtual bool ResolveAttackFrame(int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept override;
 	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Exploder_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Exploder_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(0.95f, 0.36f, 0.08f); }

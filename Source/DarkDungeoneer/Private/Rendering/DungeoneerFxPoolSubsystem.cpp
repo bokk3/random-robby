@@ -47,11 +47,14 @@ void UDungeoneerFxPoolSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	UprightRotation = Bootstrap->GetCameraFacingSpritePlaneRotation();
 
-	static constexpr const TCHAR* ShapeKeys[static_cast<int32>(EShape::Count)] = { TEXT("FxSpark_D"), TEXT("FxRing_D"), TEXT("SlashArc_D") };
+	// The puff uses the gas cloud from the combat effects sheet when it exists, otherwise the soft spark.
+	const bool bHasVfxSheet = Bootstrap->GetExtractedCellTexture(FName(TEXT("VfxCombat_R2_C1_D"))) != nullptr;
+	const TCHAR* ShapeKeys[static_cast<int32>(EShape::Count)] = { TEXT("FxSpark_D"), TEXT("FxRing_D"), TEXT("SlashArc_D"), bHasVfxSheet ? TEXT("VfxCombat_R2_C1_D") : TEXT("FxSpark_D") };
 	ShapeMaterials.Reset();
-	for (const TCHAR* Key : ShapeKeys)
+	for (int32 ShapeIdx = 0; ShapeIdx < static_cast<int32>(EShape::Count); ++ShapeIdx)
 	{
-		ShapeMaterials.Add(Bootstrap->CreateFxMaterial(this, FName(Key), FLinearColor::White, 2.4f));
+		const float Intensity = (ShapeIdx == static_cast<int32>(EShape::Puff)) ? 0.9f : 2.4f; // gas should glow softly, not flare
+		ShapeMaterials.Add(Bootstrap->CreateFxMaterial(this, FName(ShapeKeys[ShapeIdx]), FLinearColor::White, Intensity));
 	}
 
 	FActorSpawnParameters Params;
@@ -209,6 +212,25 @@ void UDungeoneerFxPoolSubsystem::SpawnGroundRing(const FVector& At, const FLinea
 	P->Life = FMath::Max(LifeSec, 0.05f);
 	P->StartScale = StartRadiusUU * RadiusToScale;
 	P->EndScale = EndRadiusUU * RadiusToScale;
+	P->Color = Color;
+	ApplyToComponent(Index);
+}
+
+void UDungeoneerFxPoolSubsystem::SpawnPuff(const FVector& At, const FLinearColor& Color, const float Size, const float LifeSec)
+{
+	int32 Index = 0;
+	FParticle* P = Acquire(EShape::Puff, Index);
+	if (!P)
+	{
+		return;
+	}
+	const float DriftYaw = FxPoolPrivate::Hash01(SpawnCounter * 29u + 7u) * 360.0f;
+	P->Location = At;
+	P->Velocity = FRotator(0.0f, DriftYaw, 0.0f).Vector() * 18.0 + FVector(0.0, 0.0, 30.0);
+	P->Drag = 0.6f;
+	P->Life = FMath::Max(LifeSec, 0.1f);
+	P->StartScale = Size * 0.7f;
+	P->EndScale = Size * 1.3f;
 	P->Color = Color;
 	ApplyToComponent(Index);
 }

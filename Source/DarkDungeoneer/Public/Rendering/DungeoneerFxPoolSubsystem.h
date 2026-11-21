@@ -22,7 +22,7 @@ class DARKDUNGEONEER_API UDungeoneerFxPoolSubsystem : public UTickableWorldSubsy
 public:
 	static constexpr int32 PoolSize = 96;
 
-	enum class EShape : uint8 { Spark, Ring, Crescent, Count };
+	enum class EShape : uint8 { Spark, Ring, Crescent, Puff, Count };
 
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
@@ -38,6 +38,9 @@ public:
 
 	/** A flat ring on the floor that grows from StartRadius to EndRadius over Life seconds and fades. */
 	void SpawnGroundRing(const FVector& At, const FLinearColor& Color, float StartRadiusUU, float EndRadiusUU, float LifeSec);
+
+	/** One slow, drifting cloud puff (hazard gas, smoke). Size is in plane-scale units (1 = 100 UU). */
+	void SpawnPuff(const FVector& At, const FLinearColor& Color, float Size = 0.9f, float LifeSec = 1.2f);
 
 	/** Two grey puffs at the feet (rolls, landings). */
 	void SpawnDust(const FVector& FeetAt);

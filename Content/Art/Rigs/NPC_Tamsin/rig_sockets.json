@@ -1,0 +1,63 @@
+{
+  "AssetName": "Rig_NPC_Tamsin",
+  "TexelDensity": 64.0,
+  "UnrealUnitsPerMeter": 100.0,
+  "UnrealUnitsPerPixel": 1.5625,
+  "FrameDimensions": {
+    "Width": 256,
+    "Height": 256,
+    "WorldWidthUU": 400.0,
+    "WorldHeightUU": 400.0
+  },
+  "Grid": {
+    "Columns": 4,
+    "Rows": 4,
+    "Directions": 4
+  },
+  "Sockets": {
+    "Torso": {
+      "Pivot": [
+        0.5,
+        0.5
+      ],
+      "DepthOffsetY": 0.0,
+      "RelativeBoundsUU": [
+        200.0,
+        240.0
+      ]
+    },
+    "Head": {
+      "Pivot": [
+        0.5,
+        0.8
+      ],
+      "DepthOffsetY": 0.5,
+      "RelativeBoundsUU": [
+        140.0,
+        140.0
+      ]
+    },
+    "Limbs": {
+      "Pivot": [
+        0.5,
+        0.22
+      ],
+      "DepthOffsetY": -0.5,
+      "RelativeBoundsUU": [
+        180.0,
+        180.0
+      ]
+    },
+    "WeaponFlashlight": {
+      "Pivot": [
+        0.72,
+        0.45
+      ],
+      "DepthOffsetY": 1.0,
+      "RelativeBoundsUU": [
+        100.0,
+        100.0
+      ]
+    }
+  }
+}

@@ -71,10 +71,17 @@ instead of stacking, and any hit cancels a small enemy's wind-up (the Colossus i
 | Exploder ("Tapper") | Shoulder-barges twice (0.6 s wind-up, 14 damage), then lights its fuse and blows up (65 in 380 UU). Lights up early when badly hurt. Hunts noise. | Parry the barge, then back off from the fuse; or lure it into others. Bottled Kiln lights its fuse early. |
 | Thrower ("Runner") | Plants its feet (0.35 s), then lobs a flask that flies for about half a second to a marked spot: fire, poison or stillsmoke. Knife-slashes (0.4 s, 10 damage) anyone who gets close. | Step off the marker, or parry the flask as it reaches you to send it back (stun, 35 damage, its own payload). |
 | Mirror Stalker ("Slip") | Invisible unless lit; lunge-bites about every 1.4 s (0.45 s wind-up, 12 damage). | Keep it in your cone; parry the bite. |
+| Glazier (Mirror Palace) | Walks behind an iron-framed mirror pane that blocks every melee hit from the front ("BLOCKED"). Slow, unstoppable shield bash (0.75 s wind-up, 16 damage) with a long recovery. Guards the mirror mazes; holds the gauntlet line from floor 2. | Go around it, use Their Own Shadow, or crack the pane with a heavy smash, the combo finisher or a dash strike (guard down 2.5 s). Hit it during the bash recovery. Skills ignore the pane. |
 | Cinder Colossus (Floor 3 boss) | Slams with a floor ring showing the whole area (0.75 s, 0.55 s in phase 2), fire/gas mortars, summons Exploders. | Hard to stun, too heavy to Hook. Get out of the ring, then dash strikes and heavy smashes. |
 
 **Elites** (about one regular enemy in six, seeded per floor) glow gold: +60% health, +25% damage, 25% faster
 wind-ups, double gold. **Deeper floors** add +20% health and +10% damage per floor past the first.
+
+## People in the dark
+
+- **Tamsin Vell** sits in every Sanctuary brazier. She turns to talk when you come near, says a line, hands over
+  what the Third Eye gives you, and sinks back into the coals when you leave.
+- **Nibbot** stands in his mirror frame at the vendor and greets you backwards ("emocleW kcab, reraeB.").
 
 ## Run structure
 

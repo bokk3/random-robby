@@ -109,6 +109,12 @@ public:
 	/** Starts a wind-up against Target if in range, off cooldown, and the hero has a free attack token. */
 	bool TryStartMeleeAttack(ADungeoneerCharacter* Target) noexcept;
 
+	/**
+	 * Lets an enemy turn a melee hit aside before it lands (the Glazier's mirror pane). Returning true means
+	 * the hit is blocked: no damage, stun or knockback. StunSeconds tells how heavy the blow was.
+	 */
+	virtual bool TryBlockMeleeHit(const FVector& AttackerLocation, float StunSeconds) noexcept { return false; }
+
 	/** Cancels a wind-up (stun, light hit on a small enemy). Releases the attack token. */
 	void InterruptAttack() noexcept;
 
@@ -126,6 +132,9 @@ public:
 	void MakeElite() noexcept;
 
 	bool IsElite() const noexcept { return bIsElite; }
+
+	/** True once this enemy's attack sheet is loaded and in use (see GetAttackSheetPrefix). */
+	bool HasAttackFrames() const noexcept { return bHasAttackFrames; }
 	float GetDamageScale() const noexcept { return DamageScale; }
 
 	UFUNCTION(BlueprintPure, Category = "Zombie|Status")
@@ -167,6 +176,26 @@ protected:
 	float DamageScale = 1.0f;
 	bool bIsElite = false;
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept { return TEXT("Exploder"); }
+
+	/** Cell prefix of this enemy's attack sheet (16 cells), or nullptr if it has none. */
+	virtual const TCHAR* GetAttackSheetPrefix() const noexcept { return nullptr; }
+
+	/** Cell prefix of a redesigned walk sheet that replaces the original when it exists, or nullptr. */
+	virtual const TCHAR* GetRedesignedWalkPrefix() const noexcept { return nullptr; }
+
+	/** If the attack sheet shows a redesign, only use it once the matching walk sheet is loaded too. */
+	virtual bool AttackSheetNeedsRedesignedWalk() const noexcept { return false; }
+
+	/**
+	 * Picks an attack-sheet cell for the current state, or returns false to show the walk frame.
+	 * FacingRow is the walk row for the current heading. Default: wind-up col 0, strike col 1, death col 3.
+	 */
+	virtual bool ResolveAttackFrame(int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept;
+
+	/** Shows the attack sheet's death frame instead of folding the sprite flat. */
+	virtual bool UsesDeathFrame() const noexcept { return false; }
+
+	float GetSecondsSinceDeath() const noexcept { return SecondsSinceDeath; }
 	virtual FName GetArchetypeDiffuseKey() const noexcept { return FName(TEXT("Exploder_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept { return FName(TEXT("Exploder_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept { return FLinearColor(0.85f, 0.30f, 0.12f); }
@@ -247,4 +276,6 @@ private:
 	int32 ActiveDirectionalCellIndex = -1;
 	bool bTexturedVisualsApplied = false;
 	bool bKillRewardsGranted = false;
+	bool bHasAttackFrames = false;
+	float SecondsSinceDeath = 0.0f;
 };

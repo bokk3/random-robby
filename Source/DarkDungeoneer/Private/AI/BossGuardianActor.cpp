@@ -150,6 +150,34 @@ void ABossGuardianActor::ExecuteRadialBossSlam()
 	}
 
 	++PatternIndex;
+	SlamAfterglow = 0.6f;
+}
+
+bool ABossGuardianActor::ResolveAttackFrame(const int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept
+{
+	// The attack sheet's rows are attacks, all facing the camera: 0 slam, 1 sweep, 2 mortar, 3 charge/death.
+	if (!IsZombieAlive())
+	{
+		OutRow = 3;
+		OutCol = (GetSecondsSinceDeath() < 0.5f) ? 2 : 3; // collapsing into slag, then only the heart bead
+		return true;
+	}
+	// Even patterns are fire slams, odd ones launch stillsmoke mortars (see ExecuteRadialBossSlam).
+	const bool bMortar = (PatternIndex & 1) != 0;
+	const float Telegraph = (CurrentBossPhase >= 2) ? 0.55f : 0.75f;
+	if (SlamTelegraphRemaining > 0.0f)
+	{
+		OutRow = bMortar ? 2 : 0;
+		OutCol = (SlamTelegraphRemaining > Telegraph * 0.5f) ? 0 : 1;
+		return true;
+	}
+	if (SlamAfterglow > 0.0f)
+	{
+		OutRow = (PatternIndex & 1) ? 0 : 2; // PatternIndex already advanced past the attack that just landed
+		OutCol = (SlamAfterglow > 0.3f) ? 2 : 3;
+		return true;
+	}
+	return false;
 }
 
 void ABossGuardianActor::Tick(float DeltaSeconds)
@@ -201,6 +229,7 @@ void ABossGuardianActor::Tick(float DeltaSeconds)
 		}
 	}
 
+	SlamAfterglow = FMath::Max(0.0f, SlamAfterglow - DeltaSeconds);
 	if (SlamTelegraphRemaining > 0.0f)
 	{
 		SlamTelegraphRemaining = FMath::Max(0.0f, SlamTelegraphRemaining - DeltaSeconds);

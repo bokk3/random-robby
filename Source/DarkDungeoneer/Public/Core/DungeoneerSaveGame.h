@@ -10,7 +10,8 @@ enum class EDungeoneerBestiaryBit : uint8
 	Exploder      = 0,
 	FastThrower   = 1,
 	MirrorStalker = 2,
-	BossGuardian  = 3
+	BossGuardian  = 3,
+	Glazier       = 4
 };
 
 /**
@@ -25,7 +26,7 @@ class DARKDUNGEONEER_API UDungeoneerSaveGame : public USaveGame
 
 public:
 	static constexpr int32 LanternTrimCount = 4;
-	static constexpr uint8 AllBestiaryBitsMask = 0x0F;
+	static constexpr uint8 AllBestiaryBitsMask = 0x1F;
 	static constexpr uint8 AllRelicBitsMask = 0x1F;
 
 	UDungeoneerSaveGame();

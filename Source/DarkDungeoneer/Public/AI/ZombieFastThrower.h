@@ -88,6 +88,8 @@ protected:
 	TObjectPtr<UStaticMeshComponent> FlaskMesh;
 	virtual void OnZombieDied() override;
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("Thrower"); }
+	virtual const TCHAR* GetAttackSheetPrefix() const noexcept override { return TEXT("ThrowerAttack"); }
+	virtual bool ResolveAttackFrame(int32 FacingRow, int32& OutRow, int32& OutCol) const noexcept override;
 	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Thrower_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept override { return FName(TEXT("Thrower_Row0_N")); }
 	virtual FLinearColor GetArchetypeVisualTint() const noexcept override { return FLinearColor(0.15f, 0.88f, 0.96f); }

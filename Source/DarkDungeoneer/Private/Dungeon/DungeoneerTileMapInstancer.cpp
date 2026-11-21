@@ -16,6 +16,7 @@
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieFastThrower.h"
 #include "AI/ZombieMirrorStalker.h"
+#include "AI/ZombieGlazier.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -683,6 +684,11 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 			{
 				SpawnedEncounterActors.Add(Stalker);
 			}
+			// The Mirror Palace's own dead: a glass-setter guarding the maze with a mirror pane.
+			if (AZombieGlazier* Glazier = World->SpawnActor<AZombieGlazier>(AZombieGlazier::StaticClass(), Center + FVector(-160.0, 140.0, 95.0), FRotator::ZeroRotator, SpawnParams))
+			{
+				SpawnedEncounterActors.Add(Glazier);
+			}
 			if (ADungeoneerLootPickupActor* MirrorGold = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(-180.0, -140.0, 0.0), FRotator::ZeroRotator, SpawnParams))
 			{
 				MirrorGold->ConfigurePickup(EDungeoneerLootDropKind::GoldPouch, 65, EDungeoneerConsumableId::None, EDungeoneerRelicId::None);
@@ -695,7 +701,15 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 			for (int32 i = 0; i < 2; ++i)
 			{
 				const double OffsetY = (i == 0) ? -320.0 : 320.0;
-				if (AZombieExploder* Exploder = World->SpawnActor<AZombieExploder>(AZombieExploder::StaticClass(), Center + FVector(180.0, OffsetY, 95.0), FRotator::ZeroRotator, SpawnParams))
+				if (i == 0 && FloorGraph.FloorIndex >= 2)
+				{
+					// From the second floor a Glazier holds the line in the gauntlet.
+					if (AZombieGlazier* Glazier = World->SpawnActor<AZombieGlazier>(AZombieGlazier::StaticClass(), Center + FVector(180.0, OffsetY, 95.0), FRotator::ZeroRotator, SpawnParams))
+					{
+						SpawnedEncounterActors.Add(Glazier);
+					}
+				}
+				else if (AZombieExploder* Exploder = World->SpawnActor<AZombieExploder>(AZombieExploder::StaticClass(), Center + FVector(180.0, OffsetY, 95.0), FRotator::ZeroRotator, SpawnParams))
 				{
 					SpawnedEncounterActors.Add(Exploder);
 				}
