@@ -32,6 +32,8 @@
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "UI/DungeoneerTradeModalWidget.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerPartyCamera.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Ecosystem/DungeonEcosystemTypes.h"
 #include "Ecosystem/DungeonFaunaSubsystem.h"
@@ -338,7 +340,7 @@ bool FDungeoneerHUDAndTradeModalAndAssetBootstrapTest::RunTest(const FString& Pa
 		TestTrue(TEXT("HUD HealthPercent at 1.0"), FMath::IsNearlyEqual(HUD->GetHealthPercent(), 1.0f, 1e-4f));
 		TestTrue(TEXT("HUD BatteryPercent at 1.0"), FMath::IsNearlyEqual(HUD->GetBatteryPercent(), 1.0f, 1e-4f));
 		TestTrue(TEXT("HUD ChronoSlowRatio at 0.25"), FMath::IsNearlyEqual(HUD->GetChronoSlowRatio(), 0.25f, 1e-4f));
-		TestTrue(TEXT("HUD formatted Chrono-Slow text displays S=0.25"), HUD->GetFormattedChronoSlowText().Contains(TEXT("S=0.25")));
+		TestTrue(TEXT("HUD slow line says 25% slower"), HUD->GetFormattedChronoSlowText().Contains(TEXT("25% SLOWER")));
 	}
 
 	// 2. TASK-902: Resting Ground Trade Modal + Gibberish Speech + Vendor Purchase 2PC
@@ -888,7 +890,7 @@ bool FDungeoneerCombatDodgeVaultFloorTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("HUD tracked updated gold balance"), HUD->GetCachedGoldBalance() > GoldBefore);
 	TestTrue(TEXT("HUD formatted combat readout includes FLOOR & KILLS"),
 		HUD->GetFormattedCombatAndLoopText().Contains(TEXT("FLOOR 1")) &&
-		HUD->GetFormattedCombatAndLoopText().Contains(TEXT("KILLS 1")));
+		HUD->GetFormattedCombatAndLoopText().Contains(TEXT("1 SLAIN")));
 
 	// 4. GameMode multi-floor loop + Vault encounter unlock & Floor descent
 	ADungeoneerGameMode* GM = TestWorld->SpawnActor<ADungeoneerGameMode>();
@@ -2066,6 +2068,450 @@ bool FDungeoneerPerfDrawCallBudgetTest::RunTest(const FString& Parameters)
 			Hero->Tick(1.0f / 60.0f);
 		}
 	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerHackAndSlashKitTest,
+	"DarkDungeoneer.Combat.HackAndSlashKit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerHackAndSlashKitTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world for the combat kit test"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieFastThrower* Thrower = TestWorld->SpawnActor<AZombieFastThrower>(FVector(150.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* FarExploder = TestWorld->SpawnActor<AZombieExploder>(FVector(3000.0, 3000.0, 95.0), FRotator::ZeroRotator);
+	if (!Hero || !Thrower || !FarExploder) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+	Thrower->DispatchBeginPlay();
+	FarExploder->DispatchBeginPlay();
+	Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(1.0, 0.0));
+	auto TickHero = [Hero](float Seconds) { for (float T = 0.0f; T < Seconds; T += 0.02f) { Hero->Tick(0.02f); } };
+	TickHero(0.1f);
+
+	// Skill table sanity.
+	for (int32 i = 1; i < static_cast<int32>(EDungeoneerSkillId::Count); ++i)
+	{
+		const FDungeoneerSkillDef& Def = DungeoneerSkills::GetDef(static_cast<EDungeoneerSkillId>(i));
+		TestTrue(FString::Printf(TEXT("Skill %d has a cooldown"), i), Def.CooldownSec > 0.0f);
+		TestEqual(FString::Printf(TEXT("Skill %d table row matches its id"), i), static_cast<int32>(Def.Id), i);
+	}
+	for (uint32 Roll = 0; Roll < 64; ++Roll)
+	{
+		const EDungeoneerSkillId Rolled = DungeoneerSkills::SkillFromRoll(Roll);
+		TestTrue(TEXT("Skill rolls never produce None"), Rolled != EDungeoneerSkillId::None && Rolled != EDungeoneerSkillId::Count);
+	}
+
+	// 1. Parry: negates a frontal zombie hit, stuns the attacker, empowers the next strike.
+	const float HpBeforeParry = Hero->GetCurrentHealth();
+	TestTrue(TEXT("Parry opens"), Hero->TriggerParry());
+	TestTrue(TEXT("Parry window active"), Hero->IsParryActive());
+	Hero->ApplyDungeoneerDamage(30.0f, Thrower);
+	TestEqual(TEXT("Parried hit deals no damage"), Hero->GetCurrentHealth(), HpBeforeParry);
+	TestTrue(TEXT("Parried attacker is stunned"), Thrower->IsStunned());
+	TestTrue(TEXT("Parry empowers the next strike"), Hero->IsEmpowered());
+	TestEqual(TEXT("Parry counted"), Hero->GetParryCount(), 1);
+	TickHero(0.5f);
+	TestFalse(TEXT("Parry window closes"), Hero->IsParryActive());
+
+	// 2. Flask deflection only works inside the parry window.
+	TestFalse(TEXT("No deflection outside the parry window"), Hero->TryDeflectThrownFlask(Thrower));
+	TestTrue(TEXT("Parry re-opens after a successful parry"), Hero->TriggerParry());
+	TestTrue(TEXT("Flask deflected inside the window"), Hero->TryDeflectThrownFlask(Thrower));
+	TickHero(0.6f);
+
+	// 3. Perfect dodge: a zombie hit during roll i-frames slows nearby zombies and refunds the roll.
+	TestTrue(TEXT("Dodge starts"), Hero->TriggerDodgeDash());
+	Hero->ApplyDungeoneerDamage(30.0f, Thrower);
+	TestEqual(TEXT("Perfect dodge counted"), Hero->GetPerfectDodgeCount(), 1);
+	TestTrue(TEXT("Perfect dodge slows nearby zombies"), Thrower->IsTimeSlowed());
+	TestEqual(TEXT("No damage taken during the roll"), Hero->GetCurrentHealth(), HpBeforeParry);
+	TickHero(0.6f);
+
+	// 4. Four-hit combo indices wrap after the finisher.
+	Hero->SetActorLocation(FVector(0.0, -2000.0, 95.0)); // Swing at air so nothing dies mid-combo.
+	for (int32 Step = 0; Step < ADungeoneerCharacter::ComboLength; ++Step)
+	{
+		TestTrue(FString::Printf(TEXT("Combo step %d fires"), Step), Hero->TriggerPrimaryAttack());
+		TestEqual(FString::Printf(TEXT("Combo index %d"), Step), Hero->GetComboStepIndex(), Step);
+		TickHero(0.46f);
+	}
+	TestTrue(TEXT("Combo wraps to the opener"), Hero->TriggerPrimaryAttack());
+	TestEqual(TEXT("Combo index wrapped to 0"), Hero->GetComboStepIndex(), 0);
+	TickHero(0.6f);
+
+	// 5. Heavy smash: a short hold cancels, a longer hold fires.
+	Hero->SetActorLocation(FVector(0.0, 0.0, 95.0));
+	TestTrue(TEXT("Heavy charge begins"), Hero->BeginHeavyCharge());
+	TickHero(0.1f);
+	TestFalse(TEXT("Releasing too early cancels the smash"), Hero->ReleaseHeavyCharge());
+	TestEqual(TEXT("Cancelled charge returns to ready"),
+		static_cast<uint8>(Hero->GetCombatActionState()), static_cast<uint8>(EDungeoneerCombatActionState::None));
+	TestTrue(TEXT("Heavy charge begins again"), Hero->BeginHeavyCharge());
+	TickHero(0.7f);
+	TestTrue(TEXT("Charge alpha builds"), Hero->GetHeavyChargeAlpha() > 0.5f);
+	TestTrue(TEXT("Releasing a full charge smashes"), Hero->ReleaseHeavyCharge());
+	TestTrue(TEXT("Heavy smash hit the thrower"), Hero->GetLastAttackHitsCount() >= 1);
+	TestFalse(TEXT("Heavy smash killed the 95 HP thrower"), Thrower->IsZombieAlive());
+	TickHero(0.8f);
+
+	// 6. Status effects on zombies: burn ticks damage on real time, stun expires.
+	const float ExploderHp = FarExploder->GetCurrentHealth();
+	FarExploder->ApplyBurn(20.0f, 1.0f, Hero);
+	FarExploder->ApplyStun(0.3f);
+	TestTrue(TEXT("Stun applied"), FarExploder->IsStunned());
+	for (int32 i = 0; i < 60; ++i) { FarExploder->Tick(0.02f); }
+	TestTrue(TEXT("Burn dealt roughly 20 damage"), FMath::IsNearlyEqual(ExploderHp - FarExploder->GetCurrentHealth(), 20.0f, 1.5f));
+	TestFalse(TEXT("Stun expired"), FarExploder->IsStunned());
+	TestFalse(TEXT("Burn expired"), FarExploder->IsBurning());
+
+	// 7. Skill slots: cooldowns gate reuse, found skills swap in.
+	UDungeoneerSkillComponent* Skills = Hero->GetSkillComponent();
+	TestNotNull(TEXT("Hero has a skill component"), Skills);
+	if (Skills)
+	{
+		TestEqual(TEXT("Slot 0 starts with the ember flask"),
+			static_cast<uint8>(Skills->GetEquippedSkill(0)), static_cast<uint8>(EDungeoneerSkillId::EmberFlask));
+		TestTrue(TEXT("Slot 0 fires"), Skills->TryActivateSlot(0));
+		TestTrue(TEXT("Slot 0 is on cooldown"), Skills->GetCooldownRemaining(0) > 0.0f);
+		TickHero(0.4f);
+		TestFalse(TEXT("Slot 0 cannot fire again while cooling down"), Skills->TryActivateSlot(0));
+
+		const EDungeoneerSkillId Dropped = Skills->EquipFoundSkill(EDungeoneerSkillId::GrappleChain);
+		TestEqual(TEXT("Found skill replaces slot 0 first"),
+			static_cast<uint8>(Skills->GetEquippedSkill(0)), static_cast<uint8>(EDungeoneerSkillId::GrappleChain));
+		TestEqual(TEXT("Replaced skill is reported"), static_cast<uint8>(Dropped), static_cast<uint8>(EDungeoneerSkillId::EmberFlask));
+		TestEqual(TEXT("Picking up an equipped skill swaps nothing"),
+			static_cast<uint8>(Skills->EquipFoundSkill(EDungeoneerSkillId::GrappleChain)), static_cast<uint8>(EDungeoneerSkillId::None));
+		TestFalse(TEXT("Grapple needs a target in front"), Skills->TryActivateSlot(0));
+
+		UDungeoneerPlayerHUDWidget* HUD = NewObject<UDungeoneerPlayerHUDWidget>(TestWorld);
+		HUD->RefreshHUDFromCharacter(Hero);
+		TestTrue(TEXT("HUD lists equipped skills"), HUD->GetCachedSkillsLine().Contains(DungeoneerSkills::GetDef(EDungeoneerSkillId::GrappleChain).DisplayName));
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerSharedCameraLeashTest,
+	"DarkDungeoneer.Coop.SharedCameraFramingAndLeash",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerSharedCameraLeashTest::RunTest(const FString& Parameters)
+{
+	// Pure rules first.
+	const FVector Inside = DungeoneerParty::ClampToLeash(FVector(500.0, 0.0, 95.0), FVector::ZeroVector, 900.0f);
+	TestTrue(TEXT("Inside the leash nothing moves"), Inside.Equals(FVector(500.0, 0.0, 95.0), 0.01));
+	const FVector Outside = DungeoneerParty::ClampToLeash(FVector(1200.0, 0.0, 95.0), FVector(0.0, 0.0, 10.0), 900.0f);
+	TestTrue(TEXT("Past the leash the hero is put on the circle and keeps its Z"), Outside.Equals(FVector(900.0, 0.0, 95.0), 0.01));
+	TestNearlyEqual(TEXT("Close heroes use the near arm length"), DungeoneerParty::ArmLengthForSpread(0.0f), DungeoneerParty::ArmLengthNearUU, 0.01f);
+	TestNearlyEqual(TEXT("Full spread uses the far arm length"), DungeoneerParty::ArmLengthForSpread(DungeoneerParty::LeashRadiusUU), DungeoneerParty::ArmLengthFarUU, 0.01f);
+	TestTrue(TEXT("Arm length grows with spread"), DungeoneerParty::ArmLengthForSpread(600.0f) > DungeoneerParty::ArmLengthForSpread(400.0f));
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* P1 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	ADungeoneerCharacter* P2 = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(600.0, 0.0, 95.0), FRotator::ZeroRotator);
+	ADungeoneerPartyCamera* PartyCamera = TestWorld->SpawnActor<ADungeoneerPartyCamera>(FVector::ZeroVector, FRotator::ZeroRotator);
+	TestTrue(TEXT("Spawned two heroes and the party camera"), P1 && P2 && PartyCamera);
+	if (!P1 || !P2 || !PartyCamera) { TestWorld->DestroyWorld(false); return false; }
+	P1->DispatchBeginPlay();
+	P2->DispatchBeginPlay();
+
+	// Framing: both heroes, focus at their midpoint, zoomed out a little for a 600 UU spread.
+	PartyCamera->SnapToParty();
+	TestEqual(TEXT("Camera frames both heroes"), PartyCamera->GetFramedHeroCount(), 2);
+	TestTrue(TEXT("Focus sits between the heroes"), FVector::Dist2D(PartyCamera->GetFocusLocation(), FVector(300.0, 0.0, 95.0)) < 1.0);
+	TestTrue(TEXT("Camera zooms out as heroes spread"), PartyCamera->GetCurrentArmLength() > DungeoneerParty::ArmLengthNearUU);
+
+	// Leash: a hero pushed far away (teleport, knockback) is pulled back inside.
+	P2->SetActorLocation(FVector(1500.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+	PartyCamera->UpdatePartyFraming(0.016f);
+	TestTrue(TEXT("Leash pulls the heroes back within range"),
+		FVector::Dist2D(P1->GetActorLocation(), P2->GetActorLocation()) <= DungeoneerParty::LeashRadiusUU + 1.0);
+
+	// A downed hero is the anchor: the standing hero is the one held back.
+	P2->SetActorLocation(FVector(400.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+	P1->SetActorLocation(FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+	P2->ApplyDungeoneerDamage(500.0f, nullptr);
+	TestTrue(TEXT("P2 is down with an ally standing"), P2->IsDowned());
+	const FVector DownedSpot = P2->GetActorLocation();
+	P1->SetActorLocation(FVector(-1100.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
+	PartyCamera->UpdatePartyFraming(0.016f);
+	TestTrue(TEXT("Downed hero stays where they fell"), FVector::Dist2D(P2->GetActorLocation(), DownedSpot) < 1.0);
+	TestTrue(TEXT("Standing hero is held within the leash of the downed one"),
+		FVector::Dist2D(P1->GetActorLocation(), DownedSpot) <= DungeoneerParty::LeashRadiusUU + 1.0);
+
+	// Bleed-out with a partner standing: get back up beside the partner, not at the entry room.
+	P2->Tick(P2->GetDownedRemainingSeconds() + 0.1f);
+	TestFalse(TEXT("P2 is back up after the downed timer"), P2->IsDowned());
+	TestTrue(TEXT("P2 gets up beside P1"), FVector::Dist2D(P2->GetActorLocation(), P1->GetActorLocation()) < 200.0);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerImpactFeedbackTest,
+	"DarkDungeoneer.Combat.ImpactFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerImpactFeedbackTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* Zombie = TestWorld->SpawnActor<AZombieExploder>(FVector(2000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestTrue(TEXT("Spawned hero and zombie"), Hero && Zombie);
+	if (!Hero || !Zombie) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+	Zombie->DispatchBeginPlay();
+
+	// Hit-stop freezes the zombie, then lets go.
+	Zombie->ApplyHitStop(0.1f);
+	TestNearlyEqual(TEXT("Hit-stop slows the zombie to 5%"), Zombie->CustomTimeDilation, 0.05f, 1e-4f);
+	Zombie->Tick(0.2f * 0.05f); // 0.2 s of real time at 5% dilation
+	TestNearlyEqual(TEXT("Hit-stop ends"), Zombie->CustomTimeDilation, 1.0f, 1e-4f);
+
+	// Hit-stop during a time slow wins while it lasts, then the slow comes back.
+	Zombie->ApplyTimeSlow(0.3f, 1.0f);
+	Zombie->ApplyHitStop(0.05f);
+	TestNearlyEqual(TEXT("Hit-stop overrides the slow"), Zombie->CustomTimeDilation, 0.05f, 1e-4f);
+	Zombie->Tick(0.1f * 0.05f);
+	TestNearlyEqual(TEXT("Slow resumes after hit-stop"), Zombie->CustomTimeDilation, 0.3f, 1e-4f);
+	TestTrue(TEXT("Zombie is still slowed"), Zombie->IsTimeSlowed());
+
+	// Camera trauma accumulates and stays in 0..1.
+	Hero->AddCameraTrauma(0.7f);
+	Hero->AddCameraTrauma(0.7f);
+	TestNearlyEqual(TEXT("Camera trauma is clamped to 1"), Hero->GetCameraTrauma(), 1.0f, 1e-4f);
+
+	// Taking damage sets the hurt flash and shakes the camera.
+	const float TraumaBefore = Hero->GetCameraTrauma();
+	Hero->ApplyDungeoneerDamage(12.0f, nullptr);
+	TestNearlyEqual(TEXT("Hurt flash starts full"), Hero->GetHurtFlashAlpha(), 1.0f, 1e-4f);
+	TestTrue(TEXT("Damage keeps the camera shaking"), Hero->GetCameraTrauma() >= FMath::Min(TraumaBefore, 1.0f) - 1e-4f);
+	Hero->Tick(0.5f);
+	TestNearlyEqual(TEXT("Hurt flash fades out"), Hero->GetHurtFlashAlpha(), 0.0f, 1e-4f);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerHeroPoseFramesTest,
+	"DarkDungeoneer.Rendering.HeroMoveSheetFrames",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerHeroPoseFramesTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestNotNull(TEXT("Spawned hero"), Hero);
+	if (!Hero) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+
+	// Standing still breathes between the two idle frames; walking uses the walk sheet.
+	Hero->ResolvePoseFrame(0.1f, false);
+	TestTrue(TEXT("Idle uses the hurt/idle sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::HurtIdle);
+	TestEqual(TEXT("First idle frame"), Hero->GetActivePoseColumn(), 0);
+	Hero->ResolvePoseFrame(0.7f, false);
+	TestEqual(TEXT("Second idle frame after 0.7 s"), Hero->GetActivePoseColumn(), 1);
+	Hero->ResolvePoseFrame(0.1f, true);
+	TestTrue(TEXT("Moving uses the walk sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::Walk);
+
+	// A combo swing starts on the wind-up frame of the combo sheet.
+	TestTrue(TEXT("Attack starts"), Hero->TriggerPrimaryAttack());
+	Hero->ResolvePoseFrame(0.0f, false);
+	TestTrue(TEXT("Combo swing uses the combo sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::Combo);
+	TestEqual(TEXT("Swing starts on the wind-up frame"), Hero->GetActivePoseColumn(), 0);
+
+	// Getting hit shows the flinch frame.
+	Hero->ApplyDungeoneerDamage(10.0f, nullptr);
+	Hero->ResolvePoseFrame(0.0f, false);
+	if (Hero->GetCombatActionState() == EDungeoneerCombatActionState::HitStagger)
+	{
+		TestTrue(TEXT("Stagger uses the hurt sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::HurtIdle);
+		TestEqual(TEXT("Stagger shows the flinch frame"), Hero->GetActivePoseColumn(), 2);
+	}
+
+	// Skills choose their own cast frame.
+	Hero->SetSkillCastFrame(EHeroPoseSheet::Skills, 1);
+	Hero->BeginSkillPose(EDungeoneerCombatActionState::SkillCast, 0.2f);
+	Hero->ResolvePoseFrame(0.0f, false);
+	TestTrue(TEXT("Skill cast uses the chosen sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::Skills);
+	TestEqual(TEXT("Skill cast uses the chosen frame"), Hero->GetActivePoseColumn(), 1);
+
+	// Down for the count: the kneeling frame.
+	Hero->ApplyDungeoneerDamage(500.0f, nullptr);
+	Hero->ResolvePoseFrame(0.0f, false);
+	TestTrue(TEXT("Downed uses the hurt sheet"), Hero->GetActivePoseSheet() == EHeroPoseSheet::HurtIdle);
+	TestEqual(TEXT("Downed shows the kneeling frame"), Hero->GetActivePoseColumn(), 3);
+
+	// Headless worlds load no sprite sheets, so the walk fallback must be in place.
+	TestFalse(TEXT("No move sheets without the asset bootstrap"), Hero->HasPoseSheet(EHeroPoseSheet::Combo));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerEnemyTelegraphTest,
+	"DarkDungeoneer.AI.EnemyTelegraphParryAndTokens",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerEnemyTelegraphTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+	UZombieSpatialSubsystem* Spatial = TestWorld->GetSubsystem<UZombieSpatialSubsystem>();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieExploder* Barger = TestWorld->SpawnActor<AZombieExploder>(FVector(150.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestTrue(TEXT("Spawned hero and exploder"), Hero && Barger && Spatial);
+	if (!Hero || !Barger || !Spatial) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+	Barger->DispatchBeginPlay();
+	Hero->GetDungeoneerMovement()->SetAimInputVector(FVector2D(1.0, 0.0)); // facing the exploder
+
+	// 1. Wind-up starts, takes an attack token, and a parry during it negates the blow and stuns.
+	TestTrue(TEXT("Exploder starts a wind-up in range"), Barger->TryStartMeleeAttack(Hero));
+	TestTrue(TEXT("Wind-up phase"), Barger->GetAttackPhase() == EZombieAttackPhase::Windup);
+	TestEqual(TEXT("Wind-up holds one attack token"), Spatial->GetAttackTokensInUse(Hero), 1);
+	TestFalse(TEXT("No second wind-up while busy"), Barger->TryStartMeleeAttack(Hero));
+	const float HpBefore = Hero->GetCurrentHealth();
+	TestTrue(TEXT("Hero raises the guard"), Hero->TriggerParry());
+	Barger->Tick(Barger->GetMeleeAttackDef().WindupSec + 0.05f);
+	TestNearlyEqual(TEXT("Parried strike deals no damage"), Hero->GetCurrentHealth(), HpBefore, 0.01f);
+	TestTrue(TEXT("Parry stuns the attacker"), Barger->IsStunned());
+	TestEqual(TEXT("Strike releases the token"), Spatial->GetAttackTokensInUse(Hero), 0);
+
+	// 2. Without a guard the strike lands.
+	Hero->Tick(0.6f); // let the parry window lapse
+	AZombieMirrorStalker* Biter = TestWorld->SpawnActor<AZombieMirrorStalker>(FVector(0.0, 130.0, 95.0), FRotator::ZeroRotator);
+	if (Biter)
+	{
+		Biter->DispatchBeginPlay();
+		const float Hp = Hero->GetCurrentHealth();
+		TestTrue(TEXT("Slip starts its bite"), Biter->TryStartMeleeAttack(Hero));
+		Biter->Tick(Biter->GetMeleeAttackDef().WindupSec + 0.05f);
+		TestTrue(TEXT("Unguarded bite lands"), Hero->GetCurrentHealth() < Hp);
+	}
+
+	// 3. Poise: a light hit during a small enemy's wind-up cancels it.
+	AZombieFastThrower* Knifer = TestWorld->SpawnActor<AZombieFastThrower>(FVector(-130.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Knifer)
+	{
+		Knifer->DispatchBeginPlay();
+		TestTrue(TEXT("Thrower starts a knife wind-up"), Knifer->TryStartMeleeAttack(Hero));
+		Knifer->TriggerHitFeedback(FVector(-1.0, 0.0, 0.0), 0.0f);
+		TestTrue(TEXT("A hit interrupts the wind-up"), Knifer->GetAttackPhase() == EZombieAttackPhase::None);
+	}
+
+	// 4. Tokens: no more than two enemies wind up on one hero at once.
+	ADungeoneerCharacter* Bait = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(5000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Bait)
+	{
+		Bait->DispatchBeginPlay();
+		int32 Started = 0;
+		for (int32 k = 0; k < 3; ++k)
+		{
+			AZombieExploder* Crowd = TestWorld->SpawnActor<AZombieExploder>(FVector(5000.0 + 120.0 * FMath::Cos(k * 2.1), 120.0 * FMath::Sin(k * 2.1), 95.0), FRotator::ZeroRotator);
+			if (Crowd)
+			{
+				Crowd->DispatchBeginPlay();
+				Started += Crowd->TryStartMeleeAttack(Bait) ? 1 : 0;
+			}
+		}
+		TestEqual(TEXT("Only two of three can wind up at once"), Started, UZombieSpatialSubsystem::MaxAttackersPerHero);
+	}
+
+	// 5. Elites and floor scaling.
+	AZombieExploder* Tough = TestWorld->SpawnActor<AZombieExploder>(FVector(-5000.0, 0.0, 95.0), FRotator::ZeroRotator);
+	if (Tough)
+	{
+		Tough->DispatchBeginPlay();
+		const float BaseHp = Tough->GetMaxHealth();
+		Tough->ApplyFloorScaling(3);
+		TestNearlyEqual(TEXT("Floor 3 adds 40% health"), Tough->GetMaxHealth(), BaseHp * 1.4f, 0.5f);
+		TestNearlyEqual(TEXT("Floor 3 adds 20% damage"), Tough->GetDamageScale(), 1.2f, 1e-3f);
+		Tough->MakeElite();
+		TestTrue(TEXT("Elite flag set"), Tough->IsElite());
+		TestNearlyEqual(TEXT("Elite adds 60% health"), Tough->GetMaxHealth(), BaseHp * 1.4f * 1.6f, 0.5f);
+	}
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDungeoneerThrowerFlaskFlightTest,
+	"DarkDungeoneer.AI.ThrowerFlaskFlightDeflect",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeoneerThrowerFlaskFlightTest::RunTest(const FString& Parameters)
+{
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	TestNotNull(TEXT("Created headless world"), TestWorld);
+	if (!TestWorld) { return false; }
+	TestWorld->InitializeActorsForPlay(FURL());
+	TestWorld->BeginPlay();
+
+	ADungeoneerCharacter* Hero = TestWorld->SpawnActor<ADungeoneerCharacter>(FVector(0.0, 0.0, 95.0), FRotator::ZeroRotator);
+	AZombieFastThrower* Thrower = TestWorld->SpawnActor<AZombieFastThrower>(FVector(600.0, 0.0, 95.0), FRotator::ZeroRotator);
+	TestTrue(TEXT("Spawned hero and thrower"), Hero && Thrower);
+	if (!Hero || !Thrower) { TestWorld->DestroyWorld(false); return false; }
+	Hero->DispatchBeginPlay();
+	Thrower->DispatchBeginPlay();
+
+	Thrower->BeginFlaskThrow(Hero->GetActorLocation());
+	TestTrue(TEXT("Throw starts with a wind-up"), Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::Windup);
+	Thrower->TickFlask(AZombieFastThrower::FlaskWindupSec + 0.01f);
+	TestTrue(TEXT("Flask leaves the hand"), Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::Flight);
+
+	// Early in flight the flask is still far from the hero: a parry now does nothing to it.
+	Thrower->TickFlask(0.15f);
+	TestTrue(TEXT("Flask is in the air between them"), Thrower->GetFlaskLocation().X > 200.0 && Thrower->GetFlaskLocation().X < 600.0);
+
+	// Guard up as it arrives: it flies back.
+	TestTrue(TEXT("Hero raises the guard"), Hero->TriggerParry());
+	for (int32 i = 0; i < 10 && Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::Flight; ++i)
+	{
+		Thrower->TickFlask(0.04f);
+	}
+	TestTrue(TEXT("Parry bats the flask back"), Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::Returning);
+
+	const float ThrowerHp = Thrower->GetCurrentHealth();
+	Thrower->TickFlask(AZombieFastThrower::FlaskReturnSec + 0.01f);
+	TestTrue(TEXT("Returned flask is done"), Thrower->GetFlaskPhase() == AZombieFastThrower::EFlaskPhase::None);
+	TestTrue(TEXT("Thrower is hurt by its own flask"), Thrower->GetCurrentHealth() < ThrowerHp);
+	TestTrue(TEXT("Thrower is stunned"), Thrower->IsStunned());
 
 	TestWorld->DestroyWorld(false);
 	return true;

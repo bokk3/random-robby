@@ -1,4 +1,6 @@
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Rendering/DungeoneerFxPoolSubsystem.h"
+#include "Audio/DungeonAcousticSubsystem.h"
 #include "AI/BossGuardianActor.h"
 #include "AI/ZombieBase.h"
 #include "AI/ZombieExploder.h"
@@ -64,8 +66,50 @@ void UZombieSpatialSubsystem::RegisterPlayer(ADungeoneerCharacter* Player)
 
 	if (NumTrackedPlayers < MaxTrackedPlayers)
 	{
+		PlayerAttackTokens[NumTrackedPlayers] = 0;
 		TrackedPlayers[NumTrackedPlayers++] = Player;
 	}
+}
+
+bool UZombieSpatialSubsystem::TryAcquireAttackToken(const ADungeoneerCharacter* Hero) noexcept
+{
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		if (TrackedPlayers[i].Get() == Hero)
+		{
+			if (PlayerAttackTokens[i] >= MaxAttackersPerHero)
+			{
+				return false;
+			}
+			++PlayerAttackTokens[i];
+			return true;
+		}
+	}
+	return false;
+}
+
+void UZombieSpatialSubsystem::ReleaseAttackToken(const ADungeoneerCharacter* Hero) noexcept
+{
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		if (TrackedPlayers[i].Get() == Hero)
+		{
+			PlayerAttackTokens[i] = FMath::Max(0, PlayerAttackTokens[i] - 1);
+			return;
+		}
+	}
+}
+
+int32 UZombieSpatialSubsystem::GetAttackTokensInUse(const ADungeoneerCharacter* Hero) const noexcept
+{
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		if (TrackedPlayers[i].Get() == Hero)
+		{
+			return PlayerAttackTokens[i];
+		}
+	}
+	return 0;
 }
 
 void UZombieSpatialSubsystem::UnregisterPlayer(ADungeoneerCharacter* Player)
@@ -75,7 +119,9 @@ void UZombieSpatialSubsystem::UnregisterPlayer(ADungeoneerCharacter* Player)
 		if (TrackedPlayers[i].Get() == Player || !TrackedPlayers[i].IsValid())
 		{
 			TrackedPlayers[i] = TrackedPlayers[NumTrackedPlayers - 1];
+			PlayerAttackTokens[i] = PlayerAttackTokens[NumTrackedPlayers - 1];
 			TrackedPlayers[NumTrackedPlayers - 1] = nullptr;
+			PlayerAttackTokens[NumTrackedPlayers - 1] = 0;
 			--NumTrackedPlayers;
 			--i;
 		}
@@ -404,6 +450,25 @@ AHazardZoneBase* UZombieSpatialSubsystem::AcquirePooledHazard(EHazardPoolType Ty
 void UZombieSpatialSubsystem::ApplyRadialDetonationDamage(const FVector& Epicenter, float Radius, float MaxDamage, AActor* InstigatorActor) noexcept
 {
 	const float RadiusSq = Radius * Radius;
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		const FVector Floor(Epicenter.X, Epicenter.Y, Epicenter.Z - 90.0);
+		Fx->SpawnGroundRing(Floor, FLinearColor(1.0f, 0.42f, 0.1f), Radius * 0.2f, Radius, 0.4f);
+		Fx->SpawnBurst(Epicenter, FLinearColor(1.0f, 0.5f, 0.15f), 10, 520.0f, 0.42f);
+	}
+	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_Blast_0")), Epicenter, 1.0f, 0.08f);
+	for (int32 i = 0; i < NumTrackedPlayers; ++i)
+	{
+		if (ADungeoneerCharacter* Hurt = TrackedPlayers[i].Get())
+		{
+			// Every hero feels a blast nearby, hit or not.
+			const double DistSq = FVector::DistSquared2D(Epicenter, Hurt->GetActorLocation());
+			if (DistSq < static_cast<double>(RadiusSq) * 4.0)
+			{
+				Hurt->AddCameraTrauma(0.35f);
+			}
+		}
+	}
 	for (int32 i = 0; i < NumTrackedPlayers; ++i)
 	{
 		if (ADungeoneerCharacter* Player = TrackedPlayers[i].Get())
@@ -468,7 +533,8 @@ int32 UZombieSpatialSubsystem::ApplyMeleeArcDamage(
 	const float MinCosHalfAngle,
 	const float DamageAmount,
 	AActor* InstigatorActor,
-	const float KnockbackImpulseUU) noexcept
+	const float KnockbackImpulseUU,
+	const float StunSeconds) noexcept
 {
 	const FVector SafeFwd = ForwardDirXY.GetSafeNormal2D();
 	const double RangeSq = static_cast<double>(RangeUU) * static_cast<double>(RangeUU);
@@ -495,6 +561,23 @@ int32 UZombieSpatialSubsystem::ApplyMeleeArcDamage(
 		{
 			Zombie->TriggerHitFeedback(DirXY, KnockbackImpulseUU);
 			Zombie->ApplyZombieDamage(DamageAmount, InstigatorActor);
+			if (StunSeconds > 0.0f)
+			{
+				Zombie->ApplyStun(StunSeconds);
+			}
+			// Weight: the struck zombie freezes for a moment, longer for heavy hits.
+			Zombie->ApplyHitStop(FMath::Clamp(0.04f + DamageAmount * 0.0006f + StunSeconds * 0.03f, 0.04f, 0.11f));
+			if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+			{
+				const bool bHeavy = DamageAmount >= 70.0f;
+				Fx->SpawnHitSparks(Zombie->GetActorLocation() + FVector(0.0, 0.0, 55.0), DirXY,
+					bHeavy ? FLinearColor(1.0f, 0.55f, 0.15f) : FLinearColor(1.0f, 0.82f, 0.4f), bHeavy ? 7 : 4);
+			}
+			if (HitsLanded < 2) // A wide swing through a crowd doesn't need a sound per zombie.
+			{
+				static const FName HitCues[3] = { FName(TEXT("Combat_Hit_0")), FName(TEXT("Combat_Hit_1")), FName(TEXT("Combat_Hit_2")) };
+				UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), HitCues[(i + HitsLanded) % 3], Zombie->GetActorLocation(), DamageAmount >= 70.0f ? 1.0f : 0.8f);
+			}
 			if (ADungeoneerCharacter* Attacker = Cast<ADungeoneerCharacter>(InstigatorActor))
 			{
 				const bool bCrit = (DamageAmount >= 70.0f);

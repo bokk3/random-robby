@@ -12,6 +12,31 @@ class UStaticMeshComponent;
 class UZombieSpatialSubsystem;
 
 /**
+ * One telegraphed melee attack. Wind-up is the warning (a closing floor ring, a red glow, a sound);
+ * the strike is a short lunge plus one hit test; recover is the opening to punish. Strikes go through
+ * ADungeoneerCharacter::ApplyDungeoneerDamage, so parry and perfect dodge answer them.
+ */
+struct FZombieMeleeAttackDef
+{
+	float StartRangeUU = 170.0f;   // starts winding up when the target is this close
+	float WindupSec = 0.6f;
+	float ReachUU = 190.0f;        // hit test distance at the strike
+	float ArcMinCos = 0.2f;        // hit test cone around the wind-up direction
+	float Damage = 14.0f;
+	float LungeSpeedUU = 520.0f;
+	float RecoverSec = 0.7f;
+	float CooldownSec = 1.6f;
+	bool bLightHitsInterrupt = true; // any hit during the wind-up cancels it (small enemies)
+};
+
+enum class EZombieAttackPhase : uint8
+{
+	None,
+	Windup,
+	Recover
+};
+
+/**
  * Base 2.5D Zombie Archetype sharing 4-axis/8-compass quantized stepping,
  * zero-allocation spatial registration, and deterministic step accumulator hooks.
  */
@@ -65,6 +90,56 @@ public:
 	void ApplyZombieDamage(float DamageAmount, AActor* DamageInstigator);
 	void TriggerHitFeedback(const FVector& KnockbackDirXY, float KnockbackSpeedUU = 340.0f) noexcept;
 
+	// --- Status effects applied by the hero's moves and skills -------------------------------
+
+	/** Freezes AI for a while. Bosses shorten it by StunResistance. Longer stuns replace shorter ones. */
+	void ApplyStun(float Seconds) noexcept;
+
+	/** Damage over time. Re-applying refreshes the duration and keeps the stronger tick rate. */
+	void ApplyBurn(float DamagePerSecond, float Seconds, AActor* BurnInstigator) noexcept;
+
+	/** Slows this zombie's whole clock (movement, fuses, throw cadence) via CustomTimeDilation. */
+	/** Freezes the zombie for a moment (real seconds) when a hit lands. Stacks with time slow. */
+	void ApplyHitStop(float RealSeconds) noexcept;
+
+	void ApplyTimeSlow(float Dilation, float Seconds) noexcept;
+
+	// --- Telegraphed melee -------------------------------------------------------------------
+
+	/** Starts a wind-up against Target if in range, off cooldown, and the hero has a free attack token. */
+	bool TryStartMeleeAttack(ADungeoneerCharacter* Target) noexcept;
+
+	/** Cancels a wind-up (stun, light hit on a small enemy). Releases the attack token. */
+	void InterruptAttack() noexcept;
+
+	EZombieAttackPhase GetAttackPhase() const noexcept { return AttackPhase; }
+	bool IsAttackBusy() const noexcept { return AttackPhase != EZombieAttackPhase::None; }
+	float GetAttackPhaseRemaining() const noexcept { return AttackPhaseRemaining; }
+	const FZombieMeleeAttackDef& GetMeleeAttackDef() const noexcept { return MeleeAttack; }
+
+	// --- Difficulty --------------------------------------------------------------------------
+
+	/** Deeper floors hit harder and take longer to kill: +20% health and +10% damage per floor past the first. */
+	void ApplyFloorScaling(int32 FloorIndex) noexcept;
+
+	/** Elite variant: +60% health, +25% damage, 25% faster wind-ups, double gold, a gold glow. */
+	void MakeElite() noexcept;
+
+	bool IsElite() const noexcept { return bIsElite; }
+	float GetDamageScale() const noexcept { return DamageScale; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Status")
+	bool IsStunned() const noexcept { return StunRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Status")
+	bool IsBurning() const noexcept { return BurnRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Status")
+	bool IsTimeSlowed() const noexcept { return TimeSlowRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Zombie|Status")
+	float GetStunResistance() const noexcept { return StunResistance; }
+
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnZombieStepTriggered, const FDungeoneerStepEvent&);
 	FOnZombieStepTriggered OnZombieStepTriggered;
 
@@ -78,6 +153,19 @@ protected:
 	void UpdateZombieDirectionalVisual(ECompassOctant HeadingOctant, int32 FrameColumn = -1) noexcept;
 	void AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept;
 	virtual void OnZombieDied();
+
+	/** Called right after a melee strike resolves (hit or miss). */
+	virtual void OnMeleeStrike(bool bHitSomething) {}
+
+	/** Runs the wind-up / strike / recover timers. Called from Tick on dilated time, so slows and hit-stop stretch it. */
+	void TickMeleeAttack(float DeltaSeconds) noexcept;
+
+	/** Nudges this zombie away from others closer than about a body width, so packs don't stack. */
+	void ApplySeparation() noexcept;
+
+	FZombieMeleeAttackDef MeleeAttack;
+	float DamageScale = 1.0f;
+	bool bIsElite = false;
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept { return TEXT("Exploder"); }
 	virtual FName GetArchetypeDiffuseKey() const noexcept { return FName(TEXT("Exploder_Row0_D")); }
 	virtual FName GetArchetypeNormalKey() const noexcept { return FName(TEXT("Exploder_Row0_N")); }
@@ -105,8 +193,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0"))
 	int32 GoldKillReward = 25;
 
+	/** Bit index in the Ledger bestiary (EDungeoneerBestiaryBit): 0 Exploder, 1 Thrower, 2 Stalker, 3 Colossus. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0", ClampMax = "7"))
+	uint8 BestiaryBitIndex = 0;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0.0"))
 	float BatteryKillReward = 8.0f;
+
+	/** 0 = takes full stun duration, 1 = immune. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StunResistance = 0.0f;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "State")
 	float CurrentHealth = 120.0f;
@@ -123,6 +219,22 @@ protected:
 	float HitFlashRemaining = 0.0f;
 
 private:
+	/** Ticks stun/burn/slow timers on real (undilated) time. */
+	void TickStatusEffects(float RealDeltaSeconds) noexcept;
+
+	TWeakObjectPtr<AActor> BurnInstigator;
+	float StunRemaining = 0.0f;
+	float BurnRemaining = 0.0f;
+	float BurnDamagePerSecond = 0.0f;
+	float HitStopRemaining = 0.0f;
+	float TimeSlowDilation = 1.0f;
+	EZombieAttackPhase AttackPhase = EZombieAttackPhase::None;
+	float AttackPhaseRemaining = 0.0f;
+	float AttackCooldownRemaining = 0.0f;
+	FVector AttackDirXY = FVector::ForwardVector;
+	TWeakObjectPtr<ADungeoneerCharacter> AttackTokenHero;
+	float TimeSlowRemaining = 0.0f;
+
 	FVector PreviousLocation = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastDamageInstigator;
 	float StepDistanceAccumulator = 0.0f;

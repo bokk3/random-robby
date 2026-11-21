@@ -63,6 +63,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Exploder|Config", meta = (ClampMin = "1.0"))
 	float MaxDetonationDamage = 65.0f;
 
+	virtual void OnMeleeStrike(bool bHitSomething) override { ++LungesDone; }
+
+	/** Lunges before committing to the fuse; it lights the fuse after this many, or when badly hurt. */
+	static constexpr int32 LungesBeforeFuse = 2;
+	int32 LungesDone = 0;
+
 private:
 	bool bFuseIgnited = false;
 	bool bDetonated = false;

@@ -56,7 +56,7 @@ TSharedRef<SWidget> UDungeoneerTradeModalWidget::RebuildWidget()
 		const FTradeBtnSpec BtnSpecs[] =
 		{
 			{ &Btn_BuySelected,  TEXT("Btn_BuySelected"),  TEXT("PURCHASE SELECTED RELIC") },
-			{ &Btn_ConfirmTrade, TEXT("Btn_ConfirmTrade"), TEXT("CONFIRM 2PC TRADE") },
+			{ &Btn_ConfirmTrade, TEXT("Btn_ConfirmTrade"), TEXT("CONFIRM TRADE") },
 			{ &Btn_CancelTrade,  TEXT("Btn_CancelTrade"),  TEXT("CANCEL / ROLLBACK") }
 		};
 

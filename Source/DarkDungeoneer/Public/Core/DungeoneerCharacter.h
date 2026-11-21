@@ -22,16 +22,25 @@ class UDungeoneerInventoryComponent;
 class UTradeManagerComponent;
 class UMirrorLightBounceComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UDungeoneerSkillComponent;
+class AZombieBase;
 
 UENUM(BlueprintType)
 enum class EDungeoneerCombatActionState : uint8
 {
 	None         UMETA(DisplayName = "Ready"),
 	LanternSlash UMETA(DisplayName = "Lantern Blade Slash"),
-	ChargedFlare UMETA(DisplayName = "Charged Lantern Flare"),
-	DodgeDash    UMETA(DisplayName = "Compass Dodge Dash"),
+	ChargedFlare UMETA(DisplayName = "Solar Flare"),
+	DodgeDash    UMETA(DisplayName = "Dodge Roll"),
 	HitStagger   UMETA(DisplayName = "Hit Stagger"),
-	Downed       UMETA(DisplayName = "Downed")
+	Downed       UMETA(DisplayName = "Downed"),
+	HeavyCharge  UMETA(DisplayName = "Charging Heavy Smash"),
+	HeavySmash   UMETA(DisplayName = "Heavy Smash"),
+	DashStrike   UMETA(DisplayName = "Dash Strike"),
+	Parry        UMETA(DisplayName = "Parry"),
+	SkillCast    UMETA(DisplayName = "Casting Skill"),
+	Whirl        UMETA(DisplayName = "Whirling Lantern")
 };
 
 UENUM(BlueprintType)
@@ -58,11 +67,29 @@ struct DARKDUNGEONEER_API FDungeoneerFloatingPopup
 };
 
 /**
- * Primary playable 2.5D Dark Dungeoneer character.
- * - Uses UDungeoneerMovementComponent for 4-axis (8-compass) quantized movement.
- * - Drives a decoupled narrow-cone USpotLightComponent flashlight with volumetric scattering.
- * - Queries ULocalPlayer and APlayerState strictly (zero GetFirstPlayerController assumptions).
+ * The playable lantern-bearer.
+ *
+ * Movement snaps to 8 compass directions (UDungeoneerMovementComponent). Aim is separate from
+ * movement and drives the flashlight cone. Combat: a 4-hit lantern combo, hold-to-charge heavy
+ * smash, dodge roll with a dash-strike follow-up, parry, and two skill slots
+ * (UDungeoneerSkillComponent). The sprite sheet only has walk frames, so attacks are sold with
+ * procedural squash/stretch, lunges, row cycling and simple effect quads.
  */
+/**
+ * Which hero sprite sheet a frame comes from. Each is 4 rows (S, N, E, W) by 4 columns.
+ * Walk is the walk cycle; the rest are the move sheets in Content/Art/Rigs/DungeoneerHeroMoves.
+ */
+enum class EHeroPoseSheet : uint8
+{
+	Walk = 0,  // columns: contact, left step, passing, right step
+	Combo,     // wind-up, swing (hit), follow-through, recover
+	Heavy,     // crouched charge, lantern overhead, slam (hit), recover
+	Evade,     // standing, tucked roll, lunge (hit), parry brace
+	Skills,    // flask throw, hook cast, lantern spin, flare held high
+	HurtIdle,  // idle in, idle out, flinch, downed
+	Count
+};
+
 UCLASS(Blueprintable)
 class DARKDUNGEONEER_API ADungeoneerCharacter : public ACharacter
 {
@@ -142,6 +169,9 @@ public:
 	/** Restores health & flashlight battery (used in Resting Grounds). */
 	void RestoreAtRestingGround(float HealthDelta, float BatteryDelta);
 
+	/** Full HP and oil, starting inventory, skills and senses, no combat state left over. Authority only. */
+	void ResetForNewRun();
+
 	UFUNCTION(BlueprintPure, Category = "Vitals")
 	float GetCurrentHealth() const noexcept { return CurrentHealth; }
 
@@ -162,6 +192,23 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Rendering")
 	int32 GetActiveWalkFrameColumn() const noexcept { return ActiveWalkFrameColumn; }
+
+	/** The sheet and column the sprite shows this frame (Walk when no move sheet applies). */
+	EHeroPoseSheet GetActivePoseSheet() const noexcept { return ActivePoseSheet; }
+	int32 GetActivePoseColumn() const noexcept { return ActivePoseColumn; }
+
+	/** True if the cells for that sheet were found on disk at startup. */
+	bool HasPoseSheet(EHeroPoseSheet Sheet) const noexcept;
+
+	/** Skills call this when they start their cast pose, to pick the frame shown during it. */
+	void SetSkillCastFrame(EHeroPoseSheet Sheet, int32 Column) noexcept
+	{
+		SkillCastSheet = Sheet;
+		SkillCastColumn = FMath::Clamp(Column, 0, 3);
+	}
+
+	/** Chooses the sheet and column from the current action. Called every Tick before the sprite updates; public for tests. */
+	void ResolvePoseFrame(float DeltaSeconds, bool bMoving) noexcept;
 
 	/** Triggers a 4-axis/8-compass Lantern Blade melee cleave + ember burst along AimOctant. */
 	UFUNCTION(BlueprintCallable, Category = "Combat")
@@ -184,7 +231,7 @@ public:
 	bool TriggerInteract();
 
 	/** Records a zombie kill and grants gold + battery siphon from slain targets. */
-	void RegisterEnemySlain(int32 BonusGold, float BonusBattery) noexcept;
+	void RegisterEnemySlain(int32 BonusGold, float BonusBattery, uint8 BestiaryMask = 0x01) noexcept;
 
 	/** Pushes a floating damage/gold/relic popup into the fixed 32-slot zero-alloc ring buffer. */
 	void PushFloatingCombatPopup(const FVector& WorldLoc, const FString& Text, EDungeoneerFloatingTextKind Kind) noexcept;
@@ -205,7 +252,95 @@ public:
 	EDungeoneerCombatActionState GetCombatActionState() const noexcept { return CombatActionState; }
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
-	bool IsInvulnerable() const noexcept { return DodgeActiveRemaining > 0.0f || DownedRespawnRemaining > 0.0f; }
+	bool IsInvulnerable() const noexcept { return DodgeActiveRemaining > 0.0f || DownedRespawnRemaining > 0.0f || InvulnRemaining > 0.0f; }
+
+	// --- Hack-and-slash moves --------------------------------------------------------------
+
+	static constexpr int32 ComboLength = 4;
+
+	/** Starts charging a heavy smash (hold attack). Released by ReleaseHeavyCharge or auto-fires at full charge. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool BeginHeavyCharge();
+
+	/** Releases a charging heavy smash. Fires if charged past the minimum, otherwise cancels. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool ReleaseHeavyCharge();
+
+	/** Opens a short parry window. Parried melee attackers are stunned; parried flasks fly back. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool TriggerParry();
+
+	/** Fires the skill equipped in slot 0 or 1. */
+	UFUNCTION(BlueprintCallable, Category = "Skills")
+	bool TriggerSkillSlot(int32 SlotIndex);
+
+	/** Called by throwers when a flask lands near this hero. Returns true if the parry window bats it back. */
+	bool TryDeflectThrownFlask(AActor* Thrower);
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsParryActive() const noexcept { return ParryActiveRemaining > 0.0f; }
+
+	/** True while the next melee hit is boosted (after a parry, perfect dodge, or Shade Step). */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsEmpowered() const noexcept { return EmpoweredRemaining > 0.0f; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetEmpoweredMultiplier() const noexcept { return IsEmpowered() ? EmpoweredMultiplier : 1.0f; }
+
+	/** 0..1 while charging a heavy smash, 0 otherwise. */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetHeavyChargeAlpha() const noexcept;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	int32 GetPerfectDodgeCount() const noexcept { return PerfectDodgeCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	int32 GetParryCount() const noexcept { return ParryCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Skills")
+	UDungeoneerSkillComponent* GetSkillComponent() const noexcept { return SkillComponent.Get(); }
+
+	// --- Hooks used by UDungeoneerSkillComponent -------------------------------------------
+
+	/** True when the hero is free to start an attack, parry or skill (light swings can be cancelled). */
+	bool CanStartAction() const noexcept;
+
+	/** Unit XY vector of the current aim direction. */
+	FVector GetAimForwardXY() const noexcept;
+
+	/** Current combat camera kick (spring offset). The party camera sums these across heroes. */
+	FVector GetCameraImpulseOffset() const noexcept { return CameraImpulseOffset; }
+
+	/** Screen shake: 0..1, decays over about half a second. The party camera shakes by the largest value. */
+	void AddCameraTrauma(float Amount) noexcept { CameraTrauma = FMath::Clamp(CameraTrauma + Amount, 0.0f, 1.0f); }
+	float GetCameraTrauma() const noexcept { return CameraTrauma; }
+
+	/** 0..1 red flash after taking damage; the HUD draws an edge flash from it. */
+	float GetHurtFlashAlpha() const noexcept { return HurtFlashRemaining / HurtFlashDuration; }
+	static constexpr float HurtFlashDuration = 0.35f;
+
+	/** Turns aim toward a world location (used after blinking behind a target). */
+	void FaceTowards(const FVector& WorldLocation) noexcept;
+
+	/** Removes oil. Returns false (and spends nothing) if there is not enough. Authority only. */
+	bool SpendLanternOil(float Amount) noexcept;
+
+	/** Boosts the next melee hit within WindowSec. Label is shown as a popup. */
+	void GrantEmpoweredStrike(float Multiplier, float WindowSec, const TCHAR* Label) noexcept;
+
+	void GrantInvulnerability(float Seconds) noexcept;
+
+	/** Puts the hero into a timed skill pose (SkillCast or Whirl). */
+	void BeginSkillPose(EDungeoneerCombatActionState PoseState, float DurationSec) noexcept;
+
+	/** Draws a thin glowing quad from Start to End for a moment (chain, thrown flask arc). */
+	void ShowSkillBeam(const FVector& Start, const FVector& End, float DurationSec, const FLinearColor& Color) noexcept;
+
+	/** Leaves a shrinking copy of the hero sprite at Location (blinks, perfect dodges, dash strikes). */
+	void ShowAfterimage(const FVector& Location, float DurationSec) noexcept;
+
+	/** Shows or hides the Mirror Decoy copy of the hero. */
+	void ShowDecoy(const FVector& Location, bool bVisible) noexcept;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	int32 GetKillsCount() const noexcept { return KillsCount; }
@@ -244,6 +379,27 @@ protected:
 	void ExecutePrimaryAttackAuthority();
 	void ExecuteDodgeDashAuthority();
 	void ExecuteInteractAuthority();
+	void ExecuteHeavySmashAuthority(float ChargeAlpha);
+	void ExecuteDashStrikeAuthority();
+	bool TriggerDashStrike();
+	void StartHeavySmash(float ChargeAlpha);
+	void HandleSuccessfulParry(AZombieBase* Attacker);
+	void HandlePerfectDodge();
+	/** Applies relic and empowered-strike multipliers to a melee hit, consuming the empowered strike. */
+	float ComputeMeleeDamage(float BaseDamage, const FVector& Origin);
+	ECompassOctant GetEffectiveAimOctant() const noexcept;
+	bool UpdateNewMovePoses(float DeltaSeconds) noexcept;
+	void UpdateEffectQuads(float DeltaSeconds) noexcept;
+	UMaterialInterface* GetCurrentHeroMaterial() const noexcept;
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExecuteHeavySmash(float ChargeAlpha);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExecuteDashStrike(FVector_NetQuantizeNormal Direction);
+
+	UFUNCTION(Server, Reliable)
+	void Server_TriggerParry();
 
 	UFUNCTION(Server, Unreliable)
 	void Server_UpdateOctants(ECompassOctant NewMoveOctant, ECompassOctant NewAimOctant);
@@ -292,6 +448,21 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mirror|LightBounce")
 	TObjectPtr<UMirrorLightBounceComponent> MirrorBounceComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skills")
+	TObjectPtr<UDungeoneerSkillComponent> SkillComponent;
+
+	/** World-space quad for chains and flask arcs. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Visual")
+	TObjectPtr<UStaticMeshComponent> SkillBeamMesh;
+
+	/** World-space copy of the hero sprite left behind by blinks and dashes. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Visual")
+	TObjectPtr<UStaticMeshComponent> AfterimageMesh;
+
+	/** World-space copy of the hero sprite for the Mirror Decoy skill. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Visual")
+	TObjectPtr<UStaticMeshComponent> DecoyMesh;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -385,19 +556,46 @@ private:
 	int32 ActiveWalkFrameColumn = 0;
 	int32 WalkStepSequenceCount = 0;
 	int32 ActiveDirectionalCellIndex = -1;
+	EHeroPoseSheet ActivePoseSheet = EHeroPoseSheet::Walk;
+	int32 ActivePoseColumn = 0;
+	EHeroPoseSheet SkillCastSheet = EHeroPoseSheet::Skills;
+	int32 SkillCastColumn = 0;
+	float IdleBreathTime = 0.0f;
 	int32 LastAttackHitsCount = 0;
 	int32 EquippedLanternTrimIndex = 0;
 	bool bAttackDamageApplied = false;
-	bool bPrevAttackKeyDown = false;
-	bool bPrevFlareKeyDown = false;
-	bool bPrevOilKeyDown = false;
-	bool bPrevAntidoteKeyDown = false;
-	bool bPrevDodgeKeyDown = false;
-	bool bPrevInteractKeyDown = false;
-	bool bPrevTradeKeyDown = false;
-	bool bPrevCoopDropInKeyDown = false;
 	bool bWasDownedWithAliveAllies = false;
+
+	// Hack-and-slash move state.
+	float AttackBufferRemaining = 0.0f;
+	float DashStrikeWindowRemaining = 0.0f;
+	float DashStrikeElapsed = 0.0f;
+	float HeavyChargeElapsed = 0.0f;
+	float HeavySmashElapsed = 0.0f;
+	float HeavySmashAlpha = 0.0f;
+	float ParryActiveRemaining = 0.0f;
+	float ParryRecoveryRemaining = 0.0f;
+	float ParryCooldownRemaining = 0.0f;
+	float EmpoweredRemaining = 0.0f;
+	float EmpoweredMultiplier = 1.0f;
+	float InvulnRemaining = 0.0f;
+	float SkillPoseRemaining = 0.0f;
+	float SkillPoseDuration = 0.0f;
+	float BeamRemaining = 0.0f;
+	float AfterimageRemaining = 0.0f;
+	float AfterimageDuration = 0.0f;
+	FVector AfterimageBaseScale = FVector::OneVector;
+	int32 PerfectDodgeCount = 0;
+	int32 ParryCount = 0;
+	bool bAttackHeld = false;
+	bool bPerfectDodgeUsedThisDash = false;
+
+	/** Edge detection for polled keyboard/gamepad buttons (index = EHeroButton in the .cpp). */
+	TStaticArray<bool, 12> PrevButtonDown;
 	bool bHasMouseSample = false;
 	bool bHasPreviousWalkLocation = false;
 	bool bTexturedVisualsApplied = false;
+	bool bSlashArcTextured = false;
+	float CameraTrauma = 0.0f;
+	float HurtFlashRemaining = 0.0f;
 };

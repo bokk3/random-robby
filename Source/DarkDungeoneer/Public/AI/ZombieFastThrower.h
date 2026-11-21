@@ -60,9 +60,32 @@ public:
 	DECLARE_MULTICAST_DELEGATE(FOnChronoLeechDecaySweep);
 	FOnChronoLeechDecaySweep OnChronoLeechDecaySweep;
 
+	/** Flask stages: winding up the throw, in flight toward the target, or batted back at the thrower. */
+	enum class EFlaskPhase : uint8 { None, Windup, Flight, Returning };
+	EFlaskPhase GetFlaskPhase() const noexcept { return FlaskPhase; }
+	FVector GetFlaskLocation() const noexcept { return FlaskLocation; }
+
+	/** Starts a throw at TargetLocation (wind-up, then flight). Public for tests. */
+	void BeginFlaskThrow(const FVector& TargetLocation) noexcept;
+
+	/** Advances the flask. Public for tests; Tick calls it. */
+	void TickFlask(float DeltaSeconds) noexcept;
+
+	static constexpr float FlaskWindupSec = 0.35f;
+	static constexpr float FlaskFlightSec = 0.55f;
+	static constexpr float FlaskReturnSec = 0.3f;
+	static constexpr float FlaskDeflectRadiusUU = 170.0f;
+
 protected:
 	EThrowPayload SelectNextPayload(int32 ThrowCount) const noexcept;
 	void ExecutePooledThrow(const FVector& TargetLocation);
+
+	/** A deflected flask reaching us: stun, damage and the payload's own effect. */
+	void SufferReturnedFlask(AActor* Deflector) noexcept;
+
+	/** Small additive quad that shows the flask in flight. */
+	UPROPERTY(VisibleAnywhere, Category = "Thrower|Visual")
+	TObjectPtr<UStaticMeshComponent> FlaskMesh;
 	virtual void OnZombieDied() override;
 	virtual const TCHAR* GetArchetypeKeyPrefix() const noexcept override { return TEXT("Thrower"); }
 	virtual FName GetArchetypeDiffuseKey() const noexcept override { return FName(TEXT("Thrower_Row0_D")); }
@@ -93,4 +116,13 @@ private:
 	int32 ThrowSequenceCount = 0;
 	int8 StrafeSign = 1;
 	bool bWasLeechActive = false;
+
+	EFlaskPhase FlaskPhase = EFlaskPhase::None;
+	float FlaskTimer = 0.0f;
+	FVector FlaskStart = FVector::ZeroVector;
+	FVector FlaskTarget = FVector::ZeroVector;
+	FVector FlaskLocation = FVector::ZeroVector;
+	EThrowPayload FlaskPayload = EThrowPayload::Fire;
+	TWeakObjectPtr<AActor> FlaskDeflector;
+	bool bFlaskMaterialApplied = false;
 };

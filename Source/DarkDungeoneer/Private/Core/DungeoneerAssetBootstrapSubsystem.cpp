@@ -3,6 +3,7 @@
 #include "Core/DungeoneerMovementConfig.h"
 #include "Rendering/Dungeoneer25DMaterialBuilder.h"
 #include "Rendering/DungeoneerEcoMaterialFactory.h"
+#include "Rendering/DungeoneerSpriteMaterialFactory.h"
 #include "Audio.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
@@ -534,7 +535,7 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
 
 	UTexture2D* MaskTex = nullptr;
 	uint8* MaskBytes = nullptr;
-	if (!bIsNormalMap && PatternKind == 3)
+	if (!bIsNormalMap && (PatternKind == 3 || PatternKind == 4))
 	{
 		MaskTex = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
 		if (MaskTex && MaskTex->GetPlatformData() && MaskTex->GetPlatformData()->Mips.Num() > 0)
@@ -567,6 +568,44 @@ UTexture2D* UDungeoneerAssetBootstrapSubsystem::RegisterProceduralTileFallback(
 				const int32 DX = FMath::Abs(X - Size / 2);
 				const int32 DY = FMath::Abs(Y - Size / 2);
 				bUseSecondary = (DX + DY == 20) || (DX + DY == 19) || ((Y % 12 < 6) && DX < 6);
+			}
+			else if (PatternKind == 5 || PatternKind == 6) // 5: soft spark disc, 6: thin ring. Brightness falls off in RGB for additive use.
+			{
+				const float DX = (static_cast<float>(X) + 0.5f - Size * 0.5f) / (Size * 0.5f);
+				const float DY = (static_cast<float>(Y) + 0.5f - Size * 0.5f) / (Size * 0.5f);
+				const float R = FMath::Sqrt(DX * DX + DY * DY);
+				float Intensity = 0.0f;
+				if (PatternKind == 5)
+				{
+					Intensity = FMath::Clamp(1.0f - R, 0.0f, 1.0f);
+					Intensity *= Intensity;
+				}
+				else
+				{
+					Intensity = FMath::Clamp(1.0f - FMath::Abs(R - 0.82f) / 0.12f, 0.0f, 1.0f);
+				}
+				// Quantize to 4 steps so it stays pixel-art.
+				const float Stepped = FMath::FloorToFloat(Intensity * 4.0f) / 4.0f;
+				Alpha = Stepped > 0.0f ? 255 : 0;
+				const FColor& Src = (Stepped >= 0.75f) ? SecondaryColor : PrimaryColor;
+				const int32 Idx = (Y * Size + X) * 4;
+				Bytes[Idx + 0] = static_cast<uint8>(Src.B * Stepped);
+				Bytes[Idx + 1] = static_cast<uint8>(Src.G * Stepped);
+				Bytes[Idx + 2] = static_cast<uint8>(Src.R * Stepped);
+				Bytes[Idx + 3] = Alpha;
+				continue;
+			}
+			else if (PatternKind == 4) // Slash crescent: thick in the middle, thin at the tips, bowing toward row 0
+			{
+				// Two-texel pixels to match the sprite art. The band is the area inside a small circle
+				// and outside a larger, lower one; the leading edge gets the hot secondary colour.
+				const int32 QX = (X / 2) * 2 + 1 - Size / 2;
+				const int32 QY = (Y / 2) * 2 + 1 - Size / 2;
+				const int32 OuterDistSq = QX * QX + (QY - 28) * (QY - 28);
+				const int32 InnerDistSq = QX * QX + (QY - 82) * (QY - 82);
+				const bool bInBand = OuterDistSq <= 40 * 40 && InnerDistSq >= 80 * 80;
+				Alpha = bInBand ? 255 : 0;
+				bUseSecondary = bInBand && OuterDistSq >= 36 * 36;
 			}
 			else // PatternKind == 3: Semi-pixelated radial scorch crater & ember cracks
 			{
@@ -714,6 +753,9 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 	RegisterProceduralTileFallback(FName(TEXT("Wall_Chain_N")),        FlatNorm,           FColor(148, 148, 240), true, false, 2);
 	RegisterProceduralTileFallback(FName(TEXT("ScorchCrater_D")),      FColor(18, 16, 18),  FColor(125, 42, 16),   false, true, 3);
 	RegisterProceduralTileFallback(FName(TEXT("ScorchCrater_N")),      FlatNorm,           FColor(128, 152, 240), true, false, 3);
+	RegisterProceduralTileFallback(FName(TEXT("FxSpark_D")),           FColor(255, 255, 255), FColor(255, 255, 255), false, true, 5);
+	RegisterProceduralTileFallback(FName(TEXT("FxRing_D")),            FColor(255, 255, 255), FColor(255, 255, 255), false, true, 6);
+	RegisterProceduralTileFallback(FName(TEXT("SlashArc_D")),          FColor(255, 128, 30), FColor(255, 238, 170), false, true, 4);
 
 	// Extract all 16 directional walk-cycle cells (4 rows x 4 alternating stride frames) per character/zombie rig cleanly in 1 PNG decode per file
 	struct FRigExtractDef
@@ -723,9 +765,16 @@ int32 UDungeoneerAssetBootstrapSubsystem::ExtractDefaultSingleCellTiles()
 		const TCHAR* NormalFile;
 		const TCHAR* KeyPrefix;
 	};
-	const FRigExtractDef RigDefs[5] =
+	// Hero move sheets (combo, heavy, evade, skills, hurt/idle) live in their own folders so each keeps its
+	// own AtlasMetadata.json. A missing sheet just produces no cells; the hero then falls back to walk frames.
+	const FRigExtractDef RigDefs[] =
 	{
 		{ TEXT("DungeoneerHero"),      TEXT("Rig_DungeoneerHero_Raw_D.png"),      TEXT("Rig_DungeoneerHero_Raw_N.png"),      TEXT("Hero") },
+		{ TEXT("DungeoneerHeroMoves/Combo"),    TEXT("Rig_DungeoneerHero_Combo_D.png"),    TEXT("Rig_DungeoneerHero_Combo_N.png"),    TEXT("HeroCombo") },
+		{ TEXT("DungeoneerHeroMoves/Heavy"),    TEXT("Rig_DungeoneerHero_Heavy_D.png"),    TEXT("Rig_DungeoneerHero_Heavy_N.png"),    TEXT("HeroHeavy") },
+		{ TEXT("DungeoneerHeroMoves/Evade"),    TEXT("Rig_DungeoneerHero_Evade_D.png"),    TEXT("Rig_DungeoneerHero_Evade_N.png"),    TEXT("HeroEvade") },
+		{ TEXT("DungeoneerHeroMoves/Skills"),   TEXT("Rig_DungeoneerHero_Skills_D.png"),   TEXT("Rig_DungeoneerHero_Skills_N.png"),   TEXT("HeroSkills") },
+		{ TEXT("DungeoneerHeroMoves/HurtIdle"), TEXT("Rig_DungeoneerHero_HurtIdle_D.png"), TEXT("Rig_DungeoneerHero_HurtIdle_N.png"), TEXT("HeroHurtIdle") },
 		{ TEXT("ZombieExploder"),      TEXT("Rig_ZombieExploder_Raw_D.png"),      TEXT("Rig_ZombieExploder_Raw_N.png"),      TEXT("Exploder") },
 		{ TEXT("ZombieFastThrower"),   TEXT("Rig_ZombieFastThrower_Raw_D.png"),   TEXT("Rig_ZombieFastThrower_Raw_N.png"),   TEXT("Thrower") },
 		{ TEXT("ZombieMirrorStalker"), TEXT("Rig_ZombieMirrorStalker_Raw_D.png"), TEXT("Rig_ZombieMirrorStalker_Raw_N.png"), TEXT("MirrorStalker") },
@@ -961,8 +1010,14 @@ UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateDungeonOrRig
 				MaskTex = DiffuseTex;
 			}
 
-			if (UMaterialInterface* MaskedSimpleMat = LoadObject<UMaterialInterface>(
-				nullptr, TEXT("/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided.M_Shader_SimpleMaskedTwoSided")))
+			// Our sprite material first (hit flash, glow, fade); the engine's masked material is the fallback.
+			UMaterialInterface* MaskedSimpleMat = EnsureSpriteMaterial();
+			if (!MaskedSimpleMat)
+			{
+				MaskedSimpleMat = LoadObject<UMaterialInterface>(
+					nullptr, TEXT("/Engine/Engine_MI_Shaders/M_Shader_SimpleMaskedTwoSided.M_Shader_SimpleMaskedTwoSided"));
+			}
+			if (MaskedSimpleMat)
 			{
 				if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MaskedSimpleMat, EffectiveOuter))
 				{
@@ -1169,6 +1224,46 @@ UMaterialInterface* UDungeoneerAssetBootstrapSubsystem::EnsureEcoInstancedMateri
 		EcoInstancedMaterial = FDungeoneerEcoMaterialFactory::EnsureEcoInstancedMaterial(EnsureSensoryMPC());
 	}
 	return EcoInstancedMaterial.Get();
+}
+
+UMaterialInterface* UDungeoneerAssetBootstrapSubsystem::EnsureSpriteMaterial()
+{
+	if (!SpriteMaterial)
+	{
+		// The sprite material samples the flat normal the eco material creates, so build that first.
+		EnsureEcoInstancedMaterial();
+		SpriteMaterial = FDungeoneerSpriteMaterialFactory::EnsureSpriteMaterial();
+	}
+	return SpriteMaterial.Get();
+}
+
+UMaterialInterface* UDungeoneerAssetBootstrapSubsystem::EnsureFxAdditiveMaterial()
+{
+	if (!FxAdditiveMaterial)
+	{
+		FxAdditiveMaterial = FDungeoneerSpriteMaterialFactory::EnsureFxAdditiveMaterial();
+	}
+	return FxAdditiveMaterial.Get();
+}
+
+UMaterialInstanceDynamic* UDungeoneerAssetBootstrapSubsystem::CreateFxMaterial(UObject* Outer, const FName MaskKey, const FLinearColor& Color, const float Intensity)
+{
+	UMaterialInterface* FxMat = EnsureFxAdditiveMaterial();
+	if (!FxMat)
+	{
+		return nullptr;
+	}
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(FxMat, Outer ? Outer : this);
+	if (MID)
+	{
+		if (UTexture2D* MaskTex = ResolveAnyTextureByKey(MaskKey))
+		{
+			MID->SetTextureParameterValue(FName(TEXT("Mask")), MaskTex);
+		}
+		MID->SetVectorParameterValue(FName(TEXT("Color")), Color);
+		MID->SetScalarParameterValue(FName(TEXT("Intensity")), Intensity);
+	}
+	return MID;
 }
 
 int32 UDungeoneerAssetBootstrapSubsystem::ImportAllEcosystemTexturesFromDisk()

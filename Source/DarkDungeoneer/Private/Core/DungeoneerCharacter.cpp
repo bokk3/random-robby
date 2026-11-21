@@ -18,9 +18,13 @@
 #include "Ecosystem/DungeonEcosystemTypes.h"
 #include "Ecosystem/DungeonFloraManagerComponent.h"
 #include "Ecosystem/DungeonWaterSubsystem.h"
+#include "AI/ZombieBase.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "UI/MenuDioramaStageActor.h"
+#include "Rendering/DungeoneerFxPoolSubsystem.h"
+#include "Rendering/DungeoneerSpriteMaterialFactory.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "Components/PointLightComponent.h"
@@ -121,6 +125,29 @@ ADungeoneerCharacter::ADungeoneerCharacter(const FObjectInitializer& ObjectIniti
 	InventoryComponent = CreateDefaultSubobject<UDungeoneerInventoryComponent>(TEXT("InventoryComponent"));
 	TradeManagerComponent = CreateDefaultSubobject<UTradeManagerComponent>(TEXT("TradeManagerComponent"));
 	MirrorBounceComponent = CreateDefaultSubobject<UMirrorLightBounceComponent>(TEXT("MirrorBounceComponent"));
+	SkillComponent = CreateDefaultSubobject<UDungeoneerSkillComponent>(TEXT("SkillComponent"));
+
+	// Effect quads live in world space so they can stay behind when the hero moves.
+	auto MakeWorldSpaceQuad = [this](const TCHAR* Name) -> UStaticMeshComponent*
+	{
+		UStaticMeshComponent* Quad = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		Quad->SetupAttachment(RootComponent);
+		Quad->SetUsingAbsoluteLocation(true);
+		Quad->SetUsingAbsoluteRotation(true);
+		Quad->SetUsingAbsoluteScale(true);
+		Quad->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Quad->SetCastShadow(false);
+		Quad->SetVisibility(false);
+		return Quad;
+	};
+	SkillBeamMesh = MakeWorldSpaceQuad(TEXT("SkillBeamMesh"));
+	AfterimageMesh = MakeWorldSpaceQuad(TEXT("AfterimageMesh"));
+	DecoyMesh = MakeWorldSpaceQuad(TEXT("DecoyMesh"));
+
+	for (bool& bDown : PrevButtonDown)
+	{
+		bDown = false;
+	}
 
 	DirectionalHeroMIDs.Reserve(16);
 }
@@ -136,6 +163,27 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 				SlashArcMesh->SetStaticMesh(PlaneMesh);
 			}
 		}
+		// The crescent texture comes from the asset bootstrap; bare test worlds without a GameInstance get a flat tint.
+		const UGameInstance* SlashGI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+		UDungeoneerAssetBootstrapSubsystem* SlashBootstrap = SlashGI ? SlashGI->GetSubsystem<UDungeoneerAssetBootstrapSubsystem>() : nullptr;
+		if (!bSlashArcTextured && SlashBootstrap)
+		{
+			// Additive and unlit, so the swing glows in the dark instead of reading as a dark smear.
+			if (UMaterialInstanceDynamic* ArcMID = SlashBootstrap->CreateFxMaterial(
+				this, FName(TEXT("SlashArc_D")), FLinearColor(1.0f, 0.78f, 0.36f), 2.6f))
+			{
+				SlashArcMesh->SetMaterial(0, ArcMID);
+				bSlashArcTextured = true;
+				// The skill beam (hook chain, flask arc) is an additive streak too.
+				if (SkillBeamMesh)
+				{
+					if (UMaterialInstanceDynamic* BeamFx = SlashBootstrap->CreateFxMaterial(this, FName(TEXT("FxSpark_D")), FLinearColor::White, 2.2f))
+					{
+						SkillBeamMesh->SetMaterial(0, BeamFx);
+					}
+				}
+			}
+		}
 		if (!SlashArcMesh->GetMaterial(0))
 		{
 			if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
@@ -149,6 +197,26 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 			}
 		}
 		SlashArcMesh->SetVisibility(CombatActionState == EDungeoneerCombatActionState::LanternSlash);
+	}
+
+	UStaticMesh* QuadMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
+	for (UStaticMeshComponent* Quad : { SkillBeamMesh.Get(), AfterimageMesh.Get(), DecoyMesh.Get() })
+	{
+		if (Quad && !Quad->GetStaticMesh() && QuadMesh)
+		{
+			Quad->SetStaticMesh(QuadMesh);
+		}
+	}
+	if (SkillBeamMesh && !SkillBeamMesh->GetMaterial(0))
+	{
+		if (UMaterialInterface* BaseShapeMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+		{
+			if (UMaterialInstanceDynamic* BeamMID = UMaterialInstanceDynamic::Create(BaseShapeMat, this))
+			{
+				BeamMID->SetScalarParameterValue(FName(TEXT("Roughness")), 0.2f);
+				SkillBeamMesh->SetMaterial(0, BeamMID);
+			}
+		}
 	}
 
 	if (!HeroVisualMesh)
@@ -180,22 +248,26 @@ void ADungeoneerCharacter::EnsureDefaultVisualsInitialized()
 					BaseVisualRelativeRotation = Bootstrap->GetCameraFacingSpritePlaneRotation();
 					HeroVisualMesh->SetRelativeRotation(BaseVisualRelativeRotation);
 
+					// One material per cell: 16 for the walk sheet, then 16 per move sheet (nullptr where a sheet is missing).
+					static const TCHAR* const SheetPrefixes[static_cast<int32>(EHeroPoseSheet::Count)] =
+						{ TEXT("Hero"), TEXT("HeroCombo"), TEXT("HeroHeavy"), TEXT("HeroEvade"), TEXT("HeroSkills"), TEXT("HeroHurtIdle") };
 					DirectionalHeroMIDs.Reset();
-					for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
+					DirectionalHeroMIDs.SetNum(16 * static_cast<int32>(EHeroPoseSheet::Count));
+					for (int32 SheetIdx = 0; SheetIdx < static_cast<int32>(EHeroPoseSheet::Count); ++SheetIdx)
 					{
-						for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+						for (int32 RowIdx = 0; RowIdx < 4; ++RowIdx)
 						{
-							const FName DiffKey(*FString::Printf(TEXT("Hero_R%d_C%d_D"), RowIdx, ColIdx));
-							const FName NormKey(*FString::Printf(TEXT("Hero_R%d_C%d_N"), RowIdx, ColIdx));
-							UMaterialInstanceDynamic* CellMID = Bootstrap->CreateDungeonOrRigMaterial(
-								this,
-								DiffKey,
-								NormKey,
-								FLinearColor::White,
-								0.45f,
-								false,
-								true);
-							DirectionalHeroMIDs.Add(CellMID);
+							for (int32 ColIdx = 0; ColIdx < 4; ++ColIdx)
+							{
+								const FName DiffKey(*FString::Printf(TEXT("%s_R%d_C%d_D"), SheetPrefixes[SheetIdx], RowIdx, ColIdx));
+								const FName NormKey(*FString::Printf(TEXT("%s_R%d_C%d_N"), SheetPrefixes[SheetIdx], RowIdx, ColIdx));
+								if (SheetIdx > 0 && !Bootstrap->GetExtractedCellTexture(DiffKey))
+								{
+									continue; // Move sheet not on disk: leave the slot empty so the walk frame is used.
+								}
+								DirectionalHeroMIDs[SheetIdx * 16 + RowIdx * 4 + ColIdx] = Bootstrap->CreateDungeonOrRigMaterial(
+									this, DiffKey, NormKey, FLinearColor::White, 0.45f, false, true);
+							}
 						}
 					}
 
@@ -273,8 +345,18 @@ void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOcta
 	}
 
 	const int32 DesiredRow = static_cast<int32>(DungeoneerMath::OctantToScreenDirectionalRowForCameraYaw(FacingOctant, -45.0f));
-	const int32 DesiredCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
-	const int32 DesiredCell = DesiredRow * 4 + DesiredCol;
+	const int32 WalkCol = FMath::Clamp((FrameColumn >= 0) ? FrameColumn : ActiveWalkFrameColumn, 0, 3);
+
+	// A move sheet frame if this action has one and the sheet is loaded, otherwise the walk frame.
+	int32 DesiredCell = DesiredRow * 4 + WalkCol;
+	if (ActivePoseSheet != EHeroPoseSheet::Walk)
+	{
+		const int32 PoseCell = static_cast<int32>(ActivePoseSheet) * 16 + DesiredRow * 4 + FMath::Clamp(ActivePoseColumn, 0, 3);
+		if (DirectionalHeroMIDs.IsValidIndex(PoseCell) && DirectionalHeroMIDs[PoseCell])
+		{
+			DesiredCell = PoseCell;
+		}
+	}
 
 	if (DesiredCell == ActiveDirectionalCellIndex)
 	{
@@ -285,7 +367,10 @@ void ADungeoneerCharacter::UpdateHeroDirectionalVisual(ECompassOctant FacingOcta
 	{
 		HeroVisualMesh->SetMaterial(0, DirectionalHeroMIDs[DesiredCell].Get());
 		ActiveDirectionalRow = DesiredRow;
-		ActiveWalkFrameColumn = DesiredCol;
+		if (DesiredCell < 16)
+		{
+			ActiveWalkFrameColumn = WalkCol;
+		}
 		ActiveDirectionalCellIndex = DesiredCell;
 	}
 }
@@ -491,32 +576,46 @@ void ADungeoneerCharacter::HandleInteractInput(const FInputActionValue& Value)
 
 bool ADungeoneerCharacter::TriggerPrimaryAttack()
 {
-	if (DownedRespawnRemaining > 0.0f ||
-		HitStaggerRemaining > 0.0f ||
-		AttackCooldownRemaining > 0.0f ||
-		CombatActionState == EDungeoneerCombatActionState::LanternSlash)
+	if (DownedRespawnRemaining > 0.0f || HitStaggerRemaining > 0.0f)
 	{
 		return false;
 	}
 
-	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
-	ActiveAttackOctant = ((IsLocallyControlled() || !GetController()) && MoveComp)
-		? MoveComp->GetAimOctant()
-		: ReplicatedAimOctant;
+	// Attacking out of a roll turns into a piercing lunge.
+	if (CombatActionState == EDungeoneerCombatActionState::DodgeDash || DashStrikeWindowRemaining > 0.0f)
+	{
+		return TriggerDashStrike();
+	}
 
-	if (ComboResetRemaining > 0.0f)
+	// Pressed mid-swing or during recovery: remember it and chain as soon as the swing allows.
+	const bool bBusyButBufferable = CombatActionState == EDungeoneerCombatActionState::LanternSlash
+		|| CombatActionState == EDungeoneerCombatActionState::Parry
+		|| CombatActionState == EDungeoneerCombatActionState::SkillCast
+		|| (CombatActionState == EDungeoneerCombatActionState::None && AttackCooldownRemaining > 0.0f);
+	if (bBusyButBufferable)
 	{
-		ComboStepIndex = (ComboStepIndex + 1) % 3;
+		AttackBufferRemaining = 0.30f;
+		return true;
 	}
-	else
+	if (CombatActionState != EDungeoneerCombatActionState::None)
 	{
-		ComboStepIndex = 0;
+		return false;
 	}
+	AttackBufferRemaining = 0.0f;
+
+	ActiveAttackOctant = GetEffectiveAimOctant();
+
+	ComboStepIndex = (ComboResetRemaining > 0.0f) ? (ComboStepIndex + 1) % ComboLength : 0;
 	ComboResetRemaining = 0.65f;
 
+	const bool bFinisher = (ComboStepIndex == ComboLength - 1);
 	CombatActionState = EDungeoneerCombatActionState::LanternSlash;
+	{
+		static const FName SwingCues[3] = { FName(TEXT("Combat_Swing_0")), FName(TEXT("Combat_Swing_1")), FName(TEXT("Combat_Swing_2")) };
+		UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), SwingCues[ComboStepIndex % 3], GetActorLocation(), bFinisher ? 1.0f : 0.75f, bFinisher ? 0.02f : 0.08f);
+	}
 	AttackSwingElapsed = 0.0f;
-	AttackCooldownRemaining = (ComboStepIndex == 2) ? PrimaryAttackCooldown : (PrimaryAttackCooldown * 0.78f);
+	AttackCooldownRemaining = bFinisher ? (PrimaryAttackCooldown * 1.25f) : (PrimaryAttackCooldown * 0.78f);
 	bAttackDamageApplied = false;
 	LastAttackHitsCount = 0;
 
@@ -545,6 +644,12 @@ bool ADungeoneerCharacter::TriggerChargedFlare()
 	FlashlightBattery = FMath::Max(0.0f, FlashlightBattery - 25.0f);
 	FlareFlashRemaining = 0.40f;
 	CombatActionState = EDungeoneerCombatActionState::ChargedFlare;
+	AddCameraTrauma(0.3f);
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		Fx->SpawnGroundRing(GetActorLocation() - FVector(0.0, 0.0, 85.0), FLinearColor(1.0f, 0.9f, 0.55f), 60.0f, 420.0f, 0.45f);
+		Fx->SpawnBurst(GetActorLocation() + FVector(0.0, 0.0, 60.0), FLinearColor(1.0f, 0.95f, 0.75f), 12, 420.0f, 0.3f);
+	}
 
 	if (UWorld* World = GetWorld())
 	{
@@ -554,7 +659,7 @@ bool ADungeoneerCharacter::TriggerChargedFlare()
 
 		if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 		{
-			SpatialSys->ApplyMeleeArcDamage(Origin, ForwardXY, 420.0f, -1.0f, 45.0f * SolarMult, this, 480.0f);
+			SpatialSys->ApplyMeleeArcDamage(Origin, ForwardXY, 420.0f, -1.0f, 45.0f * SolarMult, this, 480.0f, 1.2f);
 		}
 
 		if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
@@ -656,6 +761,13 @@ bool ADungeoneerCharacter::TriggerDodgeDash()
 	CombatActionState = EDungeoneerCombatActionState::DodgeDash;
 	DodgeActiveRemaining = 0.22f;
 	DodgeCooldownRemaining = DodgeCooldown;
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		Fx->SpawnDust(GetActorLocation() - FVector(0.0, 0.0, 85.0));
+	}
+	bPerfectDodgeUsedThisDash = false;
+	AttackBufferRemaining = 0.0f;
+	bAttackHeld = false;
 
 	if (HasAuthority())
 	{
@@ -687,7 +799,7 @@ bool ADungeoneerCharacter::TriggerInteract()
 	return true;
 }
 
-void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBattery) noexcept
+void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBattery, uint8 BestiaryMask) noexcept
 {
 	if (!HasAuthority())
 	{
@@ -699,7 +811,7 @@ void ADungeoneerCharacter::RegisterEnemySlain(int32 BonusGold, float BonusBatter
 	{
 		if (ADungeoneerGameState* GS = World->GetGameState<ADungeoneerGameState>())
 		{
-			GS->AuthorityRecordKillInLedger(0x03);
+			GS->AuthorityRecordKillInLedger(BestiaryMask);
 		}
 	}
 	if (InventoryComponent && BonusGold > 0)
@@ -728,51 +840,32 @@ void ADungeoneerCharacter::ExecutePrimaryAttackAuthority()
 	const FVector ForwardXY = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
 	const FVector Origin = GetActorLocation();
 
-	static constexpr float ComboDamageMult[3] = { 1.0f, 1.15f, 1.45f };
-	static constexpr float ComboKnockback[3]  = { 360.0f, 410.0f, 540.0f };
-	const int32 Step = FMath::Clamp(ComboStepIndex, 0, 2);
+	// Lamplighter's Round: three quick cuts and a heavy finisher that stuns.
+	static constexpr float ComboDamageMult[ComboLength] = { 1.0f, 1.1f, 1.25f, 1.8f };
+	static constexpr float ComboKnockback[ComboLength]  = { 300.0f, 340.0f, 380.0f, 620.0f };
+	static constexpr float ComboStun[ComboLength]       = { 0.0f, 0.0f, 0.0f, 0.5f };
+	const int32 Step = FMath::Clamp(ComboStepIndex, 0, ComboLength - 1);
+	const bool bFinisher = (Step == ComboLength - 1);
 
-	float EffectiveDamage = PrimaryAttackDamage * ComboDamageMult[Step];
-	if (InventoryComponent)
-	{
-		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SolarFlashlightCore))
-		{
-			EffectiveDamage *= 1.20f;
-		}
-		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SunGlassLens))
-		{
-			if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
-			{
-				if (const ADungeoneerTileMapInstancer* Instancer = GM->GetActiveTileMapInstancer())
-				{
-					if (const UDungeonFloraManagerComponent* Flora = Instancer->GetFloraManagerComponent())
-					{
-						if (Flora->IsPointInBloomRadius(Origin, 280.0f))
-						{
-							EffectiveDamage *= 1.35f;
-						}
-					}
-				}
-			}
-		}
-	}
+	const float EffectiveDamage = ComputeMeleeDamage(PrimaryAttackDamage * ComboDamageMult[Step], Origin);
 
 	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
 	{
-		// Wide 130-degree frontal cleave cone (cos(65 deg) ~= 0.4226)
+		// 130-degree frontal cone (cos 65 deg ~= 0.42).
 		LastAttackHitsCount = SpatialSys->ApplyMeleeArcDamage(
 			Origin,
 			ForwardXY,
-			PrimaryAttackRangeUU + (Step == 2 ? 32.0f : 0.0f),
+			PrimaryAttackRangeUU + (bFinisher ? 40.0f : 0.0f),
 			0.42f,
 			EffectiveDamage,
 			this,
-			ComboKnockback[Step]);
+			ComboKnockback[Step],
+			ComboStun[Step]);
 	}
 
 	if (LastAttackHitsCount > 0)
 	{
-		TriggerCombatCameraImpulse(ForwardXY, Step == 2 ? 22.0f : 12.0f, 0.035f);
+		TriggerCombatCameraImpulse(ForwardXY, bFinisher ? 24.0f : 12.0f, bFinisher ? 0.06f : 0.035f);
 		if (InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::VampireWick))
 		{
 			CurrentHealth = FMath::Clamp(CurrentHealth + 6.0f * static_cast<float>(LastAttackHitsCount), 0.0f, MaxHealth);
@@ -1076,7 +1169,7 @@ bool ADungeoneerCharacter::TriggerAllyTradeWithNearest()
 	const bool bCommitted = TradeManagerComponent->AuthorityExecuteTwoPhaseCommit(Tx);
 	if (bCommitted)
 	{
-		PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 94.0), TEXT("P2P SUPPLY SWAP [2PC]"), EDungeoneerFloatingTextKind::Gold);
+		PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 94.0), TEXT("SUPPLIES SHARED"), EDungeoneerFloatingTextKind::Gold);
 		Partner->PushFloatingCombatPopup(Partner->GetActorLocation() + FVector(0.0, 0.0, 94.0), TEXT("RECEIVED CO-OP SUPPLY"), EDungeoneerFloatingTextKind::Gold);
 	}
 	else
@@ -1131,12 +1224,691 @@ void ADungeoneerCharacter::Server_ExecuteDodgeDash_Implementation()
 	DodgeActiveRemaining = 0.22f;
 	DodgeCooldownRemaining = DodgeCooldown;
 	CombatActionState = EDungeoneerCombatActionState::DodgeDash;
+	bPerfectDodgeUsedThisDash = false;
 	ExecuteDodgeDashAuthority();
 }
 
 void ADungeoneerCharacter::Server_ExecuteInteract_Implementation()
 {
 	ExecuteInteractAuthority();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Hack-and-slash moves: heavy smash, dash strike, parry, perfect dodge, empowered strikes.
+// ---------------------------------------------------------------------------------------------
+
+namespace HeroMoveTuning
+{
+	constexpr float HeavyMinChargeSec = 0.35f;
+	constexpr float HeavyFullChargeSec = 1.0f;
+	constexpr float HeavyAutoReleaseSec = 1.4f;
+	constexpr float HeavySmashPoseSec = 0.34f;
+	constexpr float DashStrikePoseSec = 0.20f;
+	constexpr float DashStrikeLungeSec = 0.15f;
+	constexpr float DashStrikeSpeedUU = 1050.0f;
+	constexpr float DashStrikeWindowSec = 0.18f;
+	constexpr float ParryActiveSec = 0.22f;
+	constexpr float ParryTotalSec = 0.42f;
+	constexpr float ParryCooldownSec = 0.65f;
+	constexpr float PerfectDodgeSlowRadius = 650.0f;
+}
+
+ECompassOctant ADungeoneerCharacter::GetEffectiveAimOctant() const noexcept
+{
+	const UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement();
+	return ((IsLocallyControlled() || !GetController()) && MoveComp) ? MoveComp->GetAimOctant() : ReplicatedAimOctant;
+}
+
+FVector ADungeoneerCharacter::GetAimForwardXY() const noexcept
+{
+	const FVector Fwd = UDungeoneerMovementComponent::GetUnitDirectionForOctant(GetEffectiveAimOctant()).GetSafeNormal2D();
+	return Fwd.IsNearlyZero() ? FVector(1.0, 0.0, 0.0) : Fwd;
+}
+
+void ADungeoneerCharacter::FaceTowards(const FVector& WorldLocation) noexcept
+{
+	const FVector Dir = (WorldLocation - GetActorLocation()).GetSafeNormal2D();
+	if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement(); MoveComp && !Dir.IsNearlyZero())
+	{
+		MoveComp->SetAimInputVector(FVector2D(Dir.X, Dir.Y));
+		ReplicatedAimOctant = MoveComp->GetAimOctant();
+	}
+}
+
+bool ADungeoneerCharacter::CanStartAction() const noexcept
+{
+	return DownedRespawnRemaining <= 0.0f
+		&& HitStaggerRemaining <= 0.0f
+		&& (CombatActionState == EDungeoneerCombatActionState::None || CombatActionState == EDungeoneerCombatActionState::LanternSlash);
+}
+
+bool ADungeoneerCharacter::SpendLanternOil(const float Amount) noexcept
+{
+	if (Amount <= 0.0f)
+	{
+		return true;
+	}
+	if (FlashlightBattery < Amount)
+	{
+		return false;
+	}
+	FlashlightBattery -= Amount;
+	return true;
+}
+
+void ADungeoneerCharacter::GrantEmpoweredStrike(const float Multiplier, const float WindowSec, const TCHAR* Label) noexcept
+{
+	EmpoweredMultiplier = IsEmpowered() ? FMath::Max(EmpoweredMultiplier, Multiplier) : Multiplier;
+	EmpoweredRemaining = FMath::Max(EmpoweredRemaining, WindowSec);
+	if (Label)
+	{
+		PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 104.0), Label, EDungeoneerFloatingTextKind::Status);
+	}
+}
+
+void ADungeoneerCharacter::GrantInvulnerability(const float Seconds) noexcept
+{
+	InvulnRemaining = FMath::Max(InvulnRemaining, Seconds);
+}
+
+void ADungeoneerCharacter::BeginSkillPose(const EDungeoneerCombatActionState PoseState, const float DurationSec) noexcept
+{
+	CombatActionState = PoseState;
+	SkillPoseDuration = FMath::Max(DurationSec, 0.01f);
+	SkillPoseRemaining = SkillPoseDuration;
+	AttackBufferRemaining = 0.0f;
+}
+
+float ADungeoneerCharacter::GetHeavyChargeAlpha() const noexcept
+{
+	if (CombatActionState != EDungeoneerCombatActionState::HeavyCharge)
+	{
+		return 0.0f;
+	}
+	return FMath::Clamp(HeavyChargeElapsed / HeroMoveTuning::HeavyFullChargeSec, 0.0f, 1.0f);
+}
+
+float ADungeoneerCharacter::ComputeMeleeDamage(const float BaseDamage, const FVector& Origin)
+{
+	float Damage = BaseDamage;
+	if (InventoryComponent)
+	{
+		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SolarFlashlightCore))
+		{
+			Damage *= 1.20f;
+		}
+		if (InventoryComponent->HasRelic(EDungeoneerRelicId::SunGlassLens))
+		{
+			const UWorld* World = GetWorld();
+			const ADungeoneerGameMode* GM = World ? World->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
+			const ADungeoneerTileMapInstancer* Instancer = GM ? GM->GetActiveTileMapInstancer() : nullptr;
+			const UDungeonFloraManagerComponent* Flora = Instancer ? Instancer->GetFloraManagerComponent() : nullptr;
+			if (Flora && Flora->IsPointInBloomRadius(Origin, 280.0f))
+			{
+				Damage *= 1.35f;
+			}
+		}
+	}
+	if (IsEmpowered())
+	{
+		Damage *= EmpoweredMultiplier;
+		EmpoweredRemaining = 0.0f;
+		EmpoweredMultiplier = 1.0f;
+	}
+	return Damage;
+}
+
+bool ADungeoneerCharacter::TriggerSkillSlot(const int32 SlotIndex)
+{
+	return SkillComponent && SkillComponent->TryActivateSlot(SlotIndex);
+}
+
+bool ADungeoneerCharacter::BeginHeavyCharge()
+{
+	if (!CanStartAction() || CombatActionState != EDungeoneerCombatActionState::None || AttackCooldownRemaining > 0.0f)
+	{
+		return false;
+	}
+	CombatActionState = EDungeoneerCombatActionState::HeavyCharge;
+	HeavyChargeElapsed = 0.0f;
+	ActiveAttackOctant = GetEffectiveAimOctant();
+	return true;
+}
+
+bool ADungeoneerCharacter::ReleaseHeavyCharge()
+{
+	bAttackHeld = false;
+	if (CombatActionState != EDungeoneerCombatActionState::HeavyCharge)
+	{
+		return false;
+	}
+	if (HeavyChargeElapsed < HeroMoveTuning::HeavyMinChargeSec)
+	{
+		CombatActionState = EDungeoneerCombatActionState::None;
+		return false;
+	}
+	const float Alpha = FMath::Clamp(
+		(HeavyChargeElapsed - HeroMoveTuning::HeavyMinChargeSec) / (HeroMoveTuning::HeavyFullChargeSec - HeroMoveTuning::HeavyMinChargeSec),
+		0.0f, 1.0f);
+	StartHeavySmash(Alpha);
+	return true;
+}
+
+void ADungeoneerCharacter::StartHeavySmash(const float ChargeAlpha)
+{
+	ActiveAttackOctant = GetEffectiveAimOctant();
+	CombatActionState = EDungeoneerCombatActionState::HeavySmash;
+	HeavySmashElapsed = 0.0f;
+	HeavySmashAlpha = ChargeAlpha;
+	AttackCooldownRemaining = 0.55f;
+	ComboResetRemaining = 0.0f;
+	ComboStepIndex = 0;
+
+	if (HasAuthority())
+	{
+		ExecuteHeavySmashAuthority(ChargeAlpha);
+	}
+	else
+	{
+		Server_ExecuteHeavySmash(ChargeAlpha);
+	}
+}
+
+void ADungeoneerCharacter::ExecuteHeavySmashAuthority(const float ChargeAlpha)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const float Alpha = FMath::Clamp(ChargeAlpha, 0.0f, 1.0f);
+	const FVector Fwd = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
+	const FVector Origin = GetActorLocation();
+	const float Damage = ComputeMeleeDamage(PrimaryAttackDamage * FMath::Lerp(1.8f, 2.6f, Alpha), Origin);
+
+	LastAttackHitsCount = 0;
+	if (UZombieSpatialSubsystem* SpatialSys = World->GetSubsystem<UZombieSpatialSubsystem>())
+	{
+		LastAttackHitsCount = SpatialSys->ApplyMeleeArcDamage(
+			Origin + Fwd * 40.0, Fwd, 210.0f + 60.0f * Alpha, 0.2f, Damage, this, 700.0f, 0.8f + 0.6f * Alpha);
+	}
+	if (const ADungeoneerGameMode* GM = World->GetAuthGameMode<ADungeoneerGameMode>())
+	{
+		if (ADungeoneerTileMapInstancer* Instancer = GM->GetActiveTileMapInstancer())
+		{
+			Instancer->EvaluateEntityStepOnBreakables(Origin + Fwd * 110.0, 2.0f, 200.0f);
+		}
+	}
+	if (UDungeoneerSensoryWorldSubsystem* SensorySub = World->GetSubsystem<UDungeoneerSensoryWorldSubsystem>())
+	{
+		SensorySub->BroadcastNoiseEvent(Origin, 1.6f, 1000.0f, false);
+	}
+	if (LastAttackHitsCount > 0 && InventoryComponent && InventoryComponent->HasRelic(EDungeoneerRelicId::VampireWick))
+	{
+		CurrentHealth = FMath::Clamp(CurrentHealth + 6.0f * static_cast<float>(LastAttackHitsCount), 0.0f, MaxHealth);
+	}
+	TriggerCombatCameraImpulse(Fwd, 26.0f, LastAttackHitsCount > 0 ? 0.07f : 0.02f);
+	AddCameraTrauma(0.3f + 0.25f * Alpha);
+	UDungeonAcousticSubsystem::PlayCombatCueAt(World, FName(TEXT("Combat_Heavy_0")), Origin + Fwd * 110.0, 1.0f, 0.04f);
+	if (UDungeoneerFxPoolSubsystem* Fx = World->GetSubsystem<UDungeoneerFxPoolSubsystem>())
+	{
+		const FVector Impact = Origin + Fwd * 110.0 - FVector(0.0, 0.0, 85.0);
+		Fx->SpawnGroundRing(Impact, FLinearColor(1.0f, 0.72f, 0.28f), 40.0f, 210.0f + 60.0f * Alpha, 0.35f);
+		Fx->SpawnDust(Impact + FVector(0.0, 0.0, 85.0));
+	}
+	OnCombatAttackPerformed.Broadcast(ActiveAttackOctant, LastAttackHitsCount);
+}
+
+void ADungeoneerCharacter::Server_ExecuteHeavySmash_Implementation(const float ChargeAlpha)
+{
+	ActiveAttackOctant = ReplicatedAimOctant;
+	CombatActionState = EDungeoneerCombatActionState::HeavySmash;
+	HeavySmashElapsed = 0.0f;
+	HeavySmashAlpha = FMath::Clamp(ChargeAlpha, 0.0f, 1.0f);
+	ExecuteHeavySmashAuthority(HeavySmashAlpha);
+}
+
+bool ADungeoneerCharacter::TriggerDashStrike()
+{
+	if (DownedRespawnRemaining > 0.0f)
+	{
+		return false;
+	}
+	ActiveAttackOctant = GetEffectiveAimOctant();
+	DashDirectionXY = GetAimForwardXY();
+	DodgeActiveRemaining = 0.0f;
+	DashStrikeWindowRemaining = 0.0f;
+	CombatActionState = EDungeoneerCombatActionState::DashStrike;
+	DashStrikeElapsed = 0.0f;
+	AttackCooldownRemaining = 0.35f;
+	AttackBufferRemaining = 0.0f;
+	ShowAfterimage(GetActorLocation(), 0.25f);
+
+	if (HasAuthority())
+	{
+		ExecuteDashStrikeAuthority();
+	}
+	else
+	{
+		Server_ExecuteDashStrike(FVector_NetQuantizeNormal(DashDirectionXY));
+	}
+	return true;
+}
+
+void ADungeoneerCharacter::ExecuteDashStrikeAuthority()
+{
+	UWorld* World = GetWorld();
+	UZombieSpatialSubsystem* SpatialSys = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	if (!SpatialSys)
+	{
+		return;
+	}
+	const FVector Origin = GetActorLocation();
+	const float Damage = ComputeMeleeDamage(PrimaryAttackDamage * 1.5f, Origin);
+	// Narrow, long cone: everything along the lunge path gets pierced.
+	LastAttackHitsCount = SpatialSys->ApplyMeleeArcDamage(Origin, DashDirectionXY, 320.0f, 0.86f, Damage, this, 420.0f, 0.25f);
+	if (LastAttackHitsCount > 0)
+	{
+		TriggerCombatCameraImpulse(DashDirectionXY, 16.0f, 0.04f);
+	}
+	OnCombatAttackPerformed.Broadcast(ActiveAttackOctant, LastAttackHitsCount);
+}
+
+void ADungeoneerCharacter::Server_ExecuteDashStrike_Implementation(FVector_NetQuantizeNormal Direction)
+{
+	const FVector Dir = FVector(Direction).GetSafeNormal2D();
+	DashDirectionXY = Dir.IsNearlyZero() ? GetAimForwardXY() : Dir;
+	ActiveAttackOctant = ReplicatedAimOctant;
+	DodgeActiveRemaining = 0.0f;
+	CombatActionState = EDungeoneerCombatActionState::DashStrike;
+	DashStrikeElapsed = 0.0f;
+	ExecuteDashStrikeAuthority();
+}
+
+bool ADungeoneerCharacter::TriggerParry()
+{
+	if (!CanStartAction() || ParryCooldownRemaining > 0.0f)
+	{
+		return false;
+	}
+	ActiveAttackOctant = GetEffectiveAimOctant();
+	CombatActionState = EDungeoneerCombatActionState::Parry;
+	ParryActiveRemaining = HeroMoveTuning::ParryActiveSec;
+	ParryRecoveryRemaining = HeroMoveTuning::ParryTotalSec;
+	ParryCooldownRemaining = HeroMoveTuning::ParryCooldownSec;
+	if (!HasAuthority())
+	{
+		Server_TriggerParry();
+	}
+	return true;
+}
+
+void ADungeoneerCharacter::Server_TriggerParry_Implementation()
+{
+	if (ParryCooldownRemaining > 0.0f && ParryActiveRemaining <= 0.0f)
+	{
+		return;
+	}
+	ActiveAttackOctant = ReplicatedAimOctant;
+	CombatActionState = EDungeoneerCombatActionState::Parry;
+	ParryActiveRemaining = HeroMoveTuning::ParryActiveSec;
+	ParryRecoveryRemaining = HeroMoveTuning::ParryTotalSec;
+	ParryCooldownRemaining = HeroMoveTuning::ParryCooldownSec;
+}
+
+bool ADungeoneerCharacter::TryDeflectThrownFlask(AActor* Thrower)
+{
+	if (ParryActiveRemaining <= 0.0f || IsDowned())
+	{
+		return false;
+	}
+	++ParryCount;
+	ParryCooldownRemaining = 0.0f;
+	GrantEmpoweredStrike(2.0f, 1.5f, TEXT("DEFLECTED!"));
+	if (Thrower)
+	{
+		const FVector Dir = (Thrower->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		ShowSkillBeam(GetActorLocation(), Thrower->GetActorLocation(), 0.18f, FLinearColor(1.0f, 0.85f, 0.4f));
+		TriggerCombatCameraImpulse(Dir, 14.0f, 0.05f);
+	}
+	return true;
+}
+
+void ADungeoneerCharacter::HandleSuccessfulParry(AZombieBase* Attacker)
+{
+	++ParryCount;
+	ParryCooldownRemaining = 0.0f;
+	const FVector Dir = (Attacker->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+	Attacker->TriggerHitFeedback(Dir, 520.0f);
+	Attacker->ApplyStun(1.4f);
+	Attacker->ApplyZombieDamage(15.0f, this);
+	GrantEmpoweredStrike(2.0f, 1.5f, TEXT("PARRY!"));
+	TriggerCombatCameraImpulse(Dir, 18.0f, 0.08f);
+	AddCameraTrauma(0.25f);
+	Attacker->ApplyHitStop(0.12f);
+	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_Parry_0")), GetActorLocation(), 1.0f, 0.03f);
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		Fx->SpawnBurst(GetActorLocation() + Dir * 60.0 + FVector(0.0, 0.0, 50.0), FLinearColor(1.0f, 0.95f, 0.7f), 10, 380.0f, 0.3f);
+	}
+}
+
+void ADungeoneerCharacter::HandlePerfectDodge()
+{
+	bPerfectDodgeUsedThisDash = true;
+	++PerfectDodgeCount;
+	DodgeCooldownRemaining = 0.0f;
+	GrantEmpoweredStrike(2.0f, 1.5f, TEXT("PERFECT DODGE"));
+	ShowAfterimage(GetActorLocation(), 0.4f);
+	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_PerfectDodge_0")), GetActorLocation(), 0.9f, 0.0f);
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		Fx->SpawnGroundRing(GetActorLocation() - FVector(0.0, 0.0, 85.0), FLinearColor(0.4f, 0.75f, 1.0f), 60.0f, HeroMoveTuning::PerfectDodgeSlowRadius, 0.5f);
+	}
+	DungeoneerCombat::ForEachZombieInRadius(GetWorld(), GetActorLocation(), HeroMoveTuning::PerfectDodgeSlowRadius, [](AZombieBase& Zombie, double)
+	{
+		Zombie.ApplyTimeSlow(0.3f, 1.0f);
+	});
+}
+
+UMaterialInterface* ADungeoneerCharacter::GetCurrentHeroMaterial() const noexcept
+{
+	return HeroVisualMesh ? HeroVisualMesh->GetMaterial(0) : nullptr;
+}
+
+void ADungeoneerCharacter::ShowSkillBeam(const FVector& Start, const FVector& End, const float DurationSec, const FLinearColor& Color) noexcept
+{
+	if (!SkillBeamMesh)
+	{
+		return;
+	}
+	const FVector Delta = End - Start;
+	const double Length = FMath::Max(Delta.Size2D(), 1.0);
+	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Delta.Y), static_cast<float>(Delta.X)));
+	SkillBeamMesh->SetWorldLocationAndRotation((Start + End) * 0.5 + FVector(0.0, 0.0, 30.0), FRotator(0.0f, Yaw, 0.0f));
+	SkillBeamMesh->SetWorldScale3D(FVector(Length / 100.0, 0.14, 1.0));
+	if (UMaterialInstanceDynamic* BeamMID = Cast<UMaterialInstanceDynamic>(SkillBeamMesh->GetMaterial(0)))
+	{
+		BeamMID->SetVectorParameterValue(FName(TEXT("Color")), Color);
+	}
+	SkillBeamMesh->SetVisibility(true);
+	BeamRemaining = DurationSec;
+}
+
+void ADungeoneerCharacter::ShowAfterimage(const FVector& Location, const float DurationSec) noexcept
+{
+	if (!AfterimageMesh || !HeroVisualMesh)
+	{
+		return;
+	}
+	AfterimageMesh->SetMaterial(0, GetCurrentHeroMaterial());
+	AfterimageMesh->SetWorldLocationAndRotation(
+		Location + (HeroVisualMesh->GetComponentLocation() - GetActorLocation()),
+		HeroVisualMesh->GetComponentRotation());
+	AfterimageBaseScale = HeroVisualMesh->GetComponentScale();
+	AfterimageMesh->SetWorldScale3D(AfterimageBaseScale);
+	AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.45f);
+	AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 0.45f);
+	AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.7f);
+	AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 1.0f);
+	AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FadeOut, 0.25f);
+	AfterimageMesh->SetVisibility(true);
+	AfterimageDuration = FMath::Max(DurationSec, 0.01f);
+	AfterimageRemaining = AfterimageDuration;
+}
+
+void ADungeoneerCharacter::ShowDecoy(const FVector& Location, const bool bVisible) noexcept
+{
+	if (!DecoyMesh || !HeroVisualMesh)
+	{
+		return;
+	}
+	if (bVisible)
+	{
+		DecoyMesh->SetMaterial(0, GetCurrentHeroMaterial());
+		DecoyMesh->SetWorldLocationAndRotation(
+			Location + (HeroVisualMesh->GetComponentLocation() - GetActorLocation()),
+			HeroVisualMesh->GetComponentRotation());
+		DecoyMesh->SetWorldScale3D(HeroVisualMesh->GetComponentScale());
+		// A reflection, not a person: silvery and a little see-through.
+		DecoyMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.35f);
+		DecoyMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 0.6f);
+		DecoyMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.8f);
+		DecoyMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 1.0f);
+		DecoyMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FadeOut, 0.3f);
+	}
+	DecoyMesh->SetVisibility(bVisible);
+}
+
+void ADungeoneerCharacter::UpdateEffectQuads(const float DeltaSeconds) noexcept
+{
+	CameraTrauma = FMath::Max(0.0f, CameraTrauma - DeltaSeconds * 1.8f);
+	if (HurtFlashRemaining > 0.0f)
+	{
+		HurtFlashRemaining = FMath::Max(0.0f, HurtFlashRemaining - DeltaSeconds);
+		if (HeroVisualMesh)
+		{
+			// 60% so the hero stays readable under repeated hits; the screen-edge wash carries the rest.
+			HeroVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.6f * GetHurtFlashAlpha());
+		}
+	}
+	if (BeamRemaining > 0.0f)
+	{
+		BeamRemaining = FMath::Max(0.0f, BeamRemaining - DeltaSeconds);
+		if (BeamRemaining <= 0.0f && SkillBeamMesh)
+		{
+			SkillBeamMesh->SetVisibility(false);
+		}
+	}
+	if (AfterimageRemaining > 0.0f && AfterimageMesh)
+	{
+		AfterimageRemaining = FMath::Max(0.0f, AfterimageRemaining - DeltaSeconds);
+		const float Alpha = AfterimageRemaining / AfterimageDuration;
+		AfterimageMesh->SetWorldScale3D(AfterimageBaseScale * (0.55f + 0.45f * Alpha));
+		AfterimageMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FadeOut, 1.0f - 0.75f * Alpha);
+		if (AfterimageRemaining <= 0.0f)
+		{
+			AfterimageMesh->SetVisibility(false);
+		}
+	}
+}
+
+/**
+ * Poses for the moves added on top of the original slash/flare/dodge set.
+ * Returns true if it handled the current state (the caller then skips the older pose code).
+ */
+bool ADungeoneerCharacter::UpdateNewMovePoses(const float DeltaSeconds) noexcept
+{
+	const float EffectiveDt = (HitStopRemaining > 0.0f) ? (DeltaSeconds * 0.12f) : DeltaSeconds;
+	const FVector Fwd = UDungeoneerMovementComponent::GetUnitDirectionForOctant(ActiveAttackOctant).GetSafeNormal2D();
+	const float AttackYaw = DungeoneerMath::GCompassYawDegrees[static_cast<uint8>(ActiveAttackOctant) & 7];
+
+	switch (CombatActionState)
+	{
+	case EDungeoneerCombatActionState::HeavyCharge:
+	{
+		HeavyChargeElapsed += DeltaSeconds;
+		const float Alpha = GetHeavyChargeAlpha();
+		const bool bReady = HeavyChargeElapsed >= HeroMoveTuning::HeavyMinChargeSec;
+		ActiveWalkFrameColumn = 0;
+		if (HeroVisualMesh)
+		{
+			// Crouch and coil: shorter and wider, with a shiver once fully charged.
+			const float Shiver = (Alpha >= 1.0f) ? FMath::Sin(HeavyChargeElapsed * 70.0f) * 2.5f : 0.0f;
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(-Fwd.X * 10.0 * Alpha + Shiver, -Fwd.Y * 10.0 * Alpha, 0.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.0 - 0.12 * Alpha, 1.0 + 0.10 * Alpha, 1.0));
+		}
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(120.0f + (bReady ? 520.0f : 180.0f) * Alpha);
+		}
+		if (SlashArcMesh)
+		{
+			SlashArcMesh->SetVisibility(false);
+		}
+		if (HeavyChargeElapsed >= HeroMoveTuning::HeavyAutoReleaseSec)
+		{
+			ReleaseHeavyCharge();
+		}
+		return true;
+	}
+
+	case EDungeoneerCombatActionState::HeavySmash:
+	{
+		HeavySmashElapsed += EffectiveDt;
+		const float T = FMath::Clamp(HeavySmashElapsed / HeroMoveTuning::HeavySmashPoseSec, 0.0f, 1.0f);
+		ActiveWalkFrameColumn = (T < 0.3f) ? 1 : 3;
+		if (HeroVisualMesh)
+		{
+			// Rise (stretch tall) then slam (squash wide) and lunge into it.
+			const double Tall = (T < 0.3f) ? 1.0 + 0.16 * (T / 0.3f) : 1.0 - 0.2 * FMath::Sin((T - 0.3f) / 0.7f * PI);
+			const double Wide = (T < 0.3f) ? 1.0 - 0.06 * (T / 0.3f) : 1.0 + 0.18 * FMath::Sin((T - 0.3f) / 0.7f * PI);
+			const double Lunge = FMath::Sin(T * PI) * 34.0;
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(Fwd.X * Lunge, Fwd.Y * Lunge, (T < 0.3f) ? 12.0 * T / 0.3f : 0.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(Tall, Wide, 1.0));
+		}
+		if (SlashArcMesh)
+		{
+			const float Burst = (T < 0.3f) ? 0.0f : FMath::Sin((T - 0.3f) / 0.7f * PI);
+			const float Size = (1.4f + 0.8f * HeavySmashAlpha) * Burst + 0.1f;
+			const FVector ArcPos = Fwd * 120.0;
+			SlashArcMesh->SetRelativeLocation(FVector(ArcPos.X, ArcPos.Y, 6.0));
+			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, AttackYaw + 90.0f, 0.0f));
+			SlashArcMesh->SetRelativeScale3D(FVector(1.8 * Size, 1.3 * Size, 1.0));
+			SlashArcMesh->SetVisibility(T >= 0.3f);
+		}
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(120.0f + 700.0f * (1.0f - T));
+		}
+		if (HeavySmashElapsed >= HeroMoveTuning::HeavySmashPoseSec)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return true;
+	}
+
+	case EDungeoneerCombatActionState::DashStrike:
+	{
+		DashStrikeElapsed += EffectiveDt;
+		const float T = FMath::Clamp(DashStrikeElapsed / HeroMoveTuning::DashStrikePoseSec, 0.0f, 1.0f);
+		ActiveWalkFrameColumn = 1;
+		if (DashStrikeElapsed < HeroMoveTuning::DashStrikeLungeSec)
+		{
+			if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+			{
+				MoveComp->Velocity = FVector(
+					DashDirectionXY.X * static_cast<double>(HeroMoveTuning::DashStrikeSpeedUU),
+					DashDirectionXY.Y * static_cast<double>(HeroMoveTuning::DashStrikeSpeedUU),
+					MoveComp->Velocity.Z);
+			}
+		}
+		if (HeroVisualMesh)
+		{
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(DashDirectionXY.X * 18.0, DashDirectionXY.Y * 18.0, 4.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(0.92, 1.14, 1.0));
+		}
+		if (SlashArcMesh)
+		{
+			const float DashYaw = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(DashDirectionXY.Y), static_cast<float>(DashDirectionXY.X)));
+			const FVector ArcPos = DashDirectionXY * 120.0;
+			SlashArcMesh->SetRelativeLocation(FVector(ArcPos.X, ArcPos.Y, 14.0));
+			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, DashYaw, 0.0f));
+			SlashArcMesh->SetRelativeScale3D(FVector(2.6 * (1.0 - 0.5 * T), 0.3, 1.0));
+			SlashArcMesh->SetVisibility(true);
+		}
+		if (DashStrikeElapsed >= HeroMoveTuning::DashStrikePoseSec)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return true;
+	}
+
+	case EDungeoneerCombatActionState::Parry:
+	{
+		const bool bActive = ParryActiveRemaining > 0.0f;
+		ActiveWalkFrameColumn = 0;
+		if (HeroVisualMesh)
+		{
+			// Brace: lean back from the aim direction and narrow.
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(-Fwd.X * 8.0, -Fwd.Y * 8.0, 0.0));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.04, 0.94, 1.0));
+		}
+		if (SlashArcMesh)
+		{
+			const FVector ArcPos = Fwd * 70.0;
+			SlashArcMesh->SetRelativeLocation(FVector(ArcPos.X, ArcPos.Y, 14.0));
+			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, AttackYaw + 90.0f, 0.0f));
+			SlashArcMesh->SetRelativeScale3D(FVector(1.2, 0.35, 1.0));
+			SlashArcMesh->SetVisibility(bActive);
+		}
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(bActive ? 640.0f : 120.0f);
+		}
+		if (ParryRecoveryRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return true;
+	}
+
+	case EDungeoneerCombatActionState::SkillCast:
+	{
+		SkillPoseRemaining = FMath::Max(0.0f, SkillPoseRemaining - DeltaSeconds);
+		const float T = 1.0f - SkillPoseRemaining / SkillPoseDuration;
+		ActiveWalkFrameColumn = 1;
+		if (HeroVisualMesh)
+		{
+			const double Pop = FMath::Sin(T * PI);
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(Fwd.X * 14.0 * Pop, Fwd.Y * 14.0 * Pop, 6.0 * Pop));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(1.0 + 0.08 * Pop, 1.0 - 0.04 * Pop, 1.0));
+		}
+		if (SlashArcMesh)
+		{
+			SlashArcMesh->SetVisibility(false);
+		}
+		if (SkillPoseRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return true;
+	}
+
+	case EDungeoneerCombatActionState::Whirl:
+	{
+		SkillPoseRemaining = FMath::Max(0.0f, SkillPoseRemaining - DeltaSeconds);
+		const float Elapsed = SkillPoseDuration - SkillPoseRemaining;
+		ActiveWalkFrameColumn = 2;
+		if (HeroVisualMesh)
+		{
+			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + FVector(0.0, 0.0, 4.0 + 3.0 * FMath::Sin(Elapsed * 30.0f)));
+			HeroVisualMesh->SetRelativeScale3D(BaseVisualRelativeScale * FVector(0.97, 1.05, 1.0));
+		}
+		if (SlashArcMesh)
+		{
+			// The lantern orbits the hero on its chain.
+			const float OrbitYaw = Elapsed * 1080.0f;
+			const float OrbitRad = FMath::DegreesToRadians(OrbitYaw);
+			SlashArcMesh->SetRelativeLocation(FVector(FMath::Cos(OrbitRad) * 110.0, FMath::Sin(OrbitRad) * 110.0, 14.0));
+			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, OrbitYaw + 90.0f, 0.0f));
+			SlashArcMesh->SetRelativeScale3D(FVector(1.6, 0.6, 1.0));
+			SlashArcMesh->SetVisibility(true);
+		}
+		if (HeroLanternFillLight)
+		{
+			HeroLanternFillLight->SetIntensity(420.0f);
+		}
+		if (SkillPoseRemaining <= 0.0f)
+		{
+			CombatActionState = EDungeoneerCombatActionState::None;
+		}
+		return true;
+	}
+
+	default:
+		return false;
+	}
 }
 
 void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noexcept
@@ -1147,6 +1919,43 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 	ComboResetRemaining = FMath::Max(0.0f, ComboResetRemaining - DeltaSeconds);
 	FlareFlashRemaining = FMath::Max(0.0f, FlareFlashRemaining - DeltaSeconds);
 	HitStopRemaining = FMath::Max(0.0f, HitStopRemaining - DeltaSeconds);
+	AttackBufferRemaining = FMath::Max(0.0f, AttackBufferRemaining - DeltaSeconds);
+	DashStrikeWindowRemaining = FMath::Max(0.0f, DashStrikeWindowRemaining - DeltaSeconds);
+	ParryActiveRemaining = FMath::Max(0.0f, ParryActiveRemaining - DeltaSeconds);
+	ParryRecoveryRemaining = FMath::Max(0.0f, ParryRecoveryRemaining - DeltaSeconds);
+	ParryCooldownRemaining = FMath::Max(0.0f, ParryCooldownRemaining - DeltaSeconds);
+	EmpoweredRemaining = FMath::Max(0.0f, EmpoweredRemaining - DeltaSeconds);
+	InvulnRemaining = FMath::Max(0.0f, InvulnRemaining - DeltaSeconds);
+	UpdateEffectQuads(DeltaSeconds);
+
+	// Chain a buffered press, or start charging a heavy smash if attack is still held.
+	if (CombatActionState == EDungeoneerCombatActionState::None && DownedRespawnRemaining <= 0.0f && AttackCooldownRemaining <= 0.0f)
+	{
+		if (AttackBufferRemaining > 0.0f)
+		{
+			AttackBufferRemaining = 0.0f;
+			TriggerPrimaryAttack();
+		}
+		else if (bAttackHeld)
+		{
+			BeginHeavyCharge();
+		}
+	}
+
+	if (UDungeoneerMovementComponent* MoveComp = GetDungeoneerMovement())
+	{
+		float SpeedScalar = 1.0f;
+		switch (CombatActionState)
+		{
+		case EDungeoneerCombatActionState::HeavyCharge: SpeedScalar = 0.45f; break;
+		case EDungeoneerCombatActionState::HeavySmash:  SpeedScalar = 0.2f; break;
+		case EDungeoneerCombatActionState::Parry:       SpeedScalar = 0.3f; break;
+		case EDungeoneerCombatActionState::SkillCast:   SpeedScalar = 0.6f; break;
+		case EDungeoneerCombatActionState::Whirl:       SpeedScalar = 0.8f; break;
+		default: break;
+		}
+		MoveComp->SetActionSpeedScalar(SpeedScalar);
+	}
 
 	// Advance pre-allocated floating combat popups with zero allocations
 	for (int32 p = 0; p < MaxFloatingPopups; ++p)
@@ -1200,7 +2009,15 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 				FlashlightBattery = FMath::Max(FlashlightBattery, 50.0f);
 				CombatActionState = EDungeoneerCombatActionState::None;
 				bWasDownedWithAliveAllies = false;
-				if (GM)
+				// Get back up beside the partner so both stay on the shared screen; the entry room is only
+				// a fallback when nobody else is standing.
+				const ADungeoneerCharacter* Partner = SpatialSys ? SpatialSys->FindNearestLivingAlly(this, 1.0e6f) : nullptr;
+				if (Partner)
+				{
+					const FVector Beside = Partner->GetActorLocation() + FVector(92.0, 92.0, 0.0); // screen-right of the partner
+					SetActorLocation(Beside, true, nullptr, ETeleportType::TeleportPhysics);
+				}
+				else if (GM)
 				{
 					SetActorLocation(GM->GetEntrySpawnLocation() + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
 				}
@@ -1221,9 +2038,14 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 		return;
 	}
 
+	if (UpdateNewMovePoses(DeltaSeconds))
+	{
+		return;
+	}
+
 	if (CombatActionState == EDungeoneerCombatActionState::LanternSlash)
 	{
-		constexpr float SlashDuration = 0.22f;
+		const float SlashDuration = (ComboStepIndex == ComboLength - 1) ? 0.28f : 0.22f;
 		const float EffectiveDt = (HitStopRemaining > 0.0f) ? (DeltaSeconds * 0.12f) : DeltaSeconds;
 		AttackSwingElapsed += EffectiveDt;
 		const float Alpha = FMath::Clamp(AttackSwingElapsed / SlashDuration, 0.0f, 1.0f);
@@ -1234,7 +2056,7 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 		if (HeroVisualMesh)
 		{
-			const float LungeAmp = (ComboStepIndex == 2) ? 38.0f : 24.0f;
+			const float LungeAmp = (ComboStepIndex == ComboLength - 1) ? 42.0f : 24.0f;
 			const float LungeDist = FMath::Sin(Alpha * PI) * LungeAmp;
 			const FVector Offset(ForwardXY.X * LungeDist, ForwardXY.Y * LungeDist, FMath::Sin(Alpha * PI) * 10.0f);
 			HeroVisualMesh->SetRelativeLocation(BaseVisualRelativeLocation + Offset);
@@ -1243,13 +2065,15 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 
 		if (SlashArcMesh)
 		{
-			const float StartOffset = (ComboStepIndex == 1) ? 55.0f : -55.0f;
-			const float EndOffset = (ComboStepIndex == 1) ? -55.0f : 55.0f;
+			// Alternate swing direction each hit; the finisher sweeps wider.
+			const float Sweep = (ComboStepIndex == ComboLength - 1) ? 75.0f : 55.0f;
+			const float StartOffset = (ComboStepIndex % 2 == 1) ? Sweep : -Sweep;
+			const float EndOffset = -StartOffset;
 			const float SweepYaw = AttackYaw + FMath::Lerp(StartOffset, EndOffset, Alpha);
-			const FVector ArcOffset = ForwardXY * ((ComboStepIndex == 2 ? 104.0f : 84.0f) + 16.0f * Alpha);
+			const FVector ArcOffset = ForwardXY * ((ComboStepIndex == ComboLength - 1 ? 108.0f : 84.0f) + 16.0f * Alpha);
 			SlashArcMesh->SetRelativeLocation(FVector(ArcOffset.X, ArcOffset.Y, 14.0));
 			SlashArcMesh->SetRelativeRotation(FRotator(0.0f, SweepYaw, 0.0f));
-			const float ArcScale = FMath::Sin(Alpha * PI) * (ComboStepIndex == 2 ? 1.55f : 1.35f) + 0.35f;
+			const float ArcScale = FMath::Sin(Alpha * PI) * (ComboStepIndex == ComboLength - 1 ? 1.7f : 1.35f) + 0.35f;
 			SlashArcMesh->SetRelativeScale3D(FVector(1.45 * ArcScale, 0.92 * ArcScale, 1.0));
 			SlashArcMesh->SetVisibility(true);
 		}
@@ -1306,6 +2130,7 @@ void ADungeoneerCharacter::UpdateCombatAndProceduralPose(float DeltaSeconds) noe
 		if (DodgeActiveRemaining <= 0.0f)
 		{
 			CombatActionState = EDungeoneerCombatActionState::None;
+			DashStrikeWindowRemaining = HeroMoveTuning::DashStrikeWindowSec;
 		}
 		return;
 	}
@@ -1420,6 +2245,45 @@ void ADungeoneerCharacter::RefreshNearbyInteractCandidate() noexcept
 	}
 }
 
+namespace
+{
+	/** Polled buttons, used as indices into PrevButtonDown. */
+	enum EHeroButton : int32
+	{
+		Btn_Attack,
+		Btn_Dodge,
+		Btn_Interact,
+		Btn_Parry,
+		Btn_Skill1,
+		Btn_Skill2,
+		Btn_Oil,
+		Btn_Antidote,
+		Btn_Trade,
+		Btn_CoopJoin,
+		Btn_Count
+	};
+	static_assert(Btn_Count <= 12, "PrevButtonDown is sized for 12 buttons");
+
+	bool AnyKeyDown(const APlayerController& PC, std::initializer_list<FKey> Keys)
+	{
+		for (const FKey& Key : Keys)
+		{
+			if (PC.IsInputKeyDown(Key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Gamepad stick in screen space: X = up, Y = right. Zero inside the dead zone. */
+	FVector2D ReadStick(const APlayerController& PC, const FKey& AxisX, const FKey& AxisY, float DeadZone)
+	{
+		const FVector2D Stick(PC.GetInputAnalogKeyState(AxisY), PC.GetInputAnalogKeyState(AxisX));
+		return (Stick.SizeSquared() >= static_cast<double>(DeadZone * DeadZone)) ? Stick : FVector2D::ZeroVector;
+	}
+}
+
 void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds) noexcept
 {
 	APlayerController* PC = GetController<APlayerController>();
@@ -1432,49 +2296,71 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 	if (DownedRespawnRemaining > 0.0f)
 	{
 		MoveComp->SetMoveInputVector(FVector2D::ZeroVector);
+		bAttackHeld = false;
 		return;
 	}
 
 	TimeSinceMouseMoved = FMath::Min(TimeSinceMouseMoved + DeltaSeconds, 10.0f);
 
 	const ULocalPlayer* OwningLP = PC->GetLocalPlayer();
-	const int32 ControllerId = OwningLP ? OwningLP->GetControllerId() : 0;
+	const bool bIsPlayerOne = !OwningLP || OwningLP->GetControllerId() == 0;
 	const UGameInstance* GI = GetGameInstance();
 	const bool bLocalSplitActive = GI && GI->GetNumLocalPlayers() > 1;
+
+	// UE delivers keyboard and mouse events to the first local player's controller only, so player 2's
+	// keyboard keys are read from there. Gamepad buttons and sticks still come from each player's own controller.
+	const APlayerController* KeyPC = PC;
+	if (!bIsPlayerOne && GI && GI->GetNumLocalPlayers() > 0)
+	{
+		if (const ULocalPlayer* FirstLP = GI->GetLocalPlayers()[0])
+		{
+			if (const APlayerController* FirstPC = FirstLP->GetPlayerController(GetWorld()))
+			{
+				KeyPC = FirstPC;
+			}
+		}
+	}
 	ADungeoneerGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ADungeoneerGameMode>() : nullptr;
 	const bool bMainMenuOpen = GM && GM->GetActiveDioramaStage() && !GM->GetActiveDioramaStage()->IsHidden();
 
-	double MoveX = 0.0;
-	double MoveY = 0.0;
-	if (ControllerId == 0)
+	// --- Movement: WASD for P1, arrows for P2 (or for P1 when solo), plus the left stick ---
+	FVector2D RawMove = FVector2D::ZeroVector; // X = screen up, Y = screen right
+	const bool bArrowsAreMine = !bIsPlayerOne || !bLocalSplitActive;
+	if (bIsPlayerOne)
 	{
-		if (PC->IsInputKeyDown(EKeys::W) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Up)))    { MoveX += 1.0; }
-		if (PC->IsInputKeyDown(EKeys::S) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Down)))  { MoveX -= 1.0; }
-		if (PC->IsInputKeyDown(EKeys::D) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Right))) { MoveY += 1.0; }
-		if (PC->IsInputKeyDown(EKeys::A) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::Left)))  { MoveY -= 1.0; }
+		RawMove.X += PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0;
+		RawMove.X -= PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0;
+		RawMove.Y += PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0;
+		RawMove.Y -= PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0;
 	}
-	else
+	if (bArrowsAreMine)
 	{
-		if (PC->IsInputKeyDown(EKeys::Up))    { MoveX += 1.0; }
-		if (PC->IsInputKeyDown(EKeys::Down))  { MoveX -= 1.0; }
-		if (PC->IsInputKeyDown(EKeys::Right)) { MoveY += 1.0; }
-		if (PC->IsInputKeyDown(EKeys::Left))  { MoveY -= 1.0; }
+		RawMove.X += KeyPC->IsInputKeyDown(EKeys::Up) ? 1.0 : 0.0;
+		RawMove.X -= KeyPC->IsInputKeyDown(EKeys::Down) ? 1.0 : 0.0;
+		RawMove.Y += KeyPC->IsInputKeyDown(EKeys::Right) ? 1.0 : 0.0;
+		RawMove.Y -= KeyPC->IsInputKeyDown(EKeys::Left) ? 1.0 : 0.0;
 	}
+	RawMove += ReadStick(*PC, EKeys::Gamepad_LeftX, EKeys::Gamepad_LeftY, 0.25f);
 
-	const FVector2D MoveVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(FVector2D(MoveX, MoveY), -45.0f);
+	const FVector2D MoveVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RawMove, -45.0f);
 	MoveComp->SetMoveInputVector(MoveVec);
 	if (MoveComp->HasActiveMoveInput())
 	{
-		const FVector MoveDir = UDungeoneerMovementComponent::GetUnitDirectionForOctant(MoveComp->GetMoveOctant());
-		AddMovementInput(MoveDir, 1.0f);
+		AddMovementInput(UDungeoneerMovementComponent::GetUnitDirectionForOctant(MoveComp->GetMoveOctant()), 1.0f);
+	}
+
+	// --- Aim: right stick wins, then a recently moved mouse (P1), then movement direction ---
+	bool bExplicitAim = false;
+	const FVector2D RightStick = ReadStick(*PC, EKeys::Gamepad_RightX, EKeys::Gamepad_RightY, 0.35f);
+	if (!RightStick.IsZero())
+	{
+		MoveComp->SetAimInputVector(DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RightStick, -45.0f));
+		bExplicitAim = true;
 	}
 
 	float MouseX = 0.0f;
 	float MouseY = 0.0f;
-	int32 ViewW = 0;
-	int32 ViewH = 0;
-	bool bMouseActivelyAiming = false;
-	if (ControllerId == 0 && PC->GetMousePosition(MouseX, MouseY))
+	if (!bExplicitAim && bIsPlayerOne && PC->GetMousePosition(MouseX, MouseY))
 	{
 		const FVector2D CurrentMouse(static_cast<double>(MouseX), static_cast<double>(MouseY));
 		if (!bHasMouseSample)
@@ -1488,94 +2374,200 @@ void ADungeoneerCharacter::PollDirectKeyboardAndMouseFallback(float DeltaSeconds
 			TimeSinceMouseMoved = 0.0f;
 		}
 
-		if (TimeSinceMouseMoved <= 0.45f)
+		// The shared camera doesn't keep the hero at screen centre, so aim at the point under the cursor
+		// on the hero's ground plane.
+		FVector RayOrigin = FVector::ZeroVector;
+		FVector RayDir = FVector::ZeroVector;
+		if (TimeSinceMouseMoved <= 0.45f && PC->DeprojectMousePositionToWorld(RayOrigin, RayDir) && RayDir.Z < -0.01)
 		{
-			PC->GetViewportSize(ViewW, ViewH);
-			if (ViewW > 0 && ViewH > 0)
+			const FVector HeroLoc = GetActorLocation();
+			const double T = (HeroLoc.Z - RayOrigin.Z) / RayDir.Z;
+			const FVector Hit = RayOrigin + RayDir * T;
+			const FVector2D AimVec(Hit.X - HeroLoc.X, Hit.Y - HeroLoc.Y);
+			if (AimVec.SizeSquared() > 25.0 * 25.0)
 			{
-				const float CenterX = static_cast<float>(ViewW) * 0.5f;
-				const float CenterY = static_cast<float>(ViewH) * 0.5f;
-				const FVector2D RawAimVec(static_cast<double>(CenterY - MouseY), static_cast<double>(MouseX - CenterX));
-				const FVector2D AimVec = DungeoneerMath::RotateScreenInputToWorldForCameraYaw(RawAimVec, -45.0f);
 				MoveComp->SetAimInputVector(AimVec);
-				bMouseActivelyAiming = true;
+				bExplicitAim = true;
 			}
 		}
 	}
 
-	if (!bMouseActivelyAiming && MoveComp->HasActiveMoveInput())
+	if (!bExplicitAim && MoveComp->HasActiveMoveInput())
 	{
 		MoveComp->SetAimInputVector(MoveVec);
 	}
 
-	const bool bAttackKeyDown = !bMainMenuOpen && ((ControllerId == 0)
-		? (PC->IsInputKeyDown(EKeys::LeftMouseButton) || PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::J))
-		: (PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::Enter) || PC->IsInputKeyDown(EKeys::NumPadZero)));
-	if (bAttackKeyDown && !bPrevAttackKeyDown)
+	// --- Buttons ---------------------------------------------------------------------------
+	TStaticArray<bool, Btn_Count> Down;
+	for (bool& bDown : Down)
+	{
+		bDown = false;
+	}
+
+	if (!bMainMenuOpen)
+	{
+		if (bIsPlayerOne)
+		{
+			Down[Btn_Attack]   = AnyKeyDown(*PC, { EKeys::LeftMouseButton, EKeys::J, EKeys::SpaceBar });
+			Down[Btn_Dodge]    = AnyKeyDown(*PC, { EKeys::LeftShift, EKeys::K, EKeys::RightMouseButton })
+				|| (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::RightShift));
+			Down[Btn_Parry]    = AnyKeyDown(*PC, { EKeys::L, EKeys::V, EKeys::MiddleMouseButton });
+			Down[Btn_Skill1]   = AnyKeyDown(*PC, { EKeys::Q, EKeys::U });
+			Down[Btn_Skill2]   = AnyKeyDown(*PC, { EKeys::R, EKeys::I });
+			Down[Btn_Interact] = AnyKeyDown(*PC, { EKeys::F, EKeys::E });
+			Down[Btn_Oil]      = PC->IsInputKeyDown(EKeys::One);
+			Down[Btn_Antidote] = AnyKeyDown(*PC, { EKeys::C, EKeys::Two });
+			Down[Btn_Trade]    = PC->IsInputKeyDown(EKeys::T);
+			Down[Btn_CoopJoin] = AnyKeyDown(*PC, { EKeys::F2, EKeys::Gamepad_Special_Right });
+		}
+		else
+		{
+			Down[Btn_Attack]   = AnyKeyDown(*KeyPC, { EKeys::RightControl, EKeys::Enter, EKeys::NumPadZero });
+			Down[Btn_Dodge]    = AnyKeyDown(*KeyPC, { EKeys::RightShift, EKeys::NumPadOne });
+			Down[Btn_Parry]    = AnyKeyDown(*KeyPC, { EKeys::Semicolon, EKeys::NumPadSix });
+			Down[Btn_Skill1]   = AnyKeyDown(*KeyPC, { EKeys::LeftBracket, EKeys::NumPadFive });
+			Down[Btn_Skill2]   = AnyKeyDown(*KeyPC, { EKeys::RightBracket, EKeys::NumPadFour });
+			Down[Btn_Interact] = AnyKeyDown(*KeyPC, { EKeys::Backslash, EKeys::NumPadTwo });
+			Down[Btn_Oil]      = KeyPC->IsInputKeyDown(EKeys::NumPadSeven);
+			Down[Btn_Antidote] = KeyPC->IsInputKeyDown(EKeys::NumPadEight);
+			Down[Btn_Trade]    = AnyKeyDown(*KeyPC, { EKeys::P, EKeys::NumPadThree });
+		}
+
+		// Gamepad layout, same for both players.
+		Down[Btn_Attack]   = Down[Btn_Attack]   || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Left);
+		Down[Btn_Dodge]    = Down[Btn_Dodge]    || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
+		Down[Btn_Parry]    = Down[Btn_Parry]    || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Right);
+		Down[Btn_Interact] = Down[Btn_Interact] || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Top);
+		Down[Btn_Skill1]   = Down[Btn_Skill1]   || AnyKeyDown(*PC, { EKeys::Gamepad_LeftShoulder, EKeys::Gamepad_LeftTrigger });
+		Down[Btn_Skill2]   = Down[Btn_Skill2]   || AnyKeyDown(*PC, { EKeys::Gamepad_RightShoulder, EKeys::Gamepad_RightTrigger });
+		Down[Btn_Oil]      = Down[Btn_Oil]      || PC->IsInputKeyDown(EKeys::Gamepad_DPad_Up);
+		Down[Btn_Antidote] = Down[Btn_Antidote] || PC->IsInputKeyDown(EKeys::Gamepad_DPad_Down);
+		Down[Btn_Trade]    = Down[Btn_Trade]    || PC->IsInputKeyDown(EKeys::Gamepad_DPad_Right);
+	}
+
+	auto Pressed = [this, &Down](const EHeroButton Button) { return Down[Button] && !PrevButtonDown[Button]; };
+
+	if (Pressed(Btn_Attack))
 	{
 		TriggerPrimaryAttack();
 	}
-	bPrevAttackKeyDown = bAttackKeyDown;
-
-	const bool bDodgeKeyDown = !bMainMenuOpen && ((ControllerId == 0)
-		? (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::K) || PC->IsInputKeyDown(EKeys::RightMouseButton) || (!bLocalSplitActive && PC->IsInputKeyDown(EKeys::RightShift)))
-		: (PC->IsInputKeyDown(EKeys::RightShift) || PC->IsInputKeyDown(EKeys::NumPadOne)));
-	if (bDodgeKeyDown && !bPrevDodgeKeyDown)
+	bAttackHeld = Down[Btn_Attack];
+	if (!Down[Btn_Attack] && PrevButtonDown[Btn_Attack])
 	{
-		TriggerDodgeDash();
+		ReleaseHeavyCharge();
 	}
-	bPrevDodgeKeyDown = bDodgeKeyDown;
-
-	const bool bInteractKeyDown = !bMainMenuOpen && ((ControllerId == 0)
-		? (PC->IsInputKeyDown(EKeys::F) || PC->IsInputKeyDown(EKeys::E))
-		: (PC->IsInputKeyDown(EKeys::Backslash) || PC->IsInputKeyDown(EKeys::NumPadTwo)));
-	if (bInteractKeyDown && !bPrevInteractKeyDown)
+	if (Pressed(Btn_Dodge))    { TriggerDodgeDash(); }
+	if (Pressed(Btn_Parry))    { TriggerParry(); }
+	if (Pressed(Btn_Skill1))   { TriggerSkillSlot(0); }
+	if (Pressed(Btn_Skill2))   { TriggerSkillSlot(1); }
+	if (Pressed(Btn_Interact)) { TriggerInteract(); }
+	if (Pressed(Btn_Oil))      { TriggerQuickConsumable(EDungeoneerConsumableId::LanternOilPhial); }
+	if (Pressed(Btn_Antidote)) { TriggerQuickConsumable(EDungeoneerConsumableId::AntidoteDraught); }
+	if (Pressed(Btn_Trade))    { TriggerAllyTradeWithNearest(); }
+	if (Pressed(Btn_CoopJoin) && GM && bIsPlayerOne)
 	{
-		TriggerInteract();
+		GM->RequestLocalCoopJoin();
 	}
-	bPrevInteractKeyDown = bInteractKeyDown;
 
-	const bool bFlareKeyDown = !bMainMenuOpen && ((ControllerId == 0)
-		? PC->IsInputKeyDown(EKeys::R)
-		: (PC->IsInputKeyDown(EKeys::RightBracket) || PC->IsInputKeyDown(EKeys::NumPadFour)));
-	if (bFlareKeyDown && !bPrevFlareKeyDown)
+	for (int32 i = 0; i < Btn_Count; ++i)
 	{
-		TriggerChargedFlare();
+		PrevButtonDown[i] = Down[i];
 	}
-	bPrevFlareKeyDown = bFlareKeyDown;
+}
 
-	const bool bOilKeyDown = !bMainMenuOpen && (ControllerId == 0) && (PC->IsInputKeyDown(EKeys::Q) || PC->IsInputKeyDown(EKeys::One));
-	if (bOilKeyDown && !bPrevOilKeyDown)
-	{
-		TriggerQuickConsumable(EDungeoneerConsumableId::LanternOilPhial);
-	}
-	bPrevOilKeyDown = bOilKeyDown;
+bool ADungeoneerCharacter::HasPoseSheet(const EHeroPoseSheet Sheet) const noexcept
+{
+	const int32 First = static_cast<int32>(Sheet) * 16;
+	return DirectionalHeroMIDs.IsValidIndex(First) && DirectionalHeroMIDs[First] != nullptr;
+}
 
-	const bool bAntidoteKeyDown = !bMainMenuOpen && (ControllerId == 0) && (PC->IsInputKeyDown(EKeys::C) || PC->IsInputKeyDown(EKeys::Two));
-	if (bAntidoteKeyDown && !bPrevAntidoteKeyDown)
+void ADungeoneerCharacter::ResolvePoseFrame(const float DeltaSeconds, const bool bMoving) noexcept
+{
+	EHeroPoseSheet Sheet = EHeroPoseSheet::Walk;
+	int32 Col = 0;
+	switch (CombatActionState)
 	{
-		TriggerQuickConsumable(EDungeoneerConsumableId::AntidoteDraught);
-	}
-	bPrevAntidoteKeyDown = bAntidoteKeyDown;
-
-	const bool bTradeKeyDown = !bMainMenuOpen && ((ControllerId == 0)
-		? PC->IsInputKeyDown(EKeys::T)
-		: (PC->IsInputKeyDown(EKeys::P) || PC->IsInputKeyDown(EKeys::NumPadThree)));
-	if (bTradeKeyDown && !bPrevTradeKeyDown)
+	case EDungeoneerCombatActionState::LanternSlash:
 	{
-		TriggerAllyTradeWithNearest();
-	}
-	bPrevTradeKeyDown = bTradeKeyDown;
-
-	if (ControllerId == 0)
-	{
-		const bool bCoopDropInKeyDown = !bMainMenuOpen && PC->IsInputKeyDown(EKeys::F2);
-		if (bCoopDropInKeyDown && !bPrevCoopDropInKeyDown && GM)
+		const bool bFinisher = (ComboStepIndex == ComboLength - 1);
+		const float Alpha = FMath::Clamp(AttackSwingElapsed / (bFinisher ? 0.28f : 0.22f), 0.0f, 1.0f);
+		if (bFinisher)
 		{
-			GM->RequestSplitScreenCoopJoin();
+			// The fourth hit is an overhead slam, so it borrows the heavy sheet.
+			Sheet = EHeroPoseSheet::Heavy;
+			Col = (Alpha < 0.35f) ? 1 : ((Alpha < 0.75f) ? 2 : 3);
 		}
-		bPrevCoopDropInKeyDown = bCoopDropInKeyDown;
+		else
+		{
+			Sheet = EHeroPoseSheet::Combo;
+			Col = (Alpha < 0.2f) ? 0 : ((Alpha < 0.55f) ? 1 : ((Alpha < 0.8f) ? 2 : 3));
+		}
+		break;
 	}
+	case EDungeoneerCombatActionState::HeavyCharge:
+		Sheet = EHeroPoseSheet::Heavy;
+		Col = 0;
+		break;
+	case EDungeoneerCombatActionState::HeavySmash:
+	{
+		const float T = FMath::Clamp(HeavySmashElapsed / HeroMoveTuning::HeavySmashPoseSec, 0.0f, 1.0f);
+		Sheet = EHeroPoseSheet::Heavy;
+		Col = (T < 0.3f) ? 1 : ((T < 0.7f) ? 2 : 3);
+		break;
+	}
+	case EDungeoneerCombatActionState::DodgeDash:
+		Sheet = EHeroPoseSheet::Evade;
+		Col = 1;
+		break;
+	case EDungeoneerCombatActionState::DashStrike:
+		Sheet = EHeroPoseSheet::Evade;
+		Col = 2;
+		break;
+	case EDungeoneerCombatActionState::Parry:
+		Sheet = EHeroPoseSheet::Evade;
+		Col = 3;
+		break;
+	case EDungeoneerCombatActionState::SkillCast:
+		Sheet = SkillCastSheet;
+		Col = SkillCastColumn;
+		break;
+	case EDungeoneerCombatActionState::Whirl:
+		Sheet = EHeroPoseSheet::Skills;
+		Col = 2;
+		break;
+	case EDungeoneerCombatActionState::ChargedFlare:
+		Sheet = EHeroPoseSheet::Skills;
+		Col = 3;
+		break;
+	case EDungeoneerCombatActionState::HitStagger:
+		Sheet = EHeroPoseSheet::HurtIdle;
+		Col = 2;
+		break;
+	case EDungeoneerCombatActionState::Downed:
+		Sheet = EHeroPoseSheet::HurtIdle;
+		Col = 3;
+		break;
+	default:
+		if (!bMoving)
+		{
+			// Standing still: breathe between the two idle frames.
+			IdleBreathTime += DeltaSeconds;
+			Sheet = EHeroPoseSheet::HurtIdle;
+			Col = (FMath::FloorToInt(IdleBreathTime / 0.7f) & 1);
+		}
+		else
+		{
+			IdleBreathTime = 0.0f;
+		}
+		break;
+	}
+	if (DownedRespawnRemaining > 0.0f)
+	{
+		Sheet = EHeroPoseSheet::HurtIdle;
+		Col = 3;
+	}
+	ActivePoseSheet = Sheet;
+	ActivePoseColumn = Col;
 }
 
 void ADungeoneerCharacter::Tick(float DeltaSeconds)
@@ -1619,11 +2611,19 @@ void ADungeoneerCharacter::Tick(float DeltaSeconds)
 		RefreshNearbyInteractCandidate();
 	}
 
-	UpdateHeroDirectionalVisual(ActiveFacingOctant, ActiveWalkFrameColumn);
+	ResolvePoseFrame(DeltaSeconds, bHasMoveInput);
+
+	ECompassOctant VisualFacingOctant = ActiveFacingOctant;
+	if (CombatActionState == EDungeoneerCombatActionState::Whirl && SkillComponent)
+	{
+		// The spin frame is drawn from each facing in turn so the hero visibly turns.
+		VisualFacingOctant = static_cast<ECompassOctant>(FMath::FloorToInt(SkillComponent->GetWhirlElapsed() * 18.0f) & 7);
+	}
+	UpdateHeroDirectionalVisual(VisualFacingOctant, ActiveWalkFrameColumn);
 
 	if (DirectionalRigComponent)
 	{
-		DirectionalRigComponent->SetHeadingOctant(ActiveFacingOctant);
+		DirectionalRigComponent->SetHeadingOctant(VisualFacingOctant);
 		DirectionalRigComponent->SetFrameIndex(ActiveWalkFrameColumn);
 		if (MoveComp)
 		{
@@ -1685,12 +2685,50 @@ void ADungeoneerCharacter::Server_UpdateOctants_Implementation(ECompassOctant Ne
 
 void ADungeoneerCharacter::ApplyDungeoneerDamage(float DamageAmount, AActor* DamageCauser)
 {
-	if (!HasAuthority() || DamageAmount <= 0.0f || IsInvulnerable())
+	if (!HasAuthority() || DamageAmount <= 0.0f)
+	{
+		return;
+	}
+
+	// Only zombies can be parried or perfect-dodged; hazard puddles and traps cannot.
+	if (AZombieBase* AttackerZombie = Cast<AZombieBase>(DamageCauser))
+	{
+		const FVector ToAttacker = (AttackerZombie->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		if (ParryActiveRemaining > 0.0f && FVector::DotProduct(GetAimForwardXY(), ToAttacker) >= -0.2)
+		{
+			HandleSuccessfulParry(AttackerZombie);
+			return;
+		}
+		if (DodgeActiveRemaining > 0.0f && !bPerfectDodgeUsedThisDash)
+		{
+			HandlePerfectDodge();
+			return;
+		}
+	}
+
+	if (IsInvulnerable())
 	{
 		return;
 	}
 
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - DamageAmount);
+
+	// Make getting hit unmistakable: red flash on the sprite and screen edge, shake, a number, a kick.
+	HurtFlashRemaining = HurtFlashDuration;
+	if (HeroVisualMesh)
+	{
+		HeroVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 1.0f);
+		HeroVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.12f);
+		HeroVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 0.08f);
+	}
+	AddCameraTrauma(FMath::Clamp(0.25f + DamageAmount * 0.006f, 0.25f, 0.6f));
+	PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 90.0), FString::Printf(TEXT("-%d"), FMath::RoundToInt(DamageAmount)), EDungeoneerFloatingTextKind::Damage);
+	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_HeroHurt_0")), GetActorLocation(), 0.9f);
+	if (DamageCauser)
+	{
+		TriggerCombatCameraImpulse((GetActorLocation() - DamageCauser->GetActorLocation()).GetSafeNormal2D(), 16.0f, 0.0f);
+	}
+
 	if (CurrentHealth <= 0.0f)
 	{
 		const UZombieSpatialSubsystem* SpatialSys = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
@@ -1730,6 +2768,34 @@ void ADungeoneerCharacter::RestoreAtRestingGround(float HealthDelta, float Batte
 
 	CurrentHealth = FMath::Clamp(CurrentHealth + HealthDelta, 0.0f, MaxHealth);
 	FlashlightBattery = FMath::Clamp(FlashlightBattery + BatteryDelta, 0.0f, 100.0f);
+}
+
+void ADungeoneerCharacter::ResetForNewRun()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	CurrentHealth = MaxHealth;
+	FlashlightBattery = 100.0f;
+	EmpoweredRemaining = 0.0f;
+	EmpoweredMultiplier = 1.0f;
+	DownedRespawnRemaining = 0.0f;
+	CombatActionState = EDungeoneerCombatActionState::None;
+	if (InventoryComponent)
+	{
+		InventoryComponent->AuthorityResetForNewRun();
+	}
+	if (SkillComponent)
+	{
+		SkillComponent->ResetLoadoutForNewRun();
+	}
+	if (SensoryPerkComponent)
+	{
+		SensoryPerkComponent->SetPerkLevel(EDungeoneerSensoryPerk::DarkVision, 0);
+		SensoryPerkComponent->SetPerkLevel(EDungeoneerSensoryPerk::AcuteHearing, 0);
+		SensoryPerkComponent->SetPerkLevel(EDungeoneerSensoryPerk::ScentThermal, 0);
+	}
 }
 
 bool ADungeoneerCharacter::IsPointLitByFlashlight(const FVector& TargetWorldLocation) const noexcept

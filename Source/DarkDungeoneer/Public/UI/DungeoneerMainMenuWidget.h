@@ -12,7 +12,7 @@ enum class EDungeoneerMenuAction : uint8
 {
 	EnterCatacombs     = 0 UMETA(DisplayName = "Enter the Catacombs"),
 	ContinueExpedition = 1 UMETA(DisplayName = "Continue Expedition"),
-	CoopSplitScreen    = 2 UMETA(DisplayName = "Co-Op & Split-Screen"),
+	CoopSplitScreen    = 2 UMETA(DisplayName = "Two Players, One Screen"),
 	SensoryLoadout     = 3 UMETA(DisplayName = "Sensory Perks & Loadout"),
 	MirrorTrial        = 4 UMETA(DisplayName = "Mirror-Palace Trial"),
 	RestingGround      = 5 UMETA(DisplayName = "Resting Ground & Vendors"),

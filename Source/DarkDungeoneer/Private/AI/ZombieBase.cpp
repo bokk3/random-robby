@@ -1,4 +1,6 @@
 #include "AI/ZombieBase.h"
+#include "Rendering/DungeoneerFxPoolSubsystem.h"
+#include "Rendering/DungeoneerSpriteMaterialFactory.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Audio/DungeonAcousticSubsystem.h"
 #include "Ecosystem/DungeonWaterSubsystem.h"
@@ -235,7 +237,23 @@ void AZombieBase::Tick(float DeltaSeconds)
 
 	if (IsZombieAlive() && !bIsMirrorDecoy)
 	{
+		// DeltaSeconds already includes CustomTimeDilation; status timers run on real time.
+		TickStatusEffects(DeltaSeconds / FMath::Max(CustomTimeDilation, 0.01f));
+		if (!IsZombieAlive())
+		{
+			UpdateZombieDirectionalVisual(CurrentHeadingOctant, ActiveWalkFrameColumn);
+			return;
+		}
+
 		AdvanceDeterministicStepAccumulator(DeltaSeconds);
+		if (!IsStunned())
+		{
+			TickMeleeAttack(DeltaSeconds);
+		}
+		if (HasAuthority() && !IsAttackBusy())
+		{
+			ApplySeparation();
+		}
 
 		if (HitFlashRemaining > 0.0f)
 		{
@@ -245,6 +263,7 @@ void AZombieBase::Tick(float DeltaSeconds)
 			if (ZombieVisualMesh)
 			{
 				ZombieVisualMesh->SetRelativeScale3D(BaseScale * (1.0f + 0.22f * Alpha));
+				ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, Alpha);
 			}
 			if (ZombieEmissiveLight)
 			{
@@ -304,6 +323,11 @@ void AZombieBase::TriggerHitFeedback(const FVector& KnockbackDirXY, const float 
 	}
 
 	HitFlashRemaining = 0.16f;
+	// Poise: small enemies lose their wind-up when hit.
+	if (AttackPhase == EZombieAttackPhase::Windup && MeleeAttack.bLightHitsInterrupt)
+	{
+		InterruptAttack();
+	}
 	const FVector SafeDir = KnockbackDirXY.GetSafeNormal2D();
 	if (!SafeDir.IsNearlyZero() && KnockbackSpeedUU > 0.0f)
 	{
@@ -312,6 +336,325 @@ void AZombieBase::TriggerHitFeedback(const FVector& KnockbackDirXY, const float 
 			CharMove->Velocity += SafeDir * KnockbackSpeedUU;
 		}
 	}
+}
+
+void AZombieBase::ApplyStun(const float Seconds) noexcept
+{
+	if (!IsZombieAlive() || Seconds <= 0.0f)
+	{
+		return;
+	}
+	const float Scaled = Seconds * (1.0f - FMath::Clamp(StunResistance, 0.0f, 1.0f));
+	StunRemaining = FMath::Max(StunRemaining, Scaled);
+	if (StunRemaining > 0.0f)
+	{
+		InterruptAttack();
+		if (UCharacterMovementComponent* CharMove = GetCharacterMovement())
+		{
+			CharMove->StopActiveMovement();
+		}
+	}
+}
+
+void AZombieBase::ApplyBurn(const float DamagePerSecond, const float Seconds, AActor* InBurnInstigator) noexcept
+{
+	if (!IsZombieAlive() || DamagePerSecond <= 0.0f || Seconds <= 0.0f)
+	{
+		return;
+	}
+	BurnRemaining = FMath::Max(BurnRemaining, Seconds);
+	BurnDamagePerSecond = FMath::Max(BurnDamagePerSecond, DamagePerSecond);
+	if (InBurnInstigator)
+	{
+		BurnInstigator = InBurnInstigator;
+	}
+}
+
+void AZombieBase::ApplyTimeSlow(const float Dilation, const float Seconds) noexcept
+{
+	if (!IsZombieAlive() || Seconds <= 0.0f)
+	{
+		return;
+	}
+	const bool bWasSlowed = TimeSlowRemaining > 0.0f;
+	TimeSlowRemaining = FMath::Max(TimeSlowRemaining, Seconds);
+	TimeSlowDilation = FMath::Clamp(bWasSlowed ? FMath::Min(TimeSlowDilation, Dilation) : Dilation, 0.05f, 1.0f);
+	CustomTimeDilation = FMath::Clamp(FMath::Min(CustomTimeDilation, Dilation), 0.05f, 1.0f);
+}
+
+bool AZombieBase::TryStartMeleeAttack(ADungeoneerCharacter* Target) noexcept
+{
+	if (!Target || !IsZombieAlive() || bIsMirrorDecoy || IsStunned() || AttackPhase != EZombieAttackPhase::None
+		|| AttackCooldownRemaining > 0.0f || Target->IsDowned())
+	{
+		return false;
+	}
+	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	if (ToTarget.SizeSquared2D() > FMath::Square(static_cast<double>(MeleeAttack.StartRangeUU)))
+	{
+		return false;
+	}
+	UWorld* World = GetWorld();
+	UZombieSpatialSubsystem* Spatial = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	if (!Spatial || !Spatial->TryAcquireAttackToken(Target))
+	{
+		return false;
+	}
+	AttackTokenHero = Target;
+	AttackDirXY = ToTarget.GetSafeNormal2D();
+	if (AttackDirXY.IsNearlyZero())
+	{
+		AttackDirXY = FVector::ForwardVector;
+	}
+	AttackPhase = EZombieAttackPhase::Windup;
+	AttackPhaseRemaining = MeleeAttack.WindupSec * (bIsElite ? 0.75f : 1.0f);
+	if (UCharacterMovementComponent* CharMove = GetCharacterMovement())
+	{
+		CharMove->StopMovementImmediately();
+	}
+	UDungeoneerMovementComponent::QuantizeInputToOctant(FVector2D(AttackDirXY.X, AttackDirXY.Y), 1.0f, CurrentHeadingOctant);
+
+	// Telegraph: a ring on the floor where the blow will land, closing in until it hits.
+	if (UDungeoneerFxPoolSubsystem* Fx = World->GetSubsystem<UDungeoneerFxPoolSubsystem>())
+	{
+		const FVector Floor = GetActorLocation() + AttackDirXY * (MeleeAttack.ReachUU * 0.55) - FVector(0.0, 0.0, 85.0);
+		Fx->SpawnGroundRing(Floor, FLinearColor(1.0f, 0.22f, 0.08f), MeleeAttack.ReachUU * 1.3f, MeleeAttack.ReachUU * 0.45f, AttackPhaseRemaining);
+	}
+	if (ZombieVisualMesh)
+	{
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 1.0f);
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.25f);
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 0.1f);
+	}
+	UDungeonAcousticSubsystem::PlayCombatCueAt(World, FName(TEXT("Combat_Windup_0")), GetActorLocation(), 0.8f, 0.08f);
+	return true;
+}
+
+void AZombieBase::InterruptAttack() noexcept
+{
+	if (AttackPhase == EZombieAttackPhase::None)
+	{
+		return;
+	}
+	AttackPhase = EZombieAttackPhase::None;
+	AttackPhaseRemaining = 0.0f;
+	AttackCooldownRemaining = FMath::Max(AttackCooldownRemaining, 1.0f);
+	if (UZombieSpatialSubsystem* Spatial = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr)
+	{
+		Spatial->ReleaseAttackToken(AttackTokenHero.Get());
+	}
+	AttackTokenHero = nullptr;
+	if (ZombieVisualMesh)
+	{
+		// Back to a white hit flash.
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 0.0f);
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.0f);
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 0.0f);
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.0f);
+	}
+}
+
+void AZombieBase::TickMeleeAttack(const float DeltaSeconds) noexcept
+{
+	if (AttackCooldownRemaining > 0.0f)
+	{
+		AttackCooldownRemaining = FMath::Max(0.0f, AttackCooldownRemaining - DeltaSeconds);
+	}
+	if (AttackPhase == EZombieAttackPhase::Windup)
+	{
+		AttackPhaseRemaining -= DeltaSeconds;
+		const float WindupTotal = FMath::Max(MeleeAttack.WindupSec * (bIsElite ? 0.75f : 1.0f), 0.01f);
+		const float Alpha = FMath::Clamp(1.0f - AttackPhaseRemaining / WindupTotal, 0.0f, 1.0f);
+		if (ZombieVisualMesh && HitFlashRemaining <= 0.0f)
+		{
+			// Red glow builds toward the strike; a rear-back squash sells the coil.
+			ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.1f + 0.55f * Alpha * Alpha);
+			ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale() * FVector(1.0f + 0.06f * Alpha, 1.0f - 0.04f * Alpha, 1.0f));
+		}
+		if (AttackPhaseRemaining > 0.0f)
+		{
+			return;
+		}
+
+		// Strike: lunge and one hit test in the wind-up direction.
+		if (UCharacterMovementComponent* CharMove = GetCharacterMovement())
+		{
+			CharMove->Velocity += AttackDirXY * MeleeAttack.LungeSpeedUU;
+		}
+		bool bHit = false;
+		if (HasAuthority())
+		{
+			if (UZombieSpatialSubsystem* Spatial = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr)
+			{
+				const FVector Origin = GetActorLocation();
+				for (int32 i = 0; i < Spatial->GetTrackedPlayerCount(); ++i)
+				{
+					ADungeoneerCharacter* Hero = Spatial->GetTrackedPlayerAt(i);
+					if (!Hero || Hero->IsDowned())
+					{
+						continue;
+					}
+					const FVector Delta = Hero->GetActorLocation() - Origin;
+					const double Dist = Delta.Size2D();
+					if (Dist > MeleeAttack.ReachUU)
+					{
+						continue;
+					}
+					const FVector DirToHero = (Dist > 1.0) ? Delta.GetSafeNormal2D() : AttackDirXY;
+					if (FVector::DotProduct(DirToHero, AttackDirXY) >= MeleeAttack.ArcMinCos || Dist < 60.0)
+					{
+						Hero->ApplyDungeoneerDamage(MeleeAttack.Damage * DamageScale, this);
+						bHit = true;
+					}
+				}
+				Spatial->ReleaseAttackToken(AttackTokenHero.Get());
+			}
+		}
+		AttackTokenHero = nullptr;
+		UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_Swing_1")), GetActorLocation(), 0.85f, 0.0f);
+		AttackPhase = EZombieAttackPhase::Recover;
+		AttackPhaseRemaining = MeleeAttack.RecoverSec;
+		if (ZombieVisualMesh)
+		{
+			ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.0f);
+			ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale() * FVector(0.92f, 1.08f, 1.0f));
+		}
+		OnMeleeStrike(bHit);
+		return;
+	}
+	if (AttackPhase == EZombieAttackPhase::Recover)
+	{
+		AttackPhaseRemaining -= DeltaSeconds;
+		if (AttackPhaseRemaining <= 0.0f)
+		{
+			AttackPhase = EZombieAttackPhase::None;
+			AttackCooldownRemaining = MeleeAttack.CooldownSec;
+			if (ZombieVisualMesh)
+			{
+				ZombieVisualMesh->SetRelativeScale3D(GetArchetypeVisualScale());
+				ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashR, 0.0f);
+				ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashG, 0.0f);
+				ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashB, 0.0f);
+			}
+		}
+	}
+}
+
+void AZombieBase::ApplySeparation() noexcept
+{
+	const UZombieSpatialSubsystem* Spatial = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	if (!Spatial)
+	{
+		return;
+	}
+	const FVector Self = GetActorLocation();
+	FVector Push = FVector::ZeroVector;
+	for (int32 i = 0; i < Spatial->GetTrackedZombieCount(); ++i)
+	{
+		const AZombieBase* Other = Spatial->GetTrackedZombieAt(i);
+		if (!Other || Other == this || !Other->IsZombieAlive())
+		{
+			continue;
+		}
+		const FVector Away(Self.X - Other->GetActorLocation().X, Self.Y - Other->GetActorLocation().Y, 0.0);
+		const double DistSq = Away.SizeSquared();
+		if (DistSq < 95.0 * 95.0 && DistSq > 1.0)
+		{
+			const double Dist = FMath::Sqrt(DistSq);
+			Push += Away / Dist * (1.0 - Dist / 95.0);
+		}
+	}
+	if (!Push.IsNearlyZero())
+	{
+		AddMovementInput(Push.GetClampedToMaxSize(1.0), 0.6f);
+	}
+}
+
+void AZombieBase::ApplyFloorScaling(const int32 FloorIndex) noexcept
+{
+	const float Steps = static_cast<float>(FMath::Max(FloorIndex, 1) - 1);
+	MaxHealth *= 1.0f + 0.2f * Steps;
+	CurrentHealth = MaxHealth;
+	DamageScale *= 1.0f + 0.1f * Steps;
+}
+
+void AZombieBase::MakeElite() noexcept
+{
+	if (bIsElite)
+	{
+		return;
+	}
+	bIsElite = true;
+	MaxHealth *= 1.6f;
+	CurrentHealth = MaxHealth;
+	DamageScale *= 1.25f;
+	GoldKillReward *= 2;
+	if (ZombieVisualMesh)
+	{
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::GlowPulse, 0.6f);
+	}
+	if (ZombieEmissiveLight)
+	{
+		ZombieEmissiveLight->SetLightColor(FLinearColor(1.0f, 0.8f, 0.3f));
+	}
+}
+
+void AZombieBase::ApplyHitStop(const float RealSeconds) noexcept
+{
+	if (!IsZombieAlive() || RealSeconds <= 0.0f)
+	{
+		return;
+	}
+	HitStopRemaining = FMath::Max(HitStopRemaining, RealSeconds);
+	CustomTimeDilation = 0.05f;
+}
+
+void AZombieBase::TickStatusEffects(const float RealDeltaSeconds) noexcept
+{
+	if (StunRemaining > 0.0f)
+	{
+		StunRemaining = FMath::Max(0.0f, StunRemaining - RealDeltaSeconds);
+		if (ZombieVisualMesh)
+		{
+			// Dazed sway so a stunned zombie reads clearly at a glance.
+			const float Sway = (StunRemaining > 0.0f) ? FMath::Sin(StunRemaining * 22.0f) * 7.0f : 0.0f;
+			ZombieVisualMesh->SetRelativeLocation(FVector(Sway, 0.0, 8.0));
+		}
+	}
+
+	if (BurnRemaining > 0.0f)
+	{
+		const float Step = FMath::Min(RealDeltaSeconds, BurnRemaining);
+		BurnRemaining = FMath::Max(0.0f, BurnRemaining - RealDeltaSeconds);
+		if (HasAuthority())
+		{
+			ApplyZombieDamage(BurnDamagePerSecond * Step, BurnInstigator.Get());
+		}
+		if (ZombieEmissiveLight)
+		{
+			ZombieEmissiveLight->SetLightColor(BurnRemaining > 0.0f ? FLinearColor(1.0f, 0.42f, 0.10f) : GetArchetypeVisualTint());
+		}
+		if (BurnRemaining <= 0.0f)
+		{
+			BurnDamagePerSecond = 0.0f;
+		}
+	}
+
+	if (TimeSlowRemaining > 0.0f)
+	{
+		TimeSlowRemaining = FMath::Max(0.0f, TimeSlowRemaining - RealDeltaSeconds);
+		if (TimeSlowRemaining <= 0.0f)
+		{
+			TimeSlowDilation = 1.0f;
+		}
+	}
+
+	// Hit-stop wins over time slow while it lasts; afterwards the slow (if any) applies again.
+	if (HitStopRemaining > 0.0f)
+	{
+		HitStopRemaining = FMath::Max(0.0f, HitStopRemaining - RealDeltaSeconds);
+	}
+	CustomTimeDilation = (HitStopRemaining > 0.0f) ? 0.05f : ((TimeSlowRemaining > 0.0f) ? TimeSlowDilation : 1.0f);
 }
 
 void AZombieBase::AdvanceDeterministicStepAccumulator(float DeltaSeconds) noexcept
@@ -379,6 +722,20 @@ void AZombieBase::OnZombieDied()
 	SetActorEnableCollision(false);
 	GetCharacterMovement()->StopMovementImmediately();
 	DeathHideCountdown = 0.65f;
+	InterruptAttack();
+	CustomTimeDilation = 1.0f;
+	HitStopRemaining = 0.0f;
+	if (ZombieVisualMesh)
+	{
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FlashAmount, 0.0f);
+	}
+	if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+	{
+		const FLinearColor Tint = GetArchetypeVisualTint();
+		Fx->SpawnBurst(GetActorLocation() + FVector(0.0, 0.0, 40.0), FLinearColor(0.5f + Tint.R * 0.5f, 0.5f + Tint.G * 0.5f, 0.5f + Tint.B * 0.5f), 9, 300.0f, 0.36f);
+		Fx->SpawnDust(GetActorLocation() - FVector(0.0, 0.0, 85.0));
+	}
+	UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_ZombieDeath_0")), GetActorLocation(), 0.85f, 0.1f);
 
 	if (ZombieVisualMesh)
 	{
@@ -396,7 +753,7 @@ void AZombieBase::OnZombieDied()
 		bKillRewardsGranted = true;
 		if (ADungeoneerCharacter* Slayer = Cast<ADungeoneerCharacter>(LastDamageInstigator.Get()))
 		{
-			Slayer->RegisterEnemySlain(GoldKillReward, BatteryKillReward);
+			Slayer->RegisterEnemySlain(GoldKillReward, BatteryKillReward, static_cast<uint8>(1u << (BestiaryBitIndex & 7u)));
 		}
 	}
 }

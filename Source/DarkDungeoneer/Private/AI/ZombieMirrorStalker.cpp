@@ -1,4 +1,5 @@
 #include "AI/ZombieMirrorStalker.h"
+#include "Rendering/DungeoneerSpriteMaterialFactory.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerMovementComponent.h"
@@ -15,8 +16,20 @@ AZombieMirrorStalker::AZombieMirrorStalker()
 	PerceptionHearingRange = 1750.0f;
 	StepCycleDistanceUU = 95.0f;
 	GoldKillReward = 35;
+	BestiaryBitIndex = 2;
 	BatteryKillReward = 12.0f;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+
+	// Quick lunge-bite about every 1.4 s: shorter wind-up than the others, but it can be parried.
+	MeleeAttack.StartRangeUU = 150.0f;
+	MeleeAttack.WindupSec = 0.45f;
+	MeleeAttack.ReachUU = 160.0f;
+	MeleeAttack.ArcMinCos = 0.3f;
+	MeleeAttack.Damage = 12.0f;
+	MeleeAttack.LungeSpeedUU = 620.0f;
+	MeleeAttack.RecoverSec = 0.5f;
+	MeleeAttack.CooldownSec = 0.9f;
+	MeleeAttack.bLightHitsInterrupt = true;
 }
 
 void AZombieMirrorStalker::BeginPlay()
@@ -36,7 +49,7 @@ void AZombieMirrorStalker::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!IsZombieAlive() || bIsMirrorDecoy)
+	if (!IsZombieAlive() || bIsMirrorDecoy || IsStunned())
 	{
 		return;
 	}
@@ -88,7 +101,9 @@ void AZombieMirrorStalker::Tick(float DeltaSeconds)
 	if (ZombieVisualMesh)
 	{
 		const FVector BaseScale = GetArchetypeVisualScale();
-		ZombieVisualMesh->SetRelativeScale3D(BaseScale * (0.72f + 0.28f * RevealAlpha));
+		// A Slip exists only in the light: it dithers out of sight instead of shrinking.
+		ZombieVisualMesh->SetRelativeScale3D(BaseScale * (0.94f + 0.06f * RevealAlpha));
+		ZombieVisualMesh->SetCustomPrimitiveDataFloat(DungeoneerSpriteCPD::FadeOut, 1.0f - FMath::Max(RevealAlpha, 0.05f));
 	}
 	if (ZombieEmissiveLight)
 	{
@@ -101,15 +116,15 @@ void AZombieMirrorStalker::Tick(float DeltaSeconds)
 	{
 		const FVector ToTarget = TargetPlayer->GetActorLocation() - SelfLoc;
 		const double DistSq = ToTarget.SizeSquared2D();
+		if (IsAttackBusy() || TryStartMeleeAttack(TargetPlayer))
+		{
+			return;
+		}
 		if (DistSq > FMath::Square(68.0))
 		{
 			ECompassOctant DesiredOctant = CurrentHeadingOctant;
 			UDungeoneerMovementComponent::QuantizeInputToOctant(FVector2D(ToTarget.X, ToTarget.Y), 1.0f, DesiredOctant);
 			MoveAlongOctant(DesiredOctant, bRevealedByLight ? 0.85f : 1.05f);
-		}
-		if (DistSq <= FMath::Square(92.0))
-		{
-			TargetPlayer->ApplyDungeoneerDamage(16.0f * DeltaSeconds, this);
 		}
 	}
 }

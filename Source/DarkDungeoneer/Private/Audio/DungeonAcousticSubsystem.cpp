@@ -386,6 +386,24 @@ void UDungeonAcousticSubsystem::PlayOneShotWave(
 	Voice->Play(0.0f);
 }
 
+void UDungeonAcousticSubsystem::PlayCombatCue(const FName CueKey, const FVector& WorldLocation, const float Volume, const float PitchSpread)
+{
+	++CombatCueCounter;
+	// Spread pitch with a hash of the counter: deterministic, no RNG state.
+	uint32 H = CombatCueCounter * 0x9E3779B1u;
+	H ^= H >> 15;
+	const float Unit = static_cast<float>(H & 0xFFFFu) / 65535.0f;
+	PlayOneShotWave(CueKey, WorldLocation, Volume, 1.0f + PitchSpread * (Unit * 2.0f - 1.0f), 20000.0f);
+}
+
+void UDungeonAcousticSubsystem::PlayCombatCueAt(const UWorld* World, const FName CueKey, const FVector& WorldLocation, const float Volume, const float PitchSpread)
+{
+	if (UDungeonAcousticSubsystem* Audio = World ? World->GetSubsystem<UDungeonAcousticSubsystem>() : nullptr)
+	{
+		Audio->PlayCombatCue(CueKey, WorldLocation, Volume, PitchSpread);
+	}
+}
+
 void UDungeonAcousticSubsystem::NotifyWalkColumnChanged(AActor* WalkerActor, const int32 NewColumn)
 {
 	if (!WalkerActor)

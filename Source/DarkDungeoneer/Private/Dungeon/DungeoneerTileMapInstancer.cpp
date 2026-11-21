@@ -1,4 +1,5 @@
 #include "Dungeon/DungeoneerTileMapInstancer.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Dungeon/DungeonEncounterActors.h"
 #include "Audio/DungeonAcousticSubsystem.h"
@@ -609,12 +610,16 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	const int32 FirstSpawnedIndex = SpawnedEncounterActors.Num();
 
 	for (const FDungeonNode& Node : FloorGraph.Nodes)
 	{
 		const FVector Center = Node.WorldCenter;
 
-		switch (Node.RoomType)
+		// Secret pockets reuse vault/gauntlet room types for their floor art, but their encounter is always
+		// the secret-pocket one (a Stalker, a relic and a scroll). Never a second vault or boss.
+		const EDungeonRoomType EncounterType = Node.bIsSecretRoom ? EDungeonRoomType::Combat : Node.RoomType;
+		switch (EncounterType)
 		{
 		case EDungeonRoomType::Combat:
 		{
@@ -642,7 +647,14 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 						EDungeoneerRelicId::VampireWick
 					};
 					SecretRelic->ConfigurePickup(EDungeoneerLootDropKind::Relic, 0, EDungeoneerConsumableId::None, SecretPool[Node.RoomSeed & 3]);
+					SecretRelic->MarkAsSecretFind();
 					SpawnedEncounterActors.Add(SecretRelic);
+				}
+				// Secret pockets always hold a skill scroll.
+				if (ADungeoneerLootPickupActor* SecretScroll = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(140.0, 120.0, 0.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					SecretScroll->ConfigureSkillScroll(DungeoneerSkills::SkillFromRoll(static_cast<uint32>(Node.RoomSeed) >> 3));
+					SpawnedEncounterActors.Add(SecretScroll);
 				}
 			}
 			else if ((Node.RoomSeed & 1) == 0)
@@ -652,6 +664,15 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 					const EDungeoneerConsumableId Kind = (Node.RoomSeed & 2) ? EDungeoneerConsumableId::AntidoteDraught : EDungeoneerConsumableId::LanternOilPhial;
 					Supply->ConfigurePickup(EDungeoneerLootDropKind::Consumable, 0, Kind, EDungeoneerRelicId::None);
 					SpawnedEncounterActors.Add(Supply);
+				}
+			}
+			// About one combat room in three drops a skill scroll.
+			if (!Node.bIsSecretRoom && ((static_cast<uint32>(Node.RoomSeed) >> 2) % 3u) == 0u)
+			{
+				if (ADungeoneerLootPickupActor* Scroll = World->SpawnActor<ADungeoneerLootPickupActor>(ADungeoneerLootPickupActor::StaticClass(), Center + FVector(220.0, -180.0, 0.0), FRotator::ZeroRotator, SpawnParams))
+				{
+					Scroll->ConfigureSkillScroll(DungeoneerSkills::SkillFromRoll(static_cast<uint32>(Node.RoomSeed) >> 5));
+					SpawnedEncounterActors.Add(Scroll);
 				}
 			}
 			break;
@@ -721,6 +742,24 @@ void ADungeoneerTileMapInstancer::SpawnEncountersForFloorGraph(const FDungeonFlo
 		}
 		default:
 			break;
+		}
+	}
+
+	// Deeper floors are tougher, and about one regular enemy in six is an elite (seeded, so a floor
+	// always rolls the same elites). The Colossus has its own tuning.
+	uint32 EliteRoll = static_cast<uint32>(FloorGraph.FloorIndex) * 2654435761u + 0x9E37u;
+	for (int32 i = FirstSpawnedIndex; i < SpawnedEncounterActors.Num(); ++i)
+	{
+		AZombieBase* Zombie = Cast<AZombieBase>(SpawnedEncounterActors[i].Get());
+		if (!Zombie || Zombie->IsA<ABossGuardianActor>())
+		{
+			continue;
+		}
+		Zombie->ApplyFloorScaling(FloorGraph.FloorIndex);
+		EliteRoll = EliteRoll * 1664525u + 1013904223u;
+		if (((EliteRoll >> 16) % 6u) == 0u)
+		{
+			Zombie->MakeElite();
 		}
 	}
 }

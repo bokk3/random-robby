@@ -6,6 +6,7 @@
 #include "DungeoneerGameMode.generated.h"
 
 class ADungeonAtmosphereActor;
+class ADungeoneerPartyCamera;
 class ADungeoneerTileMapInstancer;
 class AMenuDioramaStageActor;
 class UDungeoneerCoopLobbyWidget;
@@ -38,9 +39,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Loop")
 	int32 AdvanceToNextDungeonFloor();
 
-	/** TASK-1401: Drops Player 2 into 2-Player Local Split-Screen with dedicated viewport & HUD. */
-	UFUNCTION(BlueprintCallable, Category = "CoOp|SplitScreen")
-	bool RequestSplitScreenCoopJoin();
+	/** Adds a second local player on the same screen: spawns their hero beside player 1, points their
+	 *  view at the shared party camera and adds their vitals card to player 1's HUD. */
+	UFUNCTION(BlueprintCallable, Category = "CoOp")
+	bool RequestLocalCoopJoin();
+
+	/** Spawns the shared party camera on first use. */
+	ADungeoneerPartyCamera* EnsurePartyCamera();
+
+	ADungeoneerPartyCamera* GetPartyCamera() const noexcept { return ActivePartyCamera.Get(); }
 
 	/** TASK-1403: Records Meta-Ledger SaveGame outcome and displays the Crypt Ledger Summary modal. */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Ledger")
@@ -119,7 +126,20 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UDungeoneerRunSummaryWidget> ActiveRunSummaryWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ADungeoneerPartyCamera> ActivePartyCamera;
+
 private:
+	/** Makes PC look through the party camera and stops the engine from snapping it back to its pawn. */
+	void ViewThroughPartyCamera(APlayerController* PC, float BlendSec);
+
+	/** -CaptureMove=<name>: makes every local hero perform a move just before the auto screenshot. */
+	void FireCaptureMove() const;
+
+	FString CaptureMoveName;
+	float CaptureMoveLeadSec = 0.0f;
+	bool bCaptureMovePending = false;
+
 	float AutoShotDelayRemaining = -1.0f;
 	float AutoQuitDelayRemaining = -1.0f;
 	int32 ActiveDailySeedDayKey = 0;

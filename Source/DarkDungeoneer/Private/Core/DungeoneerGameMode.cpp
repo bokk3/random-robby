@@ -2,7 +2,9 @@
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerGameState.h"
 #include "Core/DungeoneerGameViewportClient.h"
+#include "Core/DungeoneerPartyCamera.h"
 #include "Core/DungeoneerSaveGame.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Social/DungeoneerInventoryComponent.h"
 #include "Dungeon/DungeonGeneratorSubsystem.h"
@@ -61,7 +63,8 @@ namespace DungeoneerGameModePrivate
 		SetIntCVar(TEXT("r.DepthOfFieldQuality"), 0);
 		SetIntCVar(TEXT("r.AmbientOcclusionLevels"), 1);
 		SetIntCVar(TEXT("r.BloomQuality"), 2);
-		SetIntCVar(TEXT("r.ScreenPercentage"), 75);
+		// Pixel art needs full resolution; an upscaled 75% render smears single-texel detail.
+		SetIntCVar(TEXT("r.ScreenPercentage"), 100);
 		SetIntCVar(TEXT("t.MaxFPS"), 60);
 	}
 }
@@ -238,7 +241,7 @@ void ADungeoneerGameMode::StartPlay()
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo")))
 	{
-		const EDungeoneerMenuAction AutoAction = FParse::Param(FCommandLine::Get(), TEXT("AutoSplitScreen"))
+		const EDungeoneerMenuAction AutoAction = (FParse::Param(FCommandLine::Get(), TEXT("AutoCoop")) || FParse::Param(FCommandLine::Get(), TEXT("AutoSplitScreen")))
 			? EDungeoneerMenuAction::CoopSplitScreen
 			: EDungeoneerMenuAction::EnterCatacombs;
 		EnterLiveDungeonFromMenu(AutoAction);
@@ -249,6 +252,83 @@ void ADungeoneerGameMode::StartPlay()
 	{
 		AutoShotDelayRemaining = ShotDelaySec;
 		bPendingAutoShot = true;
+
+		// Lead time per move: how long before the shot it starts, so the frame lands on its most readable pose.
+		if (FParse::Value(FCommandLine::Get(), TEXT("CaptureMove="), CaptureMoveName) && !CaptureMoveName.IsEmpty())
+		{
+			struct FMoveLead { const TCHAR* Name; float LeadSec; };
+			static constexpr FMoveLead Leads[] = {
+				{ TEXT("Combo"), 0.08f }, { TEXT("Dodge"), 0.08f }, { TEXT("DashStrike"), 0.07f },
+				{ TEXT("Parry"), 0.06f }, { TEXT("Flare"), 0.10f }, { TEXT("Kiln"), 0.45f },
+				{ TEXT("Hook"), 0.20f }, { TEXT("Shade"), 0.12f }, { TEXT("Whirl"), 0.50f },
+				{ TEXT("Decoy"), 1.20f }, { TEXT("Spread"), 1.50f },
+			};
+			for (const FMoveLead& Lead : Leads)
+			{
+				if (CaptureMoveName.Equals(Lead.Name, ESearchCase::IgnoreCase))
+				{
+					CaptureMoveLeadSec = Lead.LeadSec;
+					bCaptureMovePending = true;
+				}
+			}
+		}
+	}
+}
+
+void ADungeoneerGameMode::FireCaptureMove() const
+{
+	const UZombieSpatialSubsystem* Spatial = GetWorld() ? GetWorld()->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+	if (!Spatial)
+	{
+		return;
+	}
+
+	// Skill moves are put in slot 0 first so the capture doesn't depend on the starting loadout.
+	EDungeoneerSkillId SkillForSlot0 = EDungeoneerSkillId::None;
+	if (CaptureMoveName.Equals(TEXT("Flare"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::SolarFlare; }
+	else if (CaptureMoveName.Equals(TEXT("Kiln"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::EmberFlask; }
+	else if (CaptureMoveName.Equals(TEXT("Hook"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::GrappleChain; }
+	else if (CaptureMoveName.Equals(TEXT("Shade"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::ShadeStep; }
+	else if (CaptureMoveName.Equals(TEXT("Whirl"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::WhirlingLantern; }
+	else if (CaptureMoveName.Equals(TEXT("Decoy"), ESearchCase::IgnoreCase)) { SkillForSlot0 = EDungeoneerSkillId::MirrorDecoy; }
+
+	for (int32 i = 0; i < Spatial->GetTrackedPlayerCount(); ++i)
+	{
+		ADungeoneerCharacter* Hero = Spatial->GetTrackedPlayerAt(i);
+		if (!Hero)
+		{
+			continue;
+		}
+		if (SkillForSlot0 != EDungeoneerSkillId::None)
+		{
+			if (UDungeoneerSkillComponent* Skills = Hero->GetSkillComponent())
+			{
+				Skills->EquipSkill(0, SkillForSlot0);
+			}
+			Hero->TriggerSkillSlot(0);
+		}
+		else if (CaptureMoveName.Equals(TEXT("Combo"), ESearchCase::IgnoreCase))
+		{
+			Hero->TriggerPrimaryAttack();
+		}
+		else if (CaptureMoveName.Equals(TEXT("Dodge"), ESearchCase::IgnoreCase))
+		{
+			Hero->TriggerDodgeDash();
+		}
+		else if (CaptureMoveName.Equals(TEXT("DashStrike"), ESearchCase::IgnoreCase))
+		{
+			Hero->TriggerDodgeDash();
+			Hero->TriggerPrimaryAttack();
+		}
+		else if (CaptureMoveName.Equals(TEXT("Parry"), ESearchCase::IgnoreCase))
+		{
+			Hero->TriggerParry();
+		}
+		else if (CaptureMoveName.Equals(TEXT("Spread"), ESearchCase::IgnoreCase) && i > 0)
+		{
+			// Co-op framing check: push the second hero well past the leash; the party camera pulls them back.
+			Hero->SetActorLocation(Hero->GetActorLocation() + FVector(1400.0, 500.0, 0.0), true, nullptr, ETeleportType::TeleportPhysics);
+		}
 	}
 }
 
@@ -267,6 +347,11 @@ void ADungeoneerGameMode::Tick(float DeltaSeconds)
 	if (bPendingAutoShot)
 	{
 		AutoShotDelayRemaining -= DeltaSeconds;
+		if (bCaptureMovePending && AutoShotDelayRemaining <= CaptureMoveLeadSec)
+		{
+			bCaptureMovePending = false;
+			FireCaptureMove();
+		}
 		if (AutoShotDelayRemaining <= 0.0f)
 		{
 			bPendingAutoShot = false;
@@ -338,6 +423,7 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 	const bool bAutoPlaySolo = FParse::Param(FCommandLine::Get(), TEXT("AutoPlaySolo"))
 		|| Action == EDungeoneerMenuAction::CoopSplitScreen;
 	const bool bForceSplitScreen = (Action == EDungeoneerMenuAction::CoopSplitScreen)
+		|| FParse::Param(FCommandLine::Get(), TEXT("AutoCoop"))
 		|| FParse::Param(FCommandLine::Get(), TEXT("AutoSplitScreen"));
 	if (ActiveDioramaStage)
 	{
@@ -433,14 +519,16 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 
 				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
 				{
-					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : FVector(90.0 * static_cast<double>(LPIdx), -90.0 * static_cast<double>(LPIdx), 0.0);
+					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : ADungeoneerPartyCamera::ScreenRightXY() * (130.0 * static_cast<double>(LPIdx));
 					Character->SetActorLocation(TargetRoomCenter + OffsetXY + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
 					Character->ApplyLanternTrimTint((EquippedLanternTrimIndex + LPIdx) & 3);
+					// Every way into the dungeon (menu, retry, return from summary) starts a fresh run.
+					Character->ResetForNewRun();
 					if (UMirrorLightBounceComponent* BounceComp = Character->GetMirrorBounceComponent())
 					{
 						BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
 					}
-					PC->SetViewTargetWithBlend(Character, bAutoPlaySolo ? 0.0f : 0.35f);
+					ViewThroughPartyCamera(PC, bAutoPlaySolo ? 0.0f : 0.35f);
 
 					if (!IsRunningCommandlet() && World->IsGameWorld())
 					{
@@ -475,7 +563,43 @@ void ADungeoneerGameMode::EnterLiveDungeonFromMenu(EDungeoneerMenuAction Action)
 
 	if (bForceSplitScreen)
 	{
-		RequestSplitScreenCoopJoin();
+		RequestLocalCoopJoin();
+	}
+	if (ActivePartyCamera)
+	{
+		ActivePartyCamera->SnapToParty();
+	}
+}
+
+ADungeoneerPartyCamera* ADungeoneerGameMode::EnsurePartyCamera()
+{
+	if (!ActivePartyCamera)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			ActivePartyCamera = World->SpawnActor<ADungeoneerPartyCamera>(ADungeoneerPartyCamera::StaticClass(), EntrySpawnLocation, FRotator::ZeroRotator, Params);
+		}
+	}
+	return ActivePartyCamera.Get();
+}
+
+void ADungeoneerGameMode::ViewThroughPartyCamera(APlayerController* PC, const float BlendSec)
+{
+	ADungeoneerPartyCamera* PartyCamera = EnsurePartyCamera();
+	if (!PC || !PartyCamera)
+	{
+		return;
+	}
+	PC->bAutoManageActiveCameraTarget = false;
+	if (BlendSec > 0.0f)
+	{
+		PC->SetViewTargetWithBlend(PartyCamera, BlendSec);
+	}
+	else
+	{
+		PC->SetViewTarget(PartyCamera);
 	}
 }
 
@@ -560,7 +684,7 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 			{
 				if (ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(PC->GetPawn()))
 				{
-					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : FVector(90.0 * static_cast<double>(LPIdx), -90.0 * static_cast<double>(LPIdx), 0.0);
+					const FVector OffsetXY = (LPIdx == 0) ? FVector::ZeroVector : ADungeoneerPartyCamera::ScreenRightXY() * (130.0 * static_cast<double>(LPIdx));
 					Character->SetActorLocation(NextEntryCenter + OffsetXY + FVector(0.0, 0.0, 95.0), false, nullptr, ETeleportType::TeleportPhysics);
 					Character->RestoreAtRestingGround(20.0f, 35.0f);
 					if (UMirrorLightBounceComponent* BounceComp = Character->GetMirrorBounceComponent())
@@ -570,6 +694,11 @@ int32 ADungeoneerGameMode::AdvanceToNextDungeonFloor()
 				}
 			}
 		}
+	}
+
+	if (ActivePartyCamera)
+	{
+		ActivePartyCamera->SnapToParty();
 	}
 
 	if (!IsRunningCommandlet())
@@ -590,7 +719,7 @@ bool ADungeoneerGameMode::IsActiveRunMainMenu() const noexcept
 		|| (ActiveDioramaStage && !ActiveDioramaStage->IsHidden());
 }
 
-bool ADungeoneerGameMode::RequestSplitScreenCoopJoin()
+bool ADungeoneerGameMode::RequestLocalCoopJoin()
 {
 	UWorld* World = GetWorld();
 	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
@@ -599,9 +728,9 @@ bool ADungeoneerGameMode::RequestSplitScreenCoopJoin()
 		return false;
 	}
 
+	// One shared screen: the viewport client never splits, player 2 only needs a controller and a pawn.
 	if (UDungeoneerGameViewportClient* GVC = Cast<UDungeoneerGameViewportClient>(World->GetGameViewport()))
 	{
-		GVC->SetLocalSplitscreenEnabled(true);
 		GVC->TryJoinLocalCoopPlayer(1);
 	}
 	else if (GI->GetNumLocalPlayers() < 2)
@@ -610,24 +739,22 @@ bool ADungeoneerGameMode::RequestSplitScreenCoopJoin()
 		GI->CreateLocalPlayer(1, CreateError, true);
 	}
 
-	const int32 NumLPs = GI->GetNumLocalPlayers();
-	if (NumLPs < 2)
+	if (GI->GetNumLocalPlayers() < 2)
 	{
 		return false;
 	}
 
 	FVector P1Location = EntrySpawnLocation;
+	APlayerController* P1PC = nullptr;
 	if (const ULocalPlayer* P1LP = GI->GetLocalPlayers()[0])
 	{
-		if (const APlayerController* P1PC = P1LP->GetPlayerController(World))
+		P1PC = P1LP->GetPlayerController(World);
+		if (P1PC && P1PC->GetPawn())
 		{
-			if (const APawn* P1Pawn = P1PC->GetPawn())
-			{
-				P1Location = P1Pawn->GetActorLocation();
-			}
+			P1Location = P1PC->GetPawn()->GetActorLocation();
 			if (ADungeoneerCharacter* P1Char = Cast<ADungeoneerCharacter>(P1PC->GetPawn()))
 			{
-				P1Char->PushFloatingCombatPopup(P1Location + FVector(0.0, 0.0, 100.0), TEXT("PLAYER 2 JOINED SPLIT-SCREEN!"), EDungeoneerFloatingTextKind::Status);
+				P1Char->PushFloatingCombatPopup(P1Location + FVector(0.0, 0.0, 100.0), TEXT("A SECOND LANTERN IS LIT"), EDungeoneerFloatingTextKind::Status);
 			}
 		}
 	}
@@ -638,56 +765,62 @@ bool ADungeoneerGameMode::RequestSplitScreenCoopJoin()
 	{
 		return false;
 	}
-
 	if (!P2PC->GetPawn())
 	{
 		RestartPlayer(P2PC);
 	}
 
-	if (ADungeoneerCharacter* P2Char = Cast<ADungeoneerCharacter>(P2PC->GetPawn()))
+	ADungeoneerCharacter* P2Char = Cast<ADungeoneerCharacter>(P2PC->GetPawn());
+	if (!P2Char)
 	{
-		const FVector P2Spawn = P1Location + FVector(92.0, -92.0, 10.0);
-		P2Char->SetActorLocation(P2Spawn, false, nullptr, ETeleportType::TeleportPhysics);
-		P2Char->ApplyLanternTrimTint((EquippedLanternTrimIndex + 1) & 3);
-		if (UMirrorLightBounceComponent* BounceComp = P2Char->GetMirrorBounceComponent())
-		{
-			BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
-		}
-
-		P2PC->bShowMouseCursor = false;
-		P2PC->bAutoManageActiveCameraTarget = true;
-		P2PC->SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
-		P2PC->SetViewTarget(P2Char);
-
-		if (!IsRunningCommandlet() && World->IsGameWorld())
-		{
-			UDungeoneerPlayerHUDWidget* P2HUD = nullptr;
-			for (UDungeoneerPlayerHUDWidget* ExistingHUD : ActivePlayerHUDWidgets)
-			{
-				if (ExistingHUD && ExistingHUD->GetOwningLocalPlayer() == P2LP)
-				{
-					P2HUD = ExistingHUD;
-					break;
-				}
-			}
-			if (!P2HUD)
-			{
-				P2HUD = CreateWidget<UDungeoneerPlayerHUDWidget>(P2PC, UDungeoneerPlayerHUDWidget::StaticClass());
-				if (P2HUD)
-				{
-					P2HUD->AddToPlayerScreen(5);
-					ActivePlayerHUDWidgets.Add(P2HUD);
-				}
-			}
-			if (P2HUD)
-			{
-				P2HUD->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-				P2HUD->RefreshHUDFromCharacter(P2Char);
-			}
-		}
-		return true;
+		return false;
 	}
-	return false;
+
+	P2Char->SetActorLocation(P1Location + ADungeoneerPartyCamera::ScreenRightXY() * 130.0 + FVector(0.0, 0.0, 10.0), false, nullptr, ETeleportType::TeleportPhysics);
+	P2Char->ApplyLanternTrimTint((EquippedLanternTrimIndex + 1) & 3);
+	if (UMirrorLightBounceComponent* BounceComp = P2Char->GetMirrorBounceComponent())
+	{
+		BounceComp->SetTargetTileMapInstancer(ActiveTileMapInstancer.Get());
+	}
+
+	P2PC->bShowMouseCursor = false;
+	P2PC->SetInputMode(FInputModeGameOnly());
+	ViewThroughPartyCamera(P2PC, 0.0f);
+
+	// Player 2's vitals card lives on player 1's HUD layer, because only player 1's view is drawn.
+	if (!IsRunningCommandlet() && World->IsGameWorld() && P1PC)
+	{
+		UDungeoneerPlayerHUDWidget* CompanionCard = nullptr;
+		for (UDungeoneerPlayerHUDWidget* ExistingHUD : ActivePlayerHUDWidgets)
+		{
+			if (ExistingHUD && ExistingHUD->IsCompanionCard())
+			{
+				CompanionCard = ExistingHUD;
+				break;
+			}
+		}
+		if (!CompanionCard)
+		{
+			CompanionCard = CreateWidget<UDungeoneerPlayerHUDWidget>(P1PC, UDungeoneerPlayerHUDWidget::StaticClass());
+			if (CompanionCard)
+			{
+				CompanionCard->ConfigureAsCompanionCard(1);
+				CompanionCard->AddToPlayerScreen(6);
+				ActivePlayerHUDWidgets.Add(CompanionCard);
+			}
+		}
+		if (CompanionCard)
+		{
+			CompanionCard->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			CompanionCard->RefreshHUDFromCharacter(P2Char);
+		}
+	}
+
+	if (ActivePartyCamera)
+	{
+		ActivePartyCamera->SnapToParty();
+	}
+	return true;
 }
 
 void ADungeoneerGameMode::ShowRunSummaryOverlay(bool bVictory)

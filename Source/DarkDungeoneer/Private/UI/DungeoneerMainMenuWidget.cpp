@@ -53,7 +53,7 @@ TSharedRef<SWidget> UDungeoneerMainMenuWidget::RebuildWidget()
 		MenuStack->AddChildToVerticalBox(TitleText);
 
 		UTextBlock* SubtitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_Subtitle"));
-		SubtitleText->SetText(FText::FromString(TEXT("CO-OP & CRYPT LEDGER  •  v1.4.0")));
+		SubtitleText->SetText(FText::FromString(TEXT("SOME NIGHTS ARE KEPT ON PURPOSE  •  v1.5.0")));
 		SubtitleText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		SubtitleText->SetColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.82f, 0.90f, 0.90f)));
 		MenuStack->AddChildToVerticalBox(SubtitleText);
@@ -197,7 +197,7 @@ const TCHAR* UDungeoneerMainMenuWidget::GetActionDisplayLabel(EDungeoneerMenuAct
 	{
 	case EDungeoneerMenuAction::EnterCatacombs:     return TEXT("ENTER THE CATACOMBS");
 	case EDungeoneerMenuAction::ContinueExpedition: return TEXT("CONTINUE EXPEDITION");
-	case EDungeoneerMenuAction::CoopSplitScreen:    return TEXT("CO-OP & SPLIT-SCREEN");
+	case EDungeoneerMenuAction::CoopSplitScreen:    return TEXT("BRING A SECOND LANTERN");
 	case EDungeoneerMenuAction::SensoryLoadout:     return TEXT("SENSORY PERKS & LOADOUT");
 	case EDungeoneerMenuAction::MirrorTrial:        return TEXT("MIRROR-PALACE TRIAL");
 	case EDungeoneerMenuAction::RestingGround:      return TEXT("RESTING GROUND & VENDORS");

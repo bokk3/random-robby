@@ -918,6 +918,256 @@
           "Bytes": 9500
         }
       }
+    },
+    "Combat_Foley_Bank": {
+      "Timestamp": "2026-11-21T05:47:49.825301+00:00",
+      "Provenance": "ProceduralDSP-CombatFoley-v1 (scripts/synthesize_combat_foley.py)",
+      "ComplianceVerified": true,
+      "Files": {
+        "Audio/Foley/Combat/Combat_Blast_0.wav": {
+          "SHA256": "18795c9b9316d4a426461d5a303ea3eeded7da6722ffc8037e53c32d6c7607ec",
+          "Bytes": 50758
+        },
+        "Audio/Foley/Combat/Combat_FuseTick_0.wav": {
+          "SHA256": "b704e344b0cd889c78cd47b7b6728486730397a7b5b39f2fce4d6e3159f39734",
+          "Bytes": 2248
+        },
+        "Audio/Foley/Combat/Combat_Heavy_0.wav": {
+          "SHA256": "7b498c218f9c1caf169f2d22ac4a06c7a17101b85d98349168c5f736d2b7ba5f",
+          "Bytes": 26504
+        },
+        "Audio/Foley/Combat/Combat_HeroHurt_0.wav": {
+          "SHA256": "c231b2d02cdb6e503db2a7d890374a3495ce6b2cdb17cc61f690a0c0e190e572",
+          "Bytes": 9746
+        },
+        "Audio/Foley/Combat/Combat_Hit_0.wav": {
+          "SHA256": "f913eed6d7b82b77679b53437d58f07ebb674d65fc55ae363472f5040950a6af",
+          "Bytes": 11510
+        },
+        "Audio/Foley/Combat/Combat_Hit_1.wav": {
+          "SHA256": "376e87c8cfe379e7b9b8e170ee1a6a12088ad7247294b266bd259ba7893bdb28",
+          "Bytes": 11510
+        },
+        "Audio/Foley/Combat/Combat_Hit_2.wav": {
+          "SHA256": "1af8ab976e69312c3bbc1602c32758684094f563f21f3fb6afa82950343ca319",
+          "Bytes": 11510
+        },
+        "Audio/Foley/Combat/Combat_Parry_0.wav": {
+          "SHA256": "27bb4507e769393c0d22d37d6de8b731aa7e69bf138d0b8bc6d214a30d8eed2e",
+          "Bytes": 41938
+        },
+        "Audio/Foley/Combat/Combat_PerfectDodge_0.wav": {
+          "SHA256": "777510d25bc73d6f6e604e706f9268507abceae85d2096ab1292590467d17bda",
+          "Bytes": 30912
+        },
+        "Audio/Foley/Combat/Combat_Shatter_0.wav": {
+          "SHA256": "0e8a508953eaf5788bd3e6dcf99e7f7c84e868289f50359bc3daebb7f21a9fdd",
+          "Bytes": 26504
+        },
+        "Audio/Foley/Combat/Combat_Skill_Hook.wav": {
+          "SHA256": "d8c7250527f21eadbd9ec57f1639609bdee672a63a46e4c0f47cd33177b341cb",
+          "Bytes": 19888
+        },
+        "Audio/Foley/Combat/Combat_Skill_Kiln.wav": {
+          "SHA256": "72ab88f3455d6eaf7bc0711eac325644392eb3aa4df3d5fbcd05f200ca7dcb67",
+          "Bytes": 22094
+        },
+        "Audio/Foley/Combat/Combat_Skill_Noon.wav": {
+          "SHA256": "72fc4d8daf13cfa3540d620369e4b8c6cee06f2771749231f277a7f5493d28ed",
+          "Bytes": 39734
+        },
+        "Audio/Foley/Combat/Combat_Skill_Shade.wav": {
+          "SHA256": "35303f6261eb8b97bcc970ed7bcbfb9e050411a107daba0bed9b66bb25bfaf16",
+          "Bytes": 22094
+        },
+        "Audio/Foley/Combat/Combat_Skill_Slipped.wav": {
+          "SHA256": "fc6fd5fdada3b39f36ceca0af9ccfe00d30fd9c59c66e8db885804f09df1b244",
+          "Bytes": 35324
+        },
+        "Audio/Foley/Combat/Combat_Skill_Wheel.wav": {
+          "SHA256": "a494ac98d9d0fb38897174e251a3f87f25d7363087ae2e60e9a52aa183499bde",
+          "Bytes": 39734
+        },
+        "Audio/Foley/Combat/Combat_Swing_0.wav": {
+          "SHA256": "c377e374d194d63e69e5dc87d570d683aaa01cecad6e6bf233399276c08ce360",
+          "Bytes": 10628
+        },
+        "Audio/Foley/Combat/Combat_Swing_1.wav": {
+          "SHA256": "e6db69b1ed9fd91e03f6246d6a7ac2118f449e6b8bf7bfd374333e3b0be1f3c2",
+          "Bytes": 10628
+        },
+        "Audio/Foley/Combat/Combat_Swing_2.wav": {
+          "SHA256": "d724898892bd87e7bdbdc0ffc70b1c88b13bad097956a4706333b9102184763e",
+          "Bytes": 10628
+        },
+        "Audio/Foley/Combat/Combat_Windup_0.wav": {
+          "SHA256": "7221f8e6035353237364431ade2c4b6d5b89f4f2a28b710a34b6c1e6f452fb00",
+          "Bytes": 24298
+        },
+        "Audio/Foley/Combat/Combat_ZombieDeath_0.wav": {
+          "SHA256": "34cec4ad1e03dfa64dbf1d6698ca129e147d42af2e8483045aa197e2d6e80f16",
+          "Bytes": 28708
+        },
+        "Audio/Foley/Combat/Combat_Loop_GasHiss.wav": {
+          "SHA256": "273845c234dd45c7d9e74f00ade13455065e2d87c25e5874781d03f65c6f31df",
+          "Bytes": 70428
+        }
+      }
+    },
+    "Rig_DungeoneerHero_Combo": {
+      "Timestamp": "2026-11-21T05:19:09.704516+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/DungeoneerHeroMoves/Combo/Rig_DungeoneerHero_Combo_D.png": {
+          "SHA256": "5cee450a169b9cf763c6fdb86532d048241b2047d8b3cb77f0789bde310532f1",
+          "Bytes": 653039
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Combo/Rig_DungeoneerHero_Combo_N.png": {
+          "SHA256": "71ca7b5c2ecb761c262f4bc6da269eaa24c33b92c0132d18bfdae491d985420a",
+          "Bytes": 383409
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Combo/Rig_DungeoneerHero_Combo_E.png": {
+          "SHA256": "30d0e28fc580fa05c76f9316b046fea7ead1736d3317d1efc9ed744def90ef50",
+          "Bytes": 68100
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Combo/Rig_DungeoneerHero_Combo_ORM.png": {
+          "SHA256": "7b0c9caab005d8060bf8e56a766354d377dabc563dd48b8243e3d78184cd0452",
+          "Bytes": 225164
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Combo/AtlasMetadata.json": {
+          "SHA256": "e7d24fca75b325fd1add07721a07f66cf0c4a73e6d57946ff2179945c5e94892",
+          "Bytes": 8310
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Combo/rig_sockets.json": {
+          "SHA256": "3b697afb691885446ba7ae0de00fdcccde0d48b80cfdcbf5e8ac5b62e9011473",
+          "Bytes": 1078
+        }
+      }
+    },
+    "Rig_DungeoneerHero_Heavy": {
+      "Timestamp": "2026-11-21T05:19:12.908688+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/Rig_DungeoneerHero_Heavy_D.png": {
+          "SHA256": "d2bbe792e27af923a36f78d53ae4efc00bec2f9cfdc1ed4ef64d1c976ffe01c9",
+          "Bytes": 670056
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/Rig_DungeoneerHero_Heavy_N.png": {
+          "SHA256": "9a8ecfb155a08a7ba2faffde96481cb590e47f15d8e6818434efbb1255cf005c",
+          "Bytes": 400250
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/Rig_DungeoneerHero_Heavy_E.png": {
+          "SHA256": "7b3818d1bfee23c176855e6a00fe995ae40e73784b8ddf777171cfcdd638f8fa",
+          "Bytes": 47835
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/Rig_DungeoneerHero_Heavy_ORM.png": {
+          "SHA256": "196f84ac18ffa66700af564a692186debbcc863cfcbaf902b72062da1ae776ec",
+          "Bytes": 238215
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/AtlasMetadata.json": {
+          "SHA256": "b9fa49a63e748371986d726e2b690531d859dfad88557f48ce4aa0fcf223abed",
+          "Bytes": 8310
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Heavy/rig_sockets.json": {
+          "SHA256": "8329dbf023efbb76b54fbe9411ee4971e42c36e9b97650e1a5378638246d3d32",
+          "Bytes": 1078
+        }
+      }
+    },
+    "Rig_DungeoneerHero_Evade": {
+      "Timestamp": "2026-11-21T05:19:16.489661+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/DungeoneerHeroMoves/Evade/Rig_DungeoneerHero_Evade_D.png": {
+          "SHA256": "cc4a8b20a7a25bd2c091534581fa973fb1dfad6d29ad2f3cba4dfa14716acf71",
+          "Bytes": 715582
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Evade/Rig_DungeoneerHero_Evade_N.png": {
+          "SHA256": "668444ce01787468d1918ba5ca224ab375036cecb97f7f41466e6af6707b713e",
+          "Bytes": 426464
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Evade/Rig_DungeoneerHero_Evade_E.png": {
+          "SHA256": "eeafb19e1af04cd682c0a1ce452e065ad0dbb48836d0217e66c561eef3861c8d",
+          "Bytes": 54186
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Evade/Rig_DungeoneerHero_Evade_ORM.png": {
+          "SHA256": "151f3de71580bdc4f41a1213a7c699dac986da3ea046f28d5037fbafdbb143d2",
+          "Bytes": 247606
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Evade/AtlasMetadata.json": {
+          "SHA256": "b1055b245259632f5f3741c295c648f7873fef8ab08085bf9c23f4e4778e5758",
+          "Bytes": 8308
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Evade/rig_sockets.json": {
+          "SHA256": "b184acd5a287a80a079590c15fbdb3a3f4aec131f2c375a7727435e11283658b",
+          "Bytes": 1078
+        }
+      }
+    },
+    "Rig_DungeoneerHero_Skills": {
+      "Timestamp": "2026-11-21T05:19:20.220648+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/DungeoneerHeroMoves/Skills/Rig_DungeoneerHero_Skills_D.png": {
+          "SHA256": "9b54016729991f35c79d8ddbe74415bf3084200384fe0853d28521b230aad766",
+          "Bytes": 787703
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Skills/Rig_DungeoneerHero_Skills_N.png": {
+          "SHA256": "93a07a4736b188ce3c25165955344f8ef7c5593d5d6e96ad9193051f2a6f1b4b",
+          "Bytes": 467646
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Skills/Rig_DungeoneerHero_Skills_E.png": {
+          "SHA256": "07b91d0746e22a87f640b4992b38067b09617c60bfa798fc209ce81b689f7ba3",
+          "Bytes": 134643
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Skills/Rig_DungeoneerHero_Skills_ORM.png": {
+          "SHA256": "8549f03c432d51417360946ba74390d02f2e424b55ae4c06bbd447e5daa20384",
+          "Bytes": 271350
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Skills/AtlasMetadata.json": {
+          "SHA256": "111c1ff5cde92be0b116e827a006a154e2da8e3a214cfe1270a31f01dd85ba99",
+          "Bytes": 8298
+        },
+        "Art/Rigs/DungeoneerHeroMoves/Skills/rig_sockets.json": {
+          "SHA256": "a64538b8de9ccac0f43b527429bccf1e5d8015b33886db5104d36551cfe48147",
+          "Bytes": 1079
+        }
+      }
+    },
+    "Rig_DungeoneerHero_HurtIdle": {
+      "Timestamp": "2026-11-21T05:19:23.448999+00:00",
+      "Provenance": "Imported-Asset",
+      "ComplianceVerified": true,
+      "Files": {
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/Rig_DungeoneerHero_HurtIdle_D.png": {
+          "SHA256": "05d6b7ee5420c2a653404324c74a328f999b4162e67dbf5f0cbb0bd1fcfabfef",
+          "Bytes": 610161
+        },
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/Rig_DungeoneerHero_HurtIdle_N.png": {
+          "SHA256": "8eefdb5411d4b8b33358ac7ed9b1fa622b4fe1bf19258ca9a18b13825a5509af",
+          "Bytes": 362151
+        },
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/Rig_DungeoneerHero_HurtIdle_E.png": {
+          "SHA256": "879bb2f4d0f39847916c864d6f0f688b818953369b1c46799daa96d166f33bd4",
+          "Bytes": 14661
+        },
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/Rig_DungeoneerHero_HurtIdle_ORM.png": {
+          "SHA256": "d880f86ce6f8369bd40cfa689b5aa71de618bc45d6cb96993a2269a4d3e687cd",
+          "Bytes": 214116
+        },
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/AtlasMetadata.json": {
+          "SHA256": "f58d3aaa6d13711e993a6091915033c82640ba0c9b92f8b42673178318ef48eb",
+          "Bytes": 8313
+        },
+        "Art/Rigs/DungeoneerHeroMoves/HurtIdle/rig_sockets.json": {
+          "SHA256": "9247e96adfc824e3b0c510aa80951e0d1599d57bf69206ac980b39f8a876c077",
+          "Bytes": 1081
+        }
+      }
     }
   },
   "assets": [

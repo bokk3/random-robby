@@ -1,4 +1,6 @@
 #include "AI/BossGuardianActor.h"
+#include "Rendering/DungeoneerFxPoolSubsystem.h"
+#include "Audio/DungeonAcousticSubsystem.h"
 #include "AI/ZombieExploder.h"
 #include "AI/ZombieSpatialSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
@@ -15,10 +17,12 @@
 ABossGuardianActor::ABossGuardianActor()
 {
 	MaxHealth = 680.0f;
+	StunResistance = 0.75f;
 	BaseWalkSpeed = 165.0f;
 	PerceptionHearingRange = 2200.0f;
 	StepCycleDistanceUU = 135.0f;
 	GoldKillReward = 250;
+	BestiaryBitIndex = 3;
 	BatteryKillReward = 35.0f;
 	GetCharacterMovement()->Mass = 600.0f;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
@@ -152,7 +156,7 @@ void ABossGuardianActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!IsZombieAlive() || bIsMirrorDecoy)
+	if (!IsZombieAlive() || bIsMirrorDecoy || IsStunned())
 	{
 		return;
 	}
@@ -188,6 +192,12 @@ void ABossGuardianActor::Tick(float DeltaSeconds)
 		{
 			AttackCycleAccumulator = 0.0f;
 			SlamTelegraphRemaining = (CurrentBossPhase >= 2) ? 0.55f : 0.75f;
+			// Show the whole slam area on the floor, closing in until the fists come down.
+			if (UDungeoneerFxPoolSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UDungeoneerFxPoolSubsystem>() : nullptr)
+			{
+				Fx->SpawnGroundRing(GetActorLocation() - FVector(0.0, 0.0, 90.0), FLinearColor(1.0f, 0.35f, 0.08f), SlamRadiusUU * 1.15f, SlamRadiusUU * 0.35f, SlamTelegraphRemaining);
+			}
+			UDungeonAcousticSubsystem::PlayCombatCueAt(GetWorld(), FName(TEXT("Combat_Windup_0")), GetActorLocation(), 1.0f, 0.0f);
 		}
 	}
 
@@ -242,7 +252,7 @@ void ABossGuardianActor::OnZombieDied()
 					}
 					Player->PushFloatingCombatPopup(
 						GetActorLocation() + FVector(0.0, 0.0, 120.0),
-						TEXT("COLOSSUS SLAIN! +SOLAR CORE"),
+						TEXT("THE KILN-MOTHER COOLS  +LAST SUNSET"),
 						EDungeoneerFloatingTextKind::Relic);
 				}
 			}

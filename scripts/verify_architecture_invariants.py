@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Static Rule Audit, Mathematical Invariant Verification & Asset Provenance Checker
-for the 2.5D Cooperative Dark Dungeoneer (UE 5.8 C++20).
+Static checks for Dark Dungeoneer, run before every commit:
+
+- required source/config/tool files exist
+- banned symbols (GetAllActorsOfClass, GetFirstPlayerController, FTimerHandle) are absent
+- Tick bodies don't call SpawnActor / NewObject / CreateDynamicMaterialInstance
+- a few math invariants (compass speeds, chrono-leech conservation, wading parity)
+- every asset in Content/AssetManifest.json matches its recorded SHA-256
 """
 
 from __future__ import annotations
@@ -36,6 +41,12 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Core/DungeoneerCharacter.cpp",
     "Source/DarkDungeoneer/Public/Core/DungeoneerGameViewportClient.h",
     "Source/DarkDungeoneer/Private/Core/DungeoneerGameViewportClient.cpp",
+    "Source/DarkDungeoneer/Public/Core/DungeoneerPartyCamera.h",
+    "Source/DarkDungeoneer/Private/Core/DungeoneerPartyCamera.cpp",
+    "Source/DarkDungeoneer/Public/Rendering/DungeoneerSpriteMaterialFactory.h",
+    "Source/DarkDungeoneer/Private/Rendering/DungeoneerSpriteMaterialFactory.cpp",
+    "Source/DarkDungeoneer/Public/Rendering/DungeoneerFxPoolSubsystem.h",
+    "Source/DarkDungeoneer/Private/Rendering/DungeoneerFxPoolSubsystem.cpp",
     "Source/DarkDungeoneer/Public/Core/DungeoneerLocalPlayerSubsystem.h",
     "Source/DarkDungeoneer/Private/Core/DungeoneerLocalPlayerSubsystem.cpp",
     # Task Group 2 (Rendering & Shaders)
@@ -50,7 +61,7 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Rendering/SensoryPerkComponent.cpp",
     "Source/DarkDungeoneer/Public/Rendering/DungeonAtmosphereActor.h",
     "Source/DarkDungeoneer/Private/Rendering/DungeonAtmosphereActor.cpp",
-    ".agents/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py",
+    ".claude/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py",
     # Task Group 3 (AI)
     "Source/DarkDungeoneer/Public/AI/ZombieSpatialSubsystem.h",
     "Source/DarkDungeoneer/Private/AI/ZombieSpatialSubsystem.cpp",
@@ -62,6 +73,9 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/AI/ZombieFastThrower.cpp",
     "Source/DarkDungeoneer/Public/AI/HazardZoneActors.h",
     "Source/DarkDungeoneer/Private/AI/HazardZoneActors.cpp",
+    # Combat (skills)
+    "Source/DarkDungeoneer/Public/Combat/DungeoneerSkillComponent.h",
+    "Source/DarkDungeoneer/Private/Combat/DungeoneerSkillComponent.cpp",
     # Task Group 4 (Dungeon)
     "Source/DarkDungeoneer/Public/Dungeon/DungeonTypes.h",
     "Source/DarkDungeoneer/Public/Dungeon/DungeonGeneratorSubsystem.h",
@@ -77,7 +91,7 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Private/Audio/AnimNotify_DungeoneerTimedCue.cpp",
     "Source/DarkDungeoneer/Public/Audio/GibberishSpeechComponent.h",
     "Source/DarkDungeoneer/Private/Audio/GibberishSpeechComponent.cpp",
-    ".agents/skills/voice-gibberish-metasound/scripts/generate_phoneme_bank.py",
+    ".claude/skills/voice-gibberish-metasound/scripts/generate_phoneme_bank.py",
     # Task Group 6 (Social)
     "Source/DarkDungeoneer/Public/Social/DungeoneerSocialSubsystem.h",
     "Source/DarkDungeoneer/Private/Social/DungeoneerSocialSubsystem.cpp",
@@ -117,7 +131,7 @@ REQUIRED_CPP_FILES = [
     "Source/DarkDungeoneer/Public/Lighting/DungeonLightBudgetSubsystem.h",
     "Source/DarkDungeoneer/Private/Lighting/DungeonLightBudgetSubsystem.cpp",
     "scripts/synthesize_ecosystem_foley.py",
-    ".agents/skills/sprite-sheet-25d-cutter/scripts/eco_cleanup_masks.json",
+    ".claude/skills/sprite-sheet-25d-cutter/scripts/eco_cleanup_masks.json",
     "docs/TO_GENERATE_ECOSYSTEM.md",
     # Task Group 12 (v1.2.0 Living Ecosystem M2: Hydrology & Interactive Flora)
     "Source/DarkDungeoneer/Public/Ecosystem/DungeonWaterSubsystem.h",

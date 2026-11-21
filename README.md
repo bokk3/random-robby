@@ -1,140 +1,80 @@
 # Dark Dungeoneer
 
-A top-down **2.5D cooperative dark dungeon crawler** built in **Unreal Engine 5.8 (C++20)**.
+A top-down 2.5D co-op roguelite hack-and-slash, built in Unreal Engine 5.8 with C++20.
 
-Players navigate pitch-black procedural multi-floor dungeons armed with a directional flashlight cone, sensory upgrades, 8-compass 2.5D sprite animation, and mirror-bouncing light mechanics while surviving proximity-exploding and elemental-throwing undead.
+You are the lamplighter of a village whose mornings are being stolen by a city sealed under the hill.
+You go down into the dark with the one lantern that can cut it, fight through reshuffling floors of
+restless dead, die, wake at the top of the stair, and go down again. A second player can join on the
+same screen at any time.
 
-> **Current Version:** `1.4.0` (2P Split-Screen Co-Op, P2P 2PC Trading, Meta-Ledger Save & Shipping Release)
+- **Design:** [docs/DESIGN.md](docs/DESIGN.md) — moves, skills, enemies, run structure, controls, known gaps
+- **Story:** [docs/STORY.md](docs/STORY.md) — world, characters, endings, in-game text
+- **Agent/dev rules:** [AGENTS.md](AGENTS.md) — build/test commands and the hard rules
+- **History:** [CHANGELOG.md](CHANGELOG.md); older plans and devlogs are in [docs/archive/](docs/archive/)
 
----
+![Floor 2 co-op](docs/screenshots/04_sporefens_gauntlet_coop.png)
 
-## Key Features
+## What's in it
 
-- **4-Axis / 8-Compass Locomotion & 2.5D Rigs (`DungeoneerMovementComponent`, `U25DAnimOrchestratorComponent`)**
-  - Quantized movement along 4 discrete axes (Cardinal + Diagonal NE–SW / NW–SE) yielding 8 compass headings (`N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`) with identical normalized speeds across cardinals and diagonals.
-  - 4×4 (`16`-cell) semi-pixelated 2.5D sprite sheets with normal maps (`_D`, `_N`, `_ORM`, `_E`) and distance-locked stride playback.
+- **Combat:** a 4-hit lantern combo, hold-to-charge heavy smash, dodge roll with a dash-strike follow-up,
+  perfect dodges, parries that stun attackers and bat thrown flasks back, and two skill slots filled by
+  scrolls found during a run (fire flask, grapple hook, blink-backstab, spin, radial flash, decoy).
+- **Darkness:** the lantern lights a cone; oil fuels it. Senses (dark vision, hearing ripples, scent trails)
+  are upgraded at sanctuary altars.
+- **Dungeon:** three seeded floors (Sunken Crypt, Spore Fens, Cinder Kiln) plus mirror-palace mazes with
+  false walls, vendors, sanctuaries, a vault and the Cinder Colossus boss.
+- **Enemies:** noise-hunting Exploders, Throwers that steal your speed with chrono gas, invisible Mirror
+  Stalkers.
+- **Living world:** water you wade through, flowers that bloom in light, moths and newts that scatter.
+- **Co-op:** a drop-in second player on the same screen (shared camera with a leash), revives, a shared stash, supply swaps; online sessions through the
+  OnlineSubsystem (Null by default).
 
-- **Darkness, Flashlight Beams & Sensory Progression (`UDungeoneerSensoryWorldSubsystem`, `USensoryPerkComponent`)**
-  - Pitch-black dungeons carved out by a directional flashlight/lantern cone and `UMirrorLightBounceComponent` beam reflections.
-  - Upgradable sensory perks (**Dark Vision**, **Acute Hearing** acoustic ripples, and **Scent/Thermal Trails**) driving `MPC_SensoryState` and atmospheric fog.
+Everything, including widgets and materials, is built from C++. Art is pixel-art sprite sheets on
+camera-facing planes, sliced into normal/ORM/emissive maps at import.
 
-- **Multi-Biome Procedural Dungeons & Mirror-Palace Mazes (`UDungeonGeneratorSubsystem`, `ADungeoneerTileMapInstancer`)**
-  - Procedural 12-node floor graphs (**10 core rooms + 2 secret Phantasm pockets** hidden behind illusory `AMirrorWall_Phantasm` seams) across *Sunken Crypt*, *Blighted Spore Fens*, *Cinder Kiln (EmberForge)*, and *Obsidian Mirror-Palace* branches.
-  - Pure C++ runtime HISM geometry bucketing (`FloorHISM`, `WetFloorHISM`, `WallHISM`, `DiagonalWedgeHISM`, `MirrorHISM`, `SconceHISM`, `BreakableHISM`, `ForegroundParallaxHISM`) with camera cutaway occlusion and PerInstanceCustomData atlas selection.
+## Requirements
 
-- **Zombie Ecosystem & Chrono-Leech Math (`UZombieSpatialSubsystem`, `AZombieExploder`, `AZombieFastThrower`)**
-  - Slow proximity-exploding zombies lured by loud environmental noise (shattering breakables, acoustic chimes, EmberFire traps).
-  - Fast elemental throwers launching Fire, Poison, and Slo-Mo Chrono Gas hazards obeying strict velocity conservation (player speed loss equals zombie speed gain).
+- Unreal Engine 5.8 (the scripts assume `D:\epuc\UE_5.8`)
+- Visual Studio 2022 or Build Tools with the C++ workload and a Windows 10/11 SDK
+- Python 3.10+ for the checks and asset scripts
 
-- **Living Ecosystem, Fauna & Spatial Acoustics (`UDungeonLightBudgetSubsystem`, `UDungeonWaterSubsystem`, `UDungeonFloraManagerComponent`, `UDungeonFaunaSubsystem`, `UDungeonAcousticSubsystem`)**
-  - 4-tier lighting hierarchy (`512` candidates: Tier 0 emissives, `32`-slot Tier 1 shader distance-field glows in `M_Dungeoneer_EcoInstanced`, `16` pooled unshadowed Tier 2 point lights, `2` Tier 3 shadow-casting world lights).
-  - Dungeon hydrology (`128 UU` O(1) surface grid, ankle-deep wading streams with `0.88x` speed modifier, wet footprints, `24` ceiling drips, weeping wall cascades, and geysers), interactive bioluminescent flora (`HISM_MagicalFlora`), and zero-allocation `FFaunaSoA` critters (`256` capacity).
-  - Surface-layered deterministic foley (`42` synthesized WAVs), game-thread-safe procedural voice streaming (`UDungeoneerPCMSoundWave`), and round-robin acoustic occlusion LPF (`64` tracked walkers, `22` pooled voices).
-
-- **Co-Op Split-Screen, Social & Atomic Trading (`UDungeoneerSocialSubsystem`, `UTradeManagerComponent`)**
-  - Local split-screen viewport management (`UDungeoneerGameViewportClient`) plus `OnlineSubsystem` parties, friend lists, chat, procedural gibberish vendor/NPC audio (`UGibberishSpeechComponent`), and two-phase commit player/vendor trading.
-
----
-
-## Architecture Principles
-
-- **C++20 Primary:** Zero gameplay logic in Blueprints (`AGENTS.md`); widgets, data assets, materials, and instanced dungeon meshes are constructed and driven from C++.
-- **Zero Hot-Path Allocations:** `Tick` and `TickComponent` avoid heap allocations, `GetAllActorsOfClass`, `GetFirstPlayerController`, and `FTimerHandle`, relying instead on pre-allocated entity pools, spatial subsystems, and fixed-step accumulators.
-- **Deterministic Provenance & Verification:** Every procedural system uses seeded streams paired with headless UE automation tests and static architectural invariant checks.
-
----
-
-## Controls
-
-| Action | Player 1 | Player 2 (Split-Screen) |
-| :--- | :--- | :--- |
-| **Move (8-Compass)** | `W A S D` | `Up Down Left Right` Arrows |
-| **Lantern Blade Combo** | `Left Mouse Button`, `Space`, or `J` | `Right Ctrl`, `Enter`, or `NumPad 0` |
-| **Charged Lantern Flare** | `R` | `Right Bracket` (`]`) or `NumPad 4` |
-| **Dodge Dash (i-frames)** | `Left Shift`, `K`, or `Right Mouse` | `Right Shift` or `NumPad 1` |
-| **Interact / Revive / Buy / Descend** | `F` or `E` | `Backslash` (`\`) or `NumPad 2` |
-| **Quick Oil / Antidote** | `Q` / `1` &bull; `C` / `2` | — |
-| **Co-Op P2P Swap / 2P Drop-In** | `T` (Swap) &bull; `F2` (Join P2) | `P` or `NumPad 3` |
-
----
-
-## Repository Layout
-
-```text
-├── Config/                  # UE 5.8 engine, game, and Enhanced Input configs
-├── Content/                 # Runtime art atlases, foley WAVs, AssetManifest.json, generated .uassets
-├── Shaders/Private/         # Custom HLSL 2.5D pixel-lit shader includes (PixelLit25D.ush)
-├── Source/
-│   ├── DarkDungeoneer.Target.cs
-│   ├── DarkDungeoneerEditor.Target.cs
-│   └── DarkDungeoneer/
-│       ├── Public/          # Core, AI, Audio, Dungeon, Ecosystem, Lighting, Rendering, Social, UI
-│       └── Private/         # Implementations + Source/DarkDungeoneer/Private/Tests/
-├── docs/                    # Design docs, devlog, tasks, and asset generation specs
-├── scripts/                 # Foley synthesizer & static invariant verification tools
-├── AGENTS.md                # Project coding & performance rules
-├── CHANGELOG.md             # Version history
-├── DarkDungeoneer.uproject  # Unreal Engine 5.8 project descriptor
-├── Launch-DarkDungeoneer.bat# Windows convenience launcher
-└── VERSION                  # Current semantic version
-```
-
----
-
-## Prerequisites
-
-- **Unreal Engine 5.8** (Windows x64 toolchain; `Launch-DarkDungeoneer.bat` expects UE at `D:\epuc\UE_5.8` by default)
-- **Visual Studio 2022 / Build Tools** with C++20 and Windows 10/11 SDK
-- **Python 3.10+** (for `scripts/verify_architecture_invariants.py`, `scripts/synthesize_ecosystem_foley.py`, and sprite-slicing utilities)
-
----
-
-## Building & Running
-
-### Quick Launch (Windows)
-
-Run the included launcher script from the repository root:
-
-```bat
-Launch-DarkDungeoneer.bat
-```
-
-It automatically launches `Binaries\Win64\DarkDungeoneer.exe` if cooked content exists, or falls back to running the project directly via `UnrealEditor.exe -game -Windowed -ResX=1280 -ResY=720`.
-
-### Build from Command Line (PowerShell)
-
-Compile both the Editor and Standalone Game targets via UnrealBuildTool:
+## Build and run
 
 ```powershell
-& "D:\epuc\UE_5.8\Engine\Build\BatchFiles\Build.bat" DarkDungeoneerEditor Win64 Development "$PWD\DarkDungeoneer.uproject" -WaitMutex -FromMsBuild
-& "D:\epuc\UE_5.8\Engine\Build\BatchFiles\Build.bat" DarkDungeoneer Win64 Development "$PWD\DarkDungeoneer.uproject" -WaitMutex -FromMsBuild
+& "D:\epuc\UE_5.8\Engine\Build\BatchFiles\Build.bat" DarkDungeoneerEditor Win64 Development "$PWD\DarkDungeoneer.uproject" -waitmutex -NoHotReload
 ```
 
----
+```powershell
+.\Launch-DarkDungeoneer.bat
+```
 
-## Testing & Verification
+The launcher runs a packaged build if one exists, otherwise the editor in `-game` mode.
+Useful flags: `-AutoPlaySolo` (skip the menu), `-AutoCoop`, `-StartFloor=2`, `-StartRoom=Combat`.
 
-### 1. Static Architecture, Math & Asset Provenance Audit
-
-Checks `Tick` allocation bans, forbidden engine symbols, compass/chrono-leech invariants, and SHA-256 provenance hashes in `Content/AssetManifest.json`:
+## Checks
 
 ```powershell
 python scripts/verify_architecture_invariants.py
 ```
 
-### 2. Unreal Headless Automation Tests
-
-Runs all `DarkDungeoneer.*` `IMPLEMENT_SIMPLE_AUTOMATION_TEST` suites cleanly without a window:
-
 ```powershell
-& "D:\epuc\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$PWD\DarkDungeoneer.uproject" -ExecCmds="Automation RunTests DarkDungeoneer; Quit" -unattended -nullrhi -nop4 -nosplash -stdout -FullStdOutLogOutput
+& "D:\epuc\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$PWD\DarkDungeoneer.uproject" -ExecCmds="Automation RunTests DarkDungeoneer; Quit" -unattended -nop4 -nosplash -NullRHI -stdout -FullStdOutLogOutput
 ```
 
----
+## Controls (player 1)
 
-## Further Reading
+WASD move · mouse aim · LMB attack (hold to smash) · Shift roll · L parry · Q / R skills · F interact ·
+1 / C oil and antidote · T swap supplies with partner · F2 add player 2. Gamepads work for both players.
+Full table in [docs/DESIGN.md](docs/DESIGN.md#controls-summary).
 
-- [AGENTS.md](AGENTS.md) — Core C++20 and performance architecture rules
-- [CHANGELOG.md](CHANGELOG.md) — Detailed release notes across versions
-- [docs/TASKS.md](docs/TASKS.md) & [docs/DEVLOG.md](docs/DEVLOG.md) — Development milestones and technical log
-- [docs/TO_GENERATE.md](docs/TO_GENERATE.md), [docs/TO_GENERATE_DUNGEON.md](docs/TO_GENERATE_DUNGEON.md), [docs/TO_GENERATE_ECOSYSTEM.md](docs/TO_GENERATE_ECOSYSTEM.md) — 4×4 sprite sheet specifications and asset pipelines
+## Layout
+
+```text
+Config/      engine, game and input settings
+Content/     sprite sheets, audio, generated .uassets, AssetManifest.json (asset hashes)
+Shaders/     PixelLit25D.ush
+Source/      game module (see AGENTS.md for the folder map) and automation tests
+docs/        design, story, art specs, screenshots, archive
+scripts/     static checks, foley and art synthesis
+.claude/     agent skills (sprite slicing, dungeon gen, AI, audio)
+```

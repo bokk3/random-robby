@@ -88,6 +88,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
 	UMaterialInterface* EnsureEcoInstancedMaterial();
 
+	/** M_Dungeoneer_Sprite (hit flash, glow, dithered fade). Null if it can't be built or loaded. */
+	UMaterialInterface* EnsureSpriteMaterial();
+
+	/** M_Dungeoneer_FxAdditive (unlit additive effects). Null if it can't be built or loaded. */
+	UMaterialInterface* EnsureFxAdditiveMaterial();
+
+	/** Additive effect material using the texture registered under MaskKey (white if missing). */
+	UMaterialInstanceDynamic* CreateFxMaterial(UObject* Outer, FName MaskKey, const FLinearColor& Color, float Intensity);
+
 	/** Ensures MPC_SensoryState exists and registers all sensory scalar/vector parameters. */
 	UFUNCTION(BlueprintCallable, Category = "Assets|Bootstrap")
 	UMaterialParameterCollection* EnsureSensoryMPC();
@@ -194,6 +203,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> EcoInstancedMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> SpriteMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> FxAdditiveMaterial;
 
 	bool bSensoryMPCNeedsResave = false;
 

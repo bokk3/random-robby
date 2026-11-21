@@ -15,7 +15,8 @@ enum class EDungeoneerLootDropKind : uint8
 {
 	GoldPouch  = 0,
 	Consumable = 1,
-	Relic      = 2
+	Relic      = 2,
+	SkillScroll = 3
 };
 
 USTRUCT(BlueprintType)
@@ -206,6 +207,12 @@ public:
 		EDungeoneerConsumableId InConsumableId,
 		EDungeoneerRelicId InRelicId);
 
+	/** Turns this pickup into a scroll that teaches (equips) a skill. */
+	void ConfigureSkillScroll(EDungeoneerSkillId InSkillId);
+
+	/** Collecting this pickup counts as finding the floor's secret (Ledger "secrets found"). */
+	void MarkAsSecretFind() noexcept { bMarksSecretFound = true; }
+
 	bool CollectByPlayer(ADungeoneerCharacter* Collector);
 
 	UFUNCTION(BlueprintPure, Category = "Loot")
@@ -241,9 +248,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
 	EDungeoneerRelicId RelicId = EDungeoneerRelicId::None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	EDungeoneerSkillId SkillId = EDungeoneerSkillId::None;
+
 private:
 	float HoverPhase = 0.0f;
 	float BaseZ = 44.0f;
 	bool bCollected = false;
+	bool bMarksSecretFound = false;
 	bool bVisualsApplied = false;
 };

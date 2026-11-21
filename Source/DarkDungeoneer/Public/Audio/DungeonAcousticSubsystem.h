@@ -66,7 +66,7 @@ class DARKDUNGEONEER_API UDungeonAcousticSubsystem : public UTickableWorldSubsys
 
 public:
 	static constexpr int32 MaxWalkers = 64;
-	static constexpr int32 NumOneShotVoices = 12;
+	static constexpr int32 NumOneShotVoices = 16;
 	static constexpr int32 NumSoundscapeLoops = 6;
 	static constexpr int32 MaxLocalPlayerLoops = 4; // 2 players x (WadeSlosh + FloraChime) or 4 slots
 	static constexpr int32 TotalVoicePoolSize = NumOneShotVoices + NumSoundscapeLoops + MaxLocalPlayerLoops;
@@ -125,12 +125,24 @@ public:
 		return (LoopIndex >= 0 && LoopIndex < NumSoundscapeLoops) ? SoundscapeCutoffHz[LoopIndex] : 18000.0f;
 	}
 
+	/**
+	 * Plays a combat sound (Content/Audio/Foley/Combat, keyed by file name) at a location, with a small
+	 * pitch spread so repeated hits don't sound identical. Fired by gameplay events, never by timers.
+	 */
+	void PlayCombatCue(FName CueKey, const FVector& WorldLocation, float Volume = 1.0f, float PitchSpread = 0.06f);
+
+	/** Static helper: plays the cue if World has an acoustic subsystem (headless tests may not). */
+	static void PlayCombatCueAt(const UWorld* World, FName CueKey, const FVector& WorldLocation, float Volume = 1.0f, float PitchSpread = 0.06f);
+
+	int32 GetCombatCueCount() const noexcept { return static_cast<int32>(CombatCueCounter); }
+
 private:
 	USoundWave* ResolveFoleyWave(FName CueKey) const noexcept;
 	void PlayOneShotWave(FName CueKey, const FVector& WorldLocation, float Volume, float Pitch, float LowPassHz);
 	float MeasurePointOcclusion01(const FVector& ListenerPos, const FVector& SourcePos) const noexcept;
 	static FName GetStepBankKey(EDungeonSurfaceKind Surface, uint32 VariantIndex) noexcept;
 
+	uint32 CombatCueCounter = 0;
 	TStaticArray<FAcousticWalkerEntry, MaxWalkers> Walkers;
 	int32 RegisteredWalkerCount = 0;
 

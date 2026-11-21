@@ -177,8 +177,8 @@ void UDungeoneerRunSummaryWidget::RefreshDisplayTexts()
 	if (Txt_BannerTitle)
 	{
 		Txt_BannerTitle->SetText(FText::FromString(CachedPayload.bVictory
-			? TEXT("CRYPT GUARDIAN SLAIN  •  EXPEDITION CLEARED")
-			: TEXT("EXPEDITION FALLEN IN THE DARK")));
+			? TEXT("THE KILN-MOTHER COOLS  •  THE VAULT LIES OPEN")
+			: TEXT("THE LANTERN GUTTERS  •  YOU WAKE AT THE STAIR-HEAD")));
 		Txt_BannerTitle->SetColorAndOpacity(FSlateColor(CachedPayload.bVictory
 			? FLinearColor(0.98f, 0.80f, 0.28f, 1.0f)
 			: FLinearColor(0.94f, 0.34f, 0.28f, 1.0f)));

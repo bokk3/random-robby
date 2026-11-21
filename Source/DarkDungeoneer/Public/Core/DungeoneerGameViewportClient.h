@@ -5,8 +5,8 @@
 #include "DungeoneerGameViewportClient.generated.h"
 
 /**
- * Custom GameViewportClient supporting 2-4 player Local Split-Screen alongside Online Multiplayer.
- * Configures split-screen layouts cleanly and routes per-ULocalPlayer viewport separation.
+ * Game viewport client for same-screen local co-op: up to MaxLocalSplitscreenPlayers local players,
+ * all seen through one full-screen view (the party camera). The screen is never split.
  */
 UCLASS()
 class DARKDUNGEONEER_API UDungeoneerGameViewportClient : public UGameViewportClient

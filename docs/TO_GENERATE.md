@@ -1,4 +1,4 @@
-# TO_GENERATE.md — 2.5D Dark Dungeoneer Asset Production Matrix
+# Art to generate
 
 ## Global Technical Specifications
 - **Canvas & Grid**: 1024x1024 px (4x4 grid = 256x256 px per cell) or 2048x2048 px (512x512 px per cell).
@@ -36,6 +36,188 @@ Columns (alternating stride legs per row):
 - Col 3: Full Right Step — opposite of Col 1 (right leg forward, left leg behind, torso dipped -1 to -2 px).
 Keep bottom-center foot baseline locked at consistent Y across all 16 cells and preserve crisp key emissives (#FFCC00 lantern, #FF5500 magma, #00FFFF flask).
 ```
+
+## Next batch: copy-ready prompts (v1.6–v1.8)
+
+Paste each prompt into the image generator as-is, one sheet per prompt. Every sheet uses the global format
+above: 1024×1024, a 4×4 grid of 256×256 cells with no borders, flat magenta `#FF00FF` background, no
+anti-aliasing on silhouettes, the same pixel density as the existing walk sheets, and the feet of every
+figure on the same baseline about 20 px above the bottom of its cell. Keep emissive colours pure: lantern
+flame `#FFCC00`, magma and kiln heat `#FF5500`, flask liquid `#00FFFF`. Characters must match
+[STORY.md](STORY.md).
+
+Save each result as `Content/Art/Raw/<File name>.png`, then slice it (this writes the `_D`, `_N`, `_ORM`,
+`_E` maps and updates the asset manifest):
+
+```powershell
+python .claude/skills/sprite-sheet-25d-cutter/scripts/slice_normal_rig.py --mode rig --input "Content/Art/Raw/<File name>.png" --output "Content/Art/Rigs/<Folder>"
+```
+
+Walk sheets also take `--validate-stride --repair-stride`. Attack and NPC sheets don't (their columns aren't a
+stride). The code picks a sheet up once it's in the sheet registry (plan step M6); until then the game uses
+the walk frames plus code-driven poses.
+
+"Hit frame" is the column where the blow lands. Gameplay times the damage to it, so draw the impact there.
+
+### Priority 1: the hero's moves
+
+**Done (2026-11-21):** sheets 1-5 came from Gemini (originals in `Content/Art/Raw/Gemini/`), were cleaned to exact
+#FF00FF, halved to 1024 px and sliced into `Content/Art/Rigs/DungeoneerHeroMoves/<Set>/`. The game loads them as
+`HeroCombo`, `HeroHeavy`, `HeroEvade`, `HeroSkills`, `HeroHurtIdle` cells and picks frames in
+`ADungeoneerCharacter::ResolvePoseFrame`. Slice future move sheets into their own folder too: the slicer writes
+`AtlasMetadata.json` and `rig_sockets.json` into its output folder and would overwrite the walk sheet's.
+
+#### 1. `Rig_DungeoneerHero_Combo` (folder `DungeoneerHero`)
+
+| Row | Facing | Col 0 | Col 1 (hit frame) | Col 2 | Col 3 |
+| --- | --- | --- | --- | --- | --- |
+| 0 | South | wind-up, lantern drawn back over right shoulder | swing mid, lantern at full arm in front, bright arc trail | follow-through low left, trail fading | recover to guard |
+| 1 | North | same, seen from behind | same | same | same |
+| 2 | East | same, right profile | same | same | same |
+| 3 | West | same, left profile | same | same | same |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing on silhouettes. Semi-pixelated dark gothic 2.5D pixel art, same style and scale as a top-down roguelite. Character: a hooded, cloaked lamplighter in rain-worn climbing leathers with steel bracers, no sword; their weapon is a brass chapel lantern with edged glass panes on a short chain, flame pure #FFCC00. Animation: a fast lantern melee swing, 4 frames per row. Col 0: wind-up, lantern drawn back over the right shoulder, body coiled. Col 1: swing at full extension in front of the body, the lantern leaving a thick curved #FFCC00 light trail (this is the impact frame). Col 2: follow-through low across the body, trail thinning. Col 3: recover to a ready stance. Rows: Row 0 facing the camera (south), Row 1 facing away (north), Row 2 right side profile (east), Row 3 left side profile (west). Feet on the same baseline in every cell, character fills about 70% of the cell height, identical proportions and palette across all cells.
+```
+
+#### 2. `Rig_DungeoneerHero_Heavy` (folder `DungeoneerHero`)
+
+| Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
+| --- | --- | --- | --- |
+| crouched, lantern held low and glowing hot | lantern raised high overhead in both hands | slammed into the floor, shockwave of light and stone chips | straightening up, lantern smoking |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Same hooded, cloaked lamplighter with steel bracers and a brass chapel lantern on a short chain (flame #FFCC00). Animation: a charged overhead lantern smash, 4 frames per row. Col 0: crouched charge, lantern held low near the floor, flame swelling brighter. Col 1: lantern raised high overhead with both hands, cloak lifting. Col 2: lantern slammed into the ground in front, a flat ring of #FFCC00 light and flying stone chips at floor level (impact frame). Col 3: straightening up, thin smoke curling from the lantern. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Feet on a shared baseline, identical proportions and palette in every cell.
+```
+
+#### 3. `Rig_DungeoneerHero_Evade` (folder `DungeoneerHero`)
+
+| Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
+| --- | --- | --- | --- |
+| roll start, diving low | tucked mid-roll, cloak wrapped, lantern hugged | dash lunge, lantern thrust forward like a spear | parry brace, lantern shutter snapped open toward the enemy |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Same hooded, cloaked lamplighter with steel bracers and a brass chapel lantern (flame #FFCC00). 4 frames per row. Col 0: start of a dodge roll, diving low and forward. Col 1: tucked mid-roll, cloak wrapped tight, lantern hugged to the chest, slight motion smear. Col 2: a long forward lunge, lantern thrust out at arm's length with a straight streak of #FFCC00 light behind it (impact frame). Col 3: parry brace, feet planted, lantern held up in front with its shutter snapped open, a flat burst of light toward the attacker. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, identical proportions and palette.
+```
+
+#### 4. `Rig_DungeoneerHero_Skills` (folder `DungeoneerHero`)
+
+| Col 0 | Col 1 | Col 2 | Col 3 |
+| --- | --- | --- | --- |
+| overhand throw of a small fire flask (Bottled Kiln) | chain cast forward, hook flying (Lamplighter's Hook) | lantern spun in a full circle on its chain, motion blur (Censer's Wheel) | lantern held high, flaring white-gold (Borrowed Noon) |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Same hooded, cloaked lamplighter with steel bracers and brass chapel lantern (flame #FFCC00). Each column is a different spell-like action, one pose each. Col 0: overhand throw, a small glass flask of #FF5500 fire leaving the hand. Col 1: casting a chain forward from the lantern, an iron hook at the end flying away. Col 2: spinning the lantern on its chain in a full circle around the body, a ring-shaped #FFCC00 motion blur. Col 3: lantern held high overhead, flaring so brightly the flame turns near-white with #FFCC00 rays. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, identical proportions and palette.
+```
+
+#### 5. `Rig_DungeoneerHero_HurtIdle` (folder `DungeoneerHero`)
+
+| Col 0 | Col 1 | Col 2 | Col 3 |
+| --- | --- | --- | --- |
+| idle breath in | idle breath out | hit flinch, recoiling back | downed, kneeling with lantern guttering |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Same hooded, cloaked lamplighter with steel bracers and brass chapel lantern (flame #FFCC00). Col 0: standing idle, chest slightly raised (breathing in). Col 1: standing idle, shoulders slightly lowered (breathing out), lantern swaying a little. Col 2: hit flinch, upper body recoiling backward, head turned away, lantern flame flickering. Col 3: downed on one knee, one hand on the floor, lantern on the ground beside them with a small weak flame. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, identical proportions and palette.
+```
+
+### Priority 2: enemies that telegraph their attacks (needed for M3)
+
+#### 6. `Rig_ZombieExploder_Attack` (folder `ZombieExploder`), the Tapper
+
+| Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
+| --- | --- | --- | --- |
+| wind-up: rears back, belly glowing brighter | shoulder lunge forward, shackle chains swinging | fuse lit: belly swollen, cracks glowing white | burst: body splits in a ring of magma and black smoke |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: a "Tapper", a dead miner swollen with firedamp gas, bloated grey-green body, broken iron shackles on wrists and ankles, a glowing cracked magma belly in #FF5500. Col 0: rearing back for a lunge, belly glowing brighter, mouth open. Col 1: heavy shoulder lunge forward, chains swinging (impact frame). Col 2: fuse lit, belly swollen to bursting, cracks across the skin glowing white-orange. Col 3: exploding, the body splitting into a ring of #FF5500 magma droplets and black smoke, broken shackles flying. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, same scale as a walking zombie that fills about 70% of the cell height.
+```
+
+#### 7. `Rig_ZombieFastThrower_Attack` (folder `ZombieFastThrower`), the Runner
+
+| Col 0 | Col 1 (throw release) | Col 2 | Col 3 (hit frame) |
+| --- | --- | --- | --- |
+| flask wind-up, arm cocked back | flask thrown overhand | knife draw, crouched | knife slash across, arc trail |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: a "Runner", a lean, fast dead glassworks courier in a tattered hood and apron, belt of glass flasks, liquid in the flasks pure cyan #00FFFF (tinted in-game). Col 0: winding up a throw, arm cocked far back with a flask, body twisted. Col 1: overhand throw release, flask leaving the hand (release frame). Col 2: crouched, drawing a short glass-cutter's knife. Col 3: fast knife slash across the body with a thin pale arc trail (impact frame). Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, same scale as the hero.
+```
+
+#### 8. `Rig_ZombieMirrorStalker_Attack` (folder `ZombieMirrorStalker`), the Slip
+
+| Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
+| --- | --- | --- | --- |
+| crouched, reflection shimmering | lunge forward, arms reaching | bite/grab at full stretch | fading: body breaking into mirror shards |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: a "Slip", a person's reflection that stayed behind in a mirror: a pale silvered humanoid with a glassy, slightly see-through surface, cracked like a mirror, hollow bright eyes. Col 0: crouched low, surface shimmering. Col 1: lunging forward, long arms reaching out. Col 2: at full stretch, jaws and hands snapping shut (impact frame). Col 3: fading away, the body breaking into falling mirror shards. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline, same scale as the hero.
+```
+
+#### 9. `Rig_BossGuardian_Attack` (folder `BossGuardian`), the Cinder Colossus
+
+| Row | Col 0 | Col 1 | Col 2 (hit frame) | Col 3 |
+| --- | --- | --- | --- | --- |
+| 0 slam | arms raised | arms high, heart blazing | fists slammed down, ring of fire | recovery, slag dripping |
+| 1 sweep | arm drawn back to one side | sweeping across | arm at full sweep, fire trail | recovery |
+| 2 mortar | chest vents open | glob of molten glass launched upward | second glob | vents closing |
+| 3 charge / death | head down, charging | mid-charge | collapsing into slag | heart bead left on the floor |
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art, front three-quarter view (facing the camera) in every cell. Character: the Cinder Colossus, a huge walking glass kiln: firebrick and black slag body, slumped melted shapes of old workers and tools fused into it, a glowing heart in the chest in #FF5500. Row 0 (ground slam): arms raised; arms high with the heart blazing; fists slammed into the ground with a flat ring of fire (impact); recovering with slag dripping. Row 1 (sweep): one arm drawn back to the side; sweeping across; arm at the end of the sweep with a curved fire trail (impact); recovering. Row 2 (mortar): chest vents opening; a glob of molten glass launched upward; a second glob launched; vents closing. Row 3: charging head-down; mid-charge; collapsing into a heap of slag; only a small glowing glass bead left on the floor. Feet on a shared baseline, the Colossus fills about 90% of the cell height.
+```
+
+### Priority 3: new enemy, NPCs, doors and effects
+
+#### 10. `Rig_Glazier_Walk` and `Rig_Glazier_Attack` (folder `Glazier`), new Mirror Palace enemy
+
+Walk sheet: the standard 4×4 walk layout. Attack sheet: Col 0 shield raised (block), Col 1 shield bash wind-up, Col 2 bash (hit frame), Col 3 shield shattered/death.
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Character: a "Glazier", a dead Mirror Palace glass-setter in a heavy leather apron and soot mask, carrying a large rectangular pane of mirror glass in an iron frame as a tower shield. Standard 4-frame walk cycle per row: Col 0 contact/idle, Col 1 left step, Col 2 passing, Col 3 right step. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). The mirror shield is always held in front. Shared foot baseline, same scale as the hero.
+```
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art. Same "Glazier": dead glass-setter in a leather apron and soot mask with a large iron-framed mirror pane used as a tower shield. Col 0: braced behind the raised mirror shield, blocking. Col 1: pulling the shield back to bash. Col 2: slamming the shield forward, a bright flash off the mirror (impact frame). Col 3: the mirror shield shattered into shards and the Glazier collapsing. Rows: Row 0 south (facing camera), Row 1 north (back), Row 2 east (right profile), Row 3 west (left profile). Shared foot baseline.
+```
+
+#### 11. `Rig_NPC_Tamsin` (folder `NPC_Tamsin`), Keeper of the Brazier
+
+Rows: 0 idle in the coals (4 frames), 1 talking (4 frames), 2 handing something over (4 frames), 3 fading back into the fire (4 frames). She always faces the camera.
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art, facing the camera in every cell. Character: Tamsin Vell, Keeper of the Brazier, an older woman made of ember and smoke sitting in the coals of a stone brazier, practical and dry, shawl and rolled sleeves, outlines glowing #FF5500 and #FFCC00. Row 0: idle, 4 frames of gentle flame flicker. Row 1: talking, 4 frames of small hand gestures and mouth movement. Row 2: leaning forward and handing over a small glowing object, 4 frames. Row 3: sinking back and fading into the fire, 4 frames. The brazier stays in the same place in every cell.
+```
+
+#### 12. `Rig_NPC_Nibbot` (folder `NPC_Nibbot`), the merchant in the mirror
+
+Rows: 0 idle (4), 1 talking (4), 2 presenting wares (4), 3 coin flip after a sale (4). Facing the camera.
+
+```text
+Strict 4x4 grid sprite sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art, facing the camera in every cell. Character: Nibbot, a cheerful merchant who is only a reflection: he stands inside a tall ornate gilt mirror frame, his whole figure mirror-reversed and silvery, with a pack of curiosities and a lantern-lit coat lined with trinkets. Row 0: idle, 4 frames of shifting his weight. Row 1: talking, 4 frames of animated gestures. Row 2: opening his coat to show wares, 4 frames. Row 3: flipping a gold coin, 4 frames. The mirror frame stays fixed in every cell.
+```
+
+#### 13. `PROP_Shutter_Door_4x4` (dungeon sheet, `--mode dungeon`)
+
+Rows: 0 closed (4 variants), 1 raising (4 frames), 2 open (4 variants), 3 cracked/broken (4 variants).
+
+```text
+Strict 4x4 grid prop sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic 2.5D pixel art, three-quarter top-down view. Subject: a glass shutter gate that seals a dungeon doorway during a fight: a tall iron frame filled with thick smoky glass panes and an iron lattice, faint #FFCC00 light glinting on the glass. Row 0: closed gate, 4 slight variations. Row 1: 4 frames of the gate sliding up into the archway. Row 2: open archway with the gate tucked above, 4 variations. Row 3: cracked and shattered gate, 4 variations. Same doorway width and base line in every cell.
+```
+
+#### 14. `VFX_Combat_4x4` (eco sheet, `--mode eco`)
+
+Rows: 0 flask tumble and shatter, 1 hit sparks (4), 2 gas puffs (4, neutral grey for in-game tint), 3 dust puffs and blast ring (4).
+
+```text
+Strict 4x4 grid effects sheet, 16 equal 256x256 cells, no borders, flat solid magenta (#FF00FF) background, no anti-aliasing. Semi-pixelated dark gothic pixel art effects, each centred in its cell. Row 0: a small glass flask tumbling through the air in 2 frames, then shattering into a splash in 2 frames (liquid pure cyan #00FFFF). Row 1: 4 frames of an impact spark burst, white core with #FFCC00 sparks flying outward. Row 2: 4 frames of a soft rolling gas puff, neutral light grey so it can be tinted. Row 3: 2 frames of a small dust puff at floor level, then 2 frames of a flat expanding blast ring in #FF5500 with black smoke.
+```
+
+### Older requests
+
+The Phase 0–5 lists above are the original wishlist. The batch here replaces their character and VFX rows
+(`CH_Player_Action_Socket_4x4`, `CH_Zombie_Exploder_Detonate_4x4`, `CH_Zombie_FastThrower_Cardinal_4x4`,
+`VFX_Projectiles_Hazards_4x4`). `CH_Player_Diagonal_Walk_4x4` is still wanted.
+
+---
 
 ## Phase 0: Baseline Assets (Completed & Ready for Slicing)
 - [x] `CH_Player_Cardinal_Walk_4x4.png`: Hooded dungeoneer with lantern (Row 1: S, Row 2: N, Row 3: E, Row 4: W).
@@ -105,3 +287,8 @@ Keep bottom-center foot baseline locked at consistent Y across all 16 cells and 
 - [ ] `AUD_Phoneme_Bank_24x.wav`: 24 short (60ms–110ms) dry vocal syllable grains (`ba, da, ka, mu, ri, to,esh, vu...`) for `MS_GibberishSynth`.
 - [ ] `AUD_Hero_Vendor_Lines`: 6 generated key voice lines (Vendor greeting, rare item reaction, Resting Ground whisper).
 - [ ] `AUD_Timed_Foley`: Stone footsteps (4 surfaces), Exploder belly-swell heartbeat ticks, glass shatter, gas hiss, time-stretch pitch sweep.
+---
+
+## Hero combat sheets
+
+Superseded by "Next batch: copy-ready prompts" at the top of this file (sheets 1–5).

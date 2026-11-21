@@ -7,7 +7,97 @@ The project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and [Con
 
 ## [Unreleased]
 
-- Future post-`v1.4.0` updates: full Windows `RunUAT BuildCookRun` distribution archive and dedicated server soak tooling.
+Work toward 1.6.0 (plan milestones M0, M1 and most of M2).
+
+### Added (enemies that fight back, M3)
+- Shared telegraphed melee for every zombie (`FZombieMeleeAttackDef`, `AZombieBase::TryStartMeleeAttack`):
+  wind-up with a closing floor ring, red glow and a growl (`Combat_Windup_0`), then a lunge and one hit test,
+  then a recovery opening. Strikes go through the hero's damage path, so parry and perfect dodge work on them.
+- Attack tokens in `UZombieSpatialSubsystem` (two attackers per hero at a time), separation steering, and
+  poise (hits cancel small enemies' wind-ups; stuns cancel any).
+- Exploder: two shoulder-barges before the fuse (or the fuse early when badly hurt).
+- Thrower: the flask is a visible projectile with a wind-up and a landing marker; parrying it in flight sends
+  it back. New knife slash at close range.
+- Mirror Stalker: the per-tick drain is now a parryable lunge-bite.
+- Colossus: the slam shows its full area as a closing floor ring, with a warning growl.
+- Elites (seeded, about 1 in 6) and per-floor health/damage scaling.
+- `AI.EnemyTelegraphParryAndTokens` and `AI.ThrowerFlaskFlightDeflect` automation tests.
+
+### Added (hero animation, M6)
+- Five hero move sheets (combo, heavy, evade, skills, hurt/idle), generated with Gemini, cleaned and sliced
+  into `Content/Art/Rigs/DungeoneerHeroMoves/`. The hero now shows real frames for every move: combo wind-up,
+  swing, follow-through and recover; heavy charge, raise and slam (also the combo finisher); tucked dodge roll;
+  dash lunge; parry brace; flask throw; hook cast; lantern spin; flare; flinch; downed; and an idle breath.
+  `ADungeoneerCharacter::ResolvePoseFrame` picks the sheet and frame; a missing sheet falls back to walk frames.
+- `Rendering.HeroMoveSheetFrames` automation test.
+
+### Added (game feel, M2)
+- `M_Dungeoneer_Sprite`: the character material, built in C++ (`FDungeoneerSpriteMaterialFactory`). Hit
+  flash, warm glow (Exploder fuse) and a dithered fade-out, all driven by custom primitive data
+  (`DungeoneerSpriteCPD`), so they survive walk-frame material swaps. Unset slots mean "normal".
+- `M_Dungeoneer_FxAdditive` and `UDungeoneerFxPoolSubsystem`: 96 pooled additive quads for hit sparks, death
+  bursts, blast rings, flare and heavy-smash rings, perfect-dodge rings and dodge dust. No Niagara assets needed.
+- The slash arc and skill beam glow (additive) instead of reading as dark smears.
+- Hit-stop on struck zombies (40-110 ms, longer for heavy hits and parries), stacking with time slow.
+- Screen shake on the party camera from hero "trauma" (blasts, heavy smash, flare, taking damage).
+- Taking damage: red sprite flash, red screen wash, a damage number and a camera kick.
+- Damage numbers pop in large and settle; crits stay bigger.
+- Combat sound bank: 21 procedural WAVs (`scripts/synthesize_combat_foley.py`) for swings, hits, heavy
+  smash, parry, perfect dodge, hero hurt, zombie death, fuse ticks, blasts, flask shatter, gas and one
+  stinger per skill, all fired from gameplay events.
+- Slips dither in and out of the light instead of shrinking; afterimages and Slipped Self look like
+  silvery reflections.
+- Full-resolution rendering (`r.ScreenPercentage 100`, was 75) so pixel art stays crisp.
+- `Combat.ImpactFeedback` automation test.
+
+### Changed
+- Local co-op shares one screen. `ADungeoneerPartyCamera` frames every local hero, zooms out as they spread
+  (arm 1320 to 1750 UU) and leashes them to 820 UU apart; a downed hero is the anchor. Split-screen is gone.
+- Player 2's card sits on player 1's HUD (top-right). Popups from both heroes draw on the one screen.
+- Mouse aim now points at the spot under the cursor instead of using the screen centre.
+- Player 2's keyboard keys are read from player 1's controller, where UE delivers them.
+- A hero who bleeds out with a partner standing gets up beside the partner, not at the entry room.
+- Slash and spin effects use a crescent texture instead of a flat rectangle.
+- Slipped Self steps the hero 160 UU back out of the copy so the copy is visible.
+- HUD: removed the move/aim, slow-ratio and sense-tier debug lines; slow and senses only show when they apply.
+- Relic names, boss kill text and run-summary banners use the STORY.md names.
+- Menu: "BRING A SECOND LANTERN" replaces the split-screen entry. `-AutoCoop` replaces `-AutoSplitScreen`.
+
+### Fixed
+- Starting or retrying a run now resets gold, relics, consumables, skills and senses.
+- Secret pockets no longer spawn a second vault (and on floor 3 a second Colossus); they hold a Stalker,
+  a relic and a scroll, and picking up the relic counts as a secret found.
+- Vaults no longer give out Last Sunset (the Colossus relic) on floor 1.
+- The Ledger bestiary records the actual enemy type killed.
+
+### Added
+- `-CaptureMove=<move>` for screenshot runs, and the `Coop.SharedCameraFramingAndLeash` automation test.
+- Copy-ready image-generator prompts for 14 new sprite sheets in `docs/TO_GENERATE.md`.
+
+## [1.5.0] - 2026-11-20
+
+The game now plays as a run-based hack-and-slash, and the project docs were rewritten in plain language.
+
+### Added
+- **Combat kit.** The combo is now four hits with a stunning finisher, and presses during a swing are buffered.
+  Hold attack to charge a heavy smash. Attack out of a roll for a piercing dash strike. Getting hit by a zombie
+  mid-roll is a perfect dodge (slows nearby zombies, refunds the roll, empowers the next hit). New parry
+  (L / V / MMB / B): stuns melee attackers and bats Thrower flasks back at them.
+- **Skills.** `UDungeoneerSkillComponent` with two slots and six skills: Bottled Kiln (fire flask), Lamplighter's
+  Hook (grapple), Their Own Shadow (blink-backstab), Censer's Wheel (spin), Borrowed Noon (the old charged flare)
+  and Slipped Self (noise decoy). Skill scrolls drop in about a third of combat rooms and in every secret pocket.
+- **Enemy status effects.** Zombies can be stunned, burned and time-slowed. The boss takes 25% of stun durations.
+- **Gamepad support** for both players, plus a cleaner polled-input path.
+- **HUD** shows equipped skills, cooldowns and the empowered-hit marker.
+- **Story and world bible** in `docs/STORY.md`; game design in `docs/DESIGN.md`.
+- Automation spec `DarkDungeoneer.Combat.HackAndSlashKit`.
+
+### Changed
+- `R` is now skill slot 2 (Borrowed Noon by default) and `Q` skill slot 1; oil moved to `1`.
+- Player-facing strings no longer use engineering terms ("P2P", "2PC", "terminal vault").
+- Agent setup moved from `.agents/` to `AGENTS.md` (+ `CLAUDE.md`) and `.claude/skills/`. The old rule files were
+  merged into `AGENTS.md` and trimmed to what the code actually does.
+- Completed plans, the task tracker and the devlog moved to `docs/archive/`.
 
 ---
 

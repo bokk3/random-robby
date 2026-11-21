@@ -69,6 +69,15 @@ public:
 		return (Index >= 0 && Index < NumTrackedPlayers) ? TrackedPlayers[Index].Get() : nullptr;
 	}
 
+	/**
+	 * Attack tokens: at most MaxAttackersPerHero enemies may be winding up or striking at one hero at a
+	 * time, so a crowd takes turns instead of hitting all at once. Returns false when the hero is full.
+	 */
+	bool TryAcquireAttackToken(const ADungeoneerCharacter* Hero) noexcept;
+	void ReleaseAttackToken(const ADungeoneerCharacter* Hero) noexcept;
+	int32 GetAttackTokensInUse(const ADungeoneerCharacter* Hero) const noexcept;
+	static constexpr int32 MaxAttackersPerHero = 2;
+
 	/** Co-Op helpers over tracked players (zero heap allocations). */
 	int32 GetAliveOtherPlayerCount(const ADungeoneerCharacter* ExcludePlayer) const noexcept;
 	ADungeoneerCharacter* FindNearestDownedAlly(const ADungeoneerCharacter* QueryPlayer, float MaxRangeUU) const noexcept;
@@ -81,7 +90,7 @@ public:
 		return (Index >= 0 && Index < NumTrackedZombies) ? TrackedZombies[Index].Get() : nullptr;
 	}
 
-	/** Zero-allocation melee cone damage & knockback across tracked zombies. Returns number of hits landed. */
+	/** Melee cone damage, knockback and optional stun across tracked zombies. Returns hits landed. */
 	int32 ApplyMeleeArcDamage(
 		const FVector& Origin,
 		const FVector& ForwardDirXY,
@@ -89,7 +98,8 @@ public:
 		float MinCosHalfAngle,
 		float DamageAmount,
 		AActor* InstigatorActor,
-		float KnockbackImpulseUU = 340.0f) noexcept;
+		float KnockbackImpulseUU = 340.0f,
+		float StunSeconds = 0.0f) noexcept;
 
 	/** Rebuilds the fixed 2D spatial hash grid in O(N) with zero heap allocations. */
 	void RefreshSpatialGrid() noexcept;
@@ -130,6 +140,7 @@ private:
 
 	TUniquePtr<FSpatialGridBuffer> SpatialGrid;
 	TStaticArray<TWeakObjectPtr<ADungeoneerCharacter>, MaxTrackedPlayers> TrackedPlayers;
+	TStaticArray<int32, MaxTrackedPlayers> PlayerAttackTokens;
 	int32 NumTrackedPlayers = 0;
 
 	TStaticArray<TWeakObjectPtr<AZombieBase>, MaxTrackedZombies> TrackedZombies;

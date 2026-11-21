@@ -43,6 +43,23 @@ enum class EDungeoneerConsumableId : uint8
 	AntidoteDraught = 2 UMETA(DisplayName = "Antidote Draught")
 };
 
+/**
+ * Active skills the hero can carry in one of two slots. Skills are found during a run
+ * (scrolls in combat rooms and secret pockets) and swap into a slot when picked up.
+ */
+UENUM(BlueprintType)
+enum class EDungeoneerSkillId : uint8
+{
+	None            = 0 UMETA(DisplayName = "Empty"),
+	EmberFlask      = 1 UMETA(DisplayName = "Bottled Kiln"),
+	GrappleChain    = 2 UMETA(DisplayName = "Lamplighter's Hook"),
+	ShadeStep       = 3 UMETA(DisplayName = "Their Own Shadow"),
+	WhirlingLantern = 4 UMETA(DisplayName = "Censer's Wheel"),
+	SolarFlare      = 5 UMETA(DisplayName = "Borrowed Noon"),
+	MirrorDecoy     = 6 UMETA(DisplayName = "Slipped Self"),
+	Count           UMETA(Hidden)
+};
+
 UENUM(BlueprintType)
 enum class EDungeoneerFloatingTextKind : uint8
 {

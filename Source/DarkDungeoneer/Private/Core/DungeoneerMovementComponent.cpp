@@ -101,7 +101,7 @@ float UDungeoneerMovementComponent::GetMaxSpeed() const
 		}
 	}
 	// Chrono-Leech conservation law: V_player = V_base * (1.0f - S) * WadingMult
-	return BaseSpeed * FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * WadingMult;
+	return BaseSpeed * FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * WadingMult * ActionSpeedScalar;
 }
 
 float UDungeoneerMovementComponent::GetStepPhaseNormalized() const noexcept

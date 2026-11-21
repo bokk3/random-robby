@@ -1,6 +1,7 @@
 #include "UI/DungeoneerPlayerHUDWidget.h"
 #include "AI/BossGuardianActor.h"
 #include "AI/ZombieSpatialSubsystem.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "Core/DungeoneerCharacter.h"
 #include "Core/DungeoneerGameMode.h"
 #include "Core/DungeoneerGameState.h"
@@ -19,6 +20,7 @@
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -233,9 +235,10 @@ public:
 		bool bParentEnabled) const override
 	{
 		const UDungeoneerPlayerHUDWidget* HUD = OwnerHUD.Get();
-		const ADungeoneerCharacter* Character = HUD ? HUD->GetObservedCharacter() : nullptr;
-		const APlayerController* PC = Character ? Character->GetController<APlayerController>() : nullptr;
-		if (!HUD || !Character || !PC)
+		const APlayerController* PC = HUD ? HUD->GetOwningPlayer() : nullptr;
+		const UWorld* World = PC ? PC->GetWorld() : nullptr;
+		const UZombieSpatialSubsystem* Spatial = World ? World->GetSubsystem<UZombieSpatialSubsystem>() : nullptr;
+		if (!HUD || !PC)
 		{
 			return LayerId;
 		}
@@ -243,6 +246,15 @@ public:
 		const FSlateFontInfo FontBold = FCoreStyle::GetDefaultFontStyle("Bold", 13);
 		const float DPIScale = FMath::Max(AllottedGeometry.Scale, 0.5f);
 
+		// Every hero shares this one screen, so draw all their popups, not only the observed hero's.
+		const int32 HeroCount = Spatial ? Spatial->GetTrackedPlayerCount() : 0;
+		for (int32 HeroIdx = 0; HeroIdx < FMath::Max(HeroCount, 1); ++HeroIdx)
+		{
+		const ADungeoneerCharacter* Character = Spatial ? Spatial->GetTrackedPlayerAt(HeroIdx) : HUD->GetObservedCharacter();
+		if (!Character)
+		{
+			continue;
+		}
 		for (int32 i = 0; i < ADungeoneerCharacter::MaxFloatingPopups; ++i)
 		{
 			const FDungeoneerFloatingPopup& Pop = Character->GetFloatingPopupAt(i);
@@ -268,15 +280,22 @@ public:
 			default: break;
 			}
 
+			// Pop in big and settle: numbers read as impacts, not labels. Crits stay larger.
+			const bool bCrit = Pop.Kind == EDungeoneerFloatingTextKind::CritDamage;
+			const float PopT = FMath::Clamp(Pop.AgeSeconds / 0.12f, 0.0f, 1.0f);
+			const float SizeScale = (bCrit ? 1.35f : 1.0f) * (1.0f + 0.7f * (1.0f - PopT) * (1.0f - PopT));
+			FSlateFontInfo PopFont = FontBold;
+			PopFont.Size = FMath::RoundToInt(13.0f * SizeScale);
 			const FVector2D LocalPos = ScreenPos / static_cast<double>(DPIScale);
 			FSlateDrawElement::MakeText(
 				OutDrawElements,
 				LayerId + 1,
-				AllottedGeometry.ToPaintGeometry(FVector2D(220.0, 28.0), FSlateLayoutTransform(LocalPos - FVector2D(40.0, 14.0))),
+				AllottedGeometry.ToPaintGeometry(FVector2D(260.0, 40.0), FSlateLayoutTransform(LocalPos - FVector2D(40.0 * SizeScale, 14.0 * SizeScale))),
 				Pop.Text,
-				FontBold,
+				PopFont,
 				ESlateDrawEffect::None,
 				Color);
+		}
 		}
 
 		return LayerId + 2;
@@ -298,6 +317,21 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 		UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("PlayerHUDRootCanvas"));
 		WidgetTree->RootWidget = RootCanvas;
 
+		if (bCompanionCard)
+		{
+			BuildCompanionCardLayout(RootCanvas);
+			return Super::RebuildWidget();
+		}
+
+		HurtFlashOverlay = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("HurtFlashOverlay"));
+		HurtFlashOverlay->SetBrushColor(FLinearColor(0.7f, 0.0f, 0.0f, 0.0f));
+		HurtFlashOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* HurtSlot = RootCanvas->AddChildToCanvas(HurtFlashOverlay))
+		{
+			HurtSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			HurtSlot->SetOffsets(FMargin(0.0f));
+		}
+
 		// Fullscreen pooled floating combat text layer (non-hit-testable)
 		FloatingPopupSlateHost = WidgetTree->ConstructWidget<UNativeWidgetHost>(UNativeWidgetHost::StaticClass(), TEXT("FloatingPopupSlateHost"));
 		FloatingPopupSlateHost->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -317,7 +351,8 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 		{
 			FrameSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 			FrameSlot->SetPosition(FVector2D(20.0, 20.0));
-			FrameSlot->SetSize(FVector2D(390.0, 178.0));
+			// Fits its lines: the slow and senses lines only appear when they apply.
+			FrameSlot->SetAutoSize(true);
 		}
 
 		UBorder* HUDFrame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PlayerHUDFrame"));
@@ -327,6 +362,11 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 
 		UVerticalBox* HUDStack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PlayerHUDStack"));
 		HUDFrame->SetContent(HUDStack);
+
+		// Keeps the auto-sized card (and its bars) at a readable width.
+		USpacer* CardWidth = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("CardWidthSpacer"));
+		CardWidth->SetSize(FVector2D(300.0, 0.0));
+		HUDStack->AddChildToVerticalBox(CardWidth);
 
 		Txt_HealthReadout = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_HealthReadout"));
 		Txt_HealthReadout->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 11));
@@ -348,10 +388,7 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 		PB_Battery->SetFillColorAndOpacity(FLinearColor(0.96f, 0.72f, 0.18f, 1.0f));
 		HUDStack->AddChildToVerticalBox(PB_Battery);
 
-		Txt_OctantIndicator = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_OctantIndicator"));
-		Txt_OctantIndicator->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-		Txt_OctantIndicator->SetColorAndOpacity(FSlateColor(FLinearColor(0.82f, 0.88f, 0.94f, 1.0f)));
-		HUDStack->AddChildToVerticalBox(Txt_OctantIndicator);
+		// The move/aim octant readout was a debug line; GetFormattedOctantText stays for logs and tests.
 
 		Txt_ChronoSlowReadout = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_ChronoSlowReadout"));
 		Txt_ChronoSlowReadout->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
@@ -437,6 +474,54 @@ TSharedRef<SWidget> UDungeoneerPlayerHUDWidget::RebuildWidget()
 	return Super::RebuildWidget();
 }
 
+void UDungeoneerPlayerHUDWidget::BuildCompanionCardLayout(UCanvasPanel* RootCanvas)
+{
+	// Player 2's card: top-right under the minimap. Vitals, slow/senses, skills and their own prompt.
+	UBorder* Trim = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CompanionTrim"));
+	Trim->SetBrushColor(FLinearColor(0.42f, 0.62f, 0.78f, 0.80f));
+	Trim->SetPadding(FMargin(1.5f));
+	if (UCanvasPanelSlot* CardSlot = RootCanvas->AddChildToCanvas(Trim))
+	{
+		CardSlot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f));
+		CardSlot->SetAlignment(FVector2D(1.0, 0.0));
+		CardSlot->SetPosition(FVector2D(-20.0, 212.0));
+		CardSlot->SetAutoSize(true);
+	}
+	UBorder* Frame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CompanionFrame"));
+	Frame->SetBrushColor(FLinearColor(0.02f, 0.024f, 0.038f, 0.88f));
+	Frame->SetPadding(FMargin(12.0f, 8.0f));
+	Trim->SetContent(Frame);
+
+	UVerticalBox* Stack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("CompanionStack"));
+	Frame->SetContent(Stack);
+	USpacer* CardWidth = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("CompanionWidthSpacer"));
+	CardWidth->SetSize(FVector2D(240.0, 0.0));
+	Stack->AddChildToVerticalBox(CardWidth);
+
+	auto AddText = [this, Stack](const TCHAR* Name, const int32 Size, const bool bBold, const FLinearColor& Color) -> UTextBlock*
+	{
+		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		Text->SetFont(FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size));
+		Text->SetColorAndOpacity(FSlateColor(Color));
+		Stack->AddChildToVerticalBox(Text);
+		return Text;
+	};
+
+	AddText(TEXT("Txt_CompanionTitle"), 10, true, FLinearColor(0.62f, 0.82f, 0.98f, 1.0f))->SetText(FText::FromString(TEXT("SECOND LANTERN")));
+	Txt_HealthReadout = AddText(TEXT("Txt_HealthReadout"), 10, true, FLinearColor(0.96f, 0.42f, 0.38f, 1.0f));
+	PB_Health = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("PB_Health"));
+	PB_Health->SetFillColorAndOpacity(FLinearColor(0.84f, 0.16f, 0.18f, 1.0f));
+	Stack->AddChildToVerticalBox(PB_Health);
+	Txt_BatteryReadout = AddText(TEXT("Txt_BatteryReadout"), 10, true, FLinearColor(0.98f, 0.80f, 0.34f, 1.0f));
+	PB_Battery = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("PB_Battery"));
+	PB_Battery->SetFillColorAndOpacity(FLinearColor(0.96f, 0.72f, 0.18f, 1.0f));
+	Stack->AddChildToVerticalBox(PB_Battery);
+	Txt_ChronoSlowReadout = AddText(TEXT("Txt_ChronoSlowReadout"), 9, false, FLinearColor(0.35f, 0.92f, 0.76f, 1.0f));
+	Txt_SensoryPerksReadout = AddText(TEXT("Txt_SensoryPerksReadout"), 9, false, FLinearColor(0.54f, 0.82f, 0.98f, 1.0f));
+	Txt_RelicsAndSupplies = AddText(TEXT("Txt_RelicsAndSupplies"), 9, true, FLinearColor(0.38f, 0.90f, 0.98f, 1.0f));
+	Txt_InteractHint = AddText(TEXT("Txt_InteractHint"), 9, true, FLinearColor(0.56f, 0.98f, 0.68f, 1.0f));
+}
+
 void UDungeoneerPlayerHUDWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -458,9 +543,16 @@ void UDungeoneerPlayerHUDWidget::RefreshHUDFromOwningLocalPlayer() noexcept
 		return;
 	}
 
-	if (const APlayerController* OwningPC = OwningLP->GetPlayerController(World))
+	// A companion card watches another local player's hero; the normal HUD watches its owner's.
+	const ULocalPlayer* WatchedLP = OwningLP;
+	if (ObservedLocalPlayerIndex >= 0)
 	{
-		if (const ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(OwningPC->GetPawn()))
+		const UGameInstance* GI = World->GetGameInstance();
+		WatchedLP = (GI && ObservedLocalPlayerIndex < GI->GetNumLocalPlayers()) ? GI->GetLocalPlayers()[ObservedLocalPlayerIndex] : nullptr;
+	}
+	if (const APlayerController* WatchedPC = WatchedLP ? WatchedLP->GetPlayerController(World) : nullptr)
+	{
+		if (const ADungeoneerCharacter* Character = Cast<ADungeoneerCharacter>(WatchedPC->GetPawn()))
 		{
 			RefreshHUDFromCharacter(Character);
 		}
@@ -474,6 +566,7 @@ void UDungeoneerPlayerHUDWidget::RefreshHUDFromCharacter(const ADungeoneerCharac
 		return;
 	}
 	ObservedCharacter = Character;
+	CachedHurtFlash = Character->GetHurtFlashAlpha();
 
 	CachedCurrentHealth = FMath::Max(0.0f, Character->GetCurrentHealth());
 	CachedMaxHealth = FMath::Max(1.0f, Character->GetMaxHealth());
@@ -545,26 +638,49 @@ void UDungeoneerPlayerHUDWidget::RefreshHUDFromCharacter(const ADungeoneerCharac
 		}
 	}
 
+	// Swing names were debug output; the line now only calls out states the player has to act on.
 	switch (Character->GetCombatActionState())
 	{
-	case EDungeoneerCombatActionState::LanternSlash: CachedCombatStateLabel = TEXT("SLASH!"); break;
-	case EDungeoneerCombatActionState::ChargedFlare: CachedCombatStateLabel = TEXT("FLARE!"); break;
-	case EDungeoneerCombatActionState::DodgeDash:    CachedCombatStateLabel = TEXT("DODGE!"); break;
-	case EDungeoneerCombatActionState::HitStagger:   CachedCombatStateLabel = TEXT("STAGGER"); break;
-	case EDungeoneerCombatActionState::Downed:       CachedCombatStateLabel = TEXT("DOWNED"); break;
-	default:                                         CachedCombatStateLabel = TEXT("READY"); break;
+	case EDungeoneerCombatActionState::Downed:      CachedCombatStateLabel = TEXT("DOWN - HOLD ON"); break;
+	case EDungeoneerCombatActionState::HeavyCharge: CachedCombatStateLabel = Character->GetHeavyChargeAlpha() >= 1.0f ? TEXT("BANKED - RELEASE!") : TEXT(""); break;
+	default:                                        CachedCombatStateLabel.Reset(); break;
+	}
+	if (Character->IsEmpowered())
+	{
+		if (!CachedCombatStateLabel.IsEmpty())
+		{
+			CachedCombatStateLabel += TEXT("   ");
+		}
+		CachedCombatStateLabel += FString::Printf(TEXT("x%.1f NEXT HIT"), Character->GetEmpoweredMultiplier());
+	}
+
+	CachedSkillsLine.Reset();
+	if (const UDungeoneerSkillComponent* Skills = Character->GetSkillComponent())
+	{
+		for (int32 SkillSlot = 0; SkillSlot < UDungeoneerSkillComponent::NumSlots; ++SkillSlot)
+		{
+			const FDungeoneerSkillDef& Def = DungeoneerSkills::GetDef(Skills->GetEquippedSkill(SkillSlot));
+			const float Cooldown = Skills->GetCooldownRemaining(SkillSlot);
+			if (SkillSlot > 0)
+			{
+				CachedSkillsLine += TEXT("   ");
+			}
+			CachedSkillsLine += (Cooldown > 0.0f)
+				? FString::Printf(TEXT("%s (%.0fs)"), Def.DisplayName, FMath::CeilToFloat(Cooldown))
+				: FString::Printf(TEXT("%s READY"), Def.DisplayName);
+		}
 	}
 
 	switch (Character->GetNearbyInteractType())
 	{
 	case EDungeoneerNearbyInteract::VendorTrade:      CachedInteractHint = TEXT("[F] BUY SUPPLY FROM VENDOR"); break;
-	case EDungeoneerNearbyInteract::UnlockVault:      CachedInteractHint = TEXT("[F] UNLOCK TERMINAL LOOT VAULT"); break;
+	case EDungeoneerNearbyInteract::UnlockVault:      CachedInteractHint = TEXT("[F] OPEN THE VAULT"); break;
 	case EDungeoneerNearbyInteract::DescendNextFloor: CachedInteractHint = TEXT("[F] DESCEND TO NEXT FLOOR"); break;
 	case EDungeoneerNearbyInteract::SensoryAltar:     CachedInteractHint = TEXT("[F] SANCTUARY ALTAR: AWAKEN SENSE (90g)"); break;
 	case EDungeoneerNearbyInteract::CollectPickup:    CachedInteractHint = TEXT("[F] COLLECT DROPPED LOOT"); break;
 	case EDungeoneerNearbyInteract::ReviveAlly:       CachedInteractHint = TEXT("[F] REVIVE DOWNED ALLY (50% HP)"); break;
-	case EDungeoneerNearbyInteract::AllyTrade:        CachedInteractHint = TEXT("[T] CO-OP P2P SUPPLY SWAP (2PC)  |  [F2] SPLIT-SCREEN"); break;
-	default:                                          CachedInteractHint = TEXT("LMB: COMBO | R: FLARE | Q/C: SUPPLIES | SHIFT: DODGE | F2: 2P CO-OP"); break;
+	case EDungeoneerNearbyInteract::AllyTrade:        CachedInteractHint = TEXT("[T] SHARE SUPPLIES WITH PARTNER"); break;
+	default:                                          CachedInteractHint = TEXT("LMB combo (hold: smash)  SHIFT roll  L parry  Q/R skills  1/C supplies  F2 co-op"); break;
 	}
 
 	RefreshMinimapFromWorld(Character);
@@ -662,18 +778,21 @@ FString UDungeoneerPlayerHUDWidget::GetFormattedOctantText() const
 
 FString UDungeoneerPlayerHUDWidget::GetFormattedChronoSlowText() const
 {
-	return FString::Printf(TEXT("CHRONO-SLOW S=%.2f (%.0f%% SPEED)"),
-		ChronoSlowRatio,
-		FMath::Clamp(1.0f - ChronoSlowRatio, 0.05f, 1.0f) * 100.0f);
+	return FString::Printf(TEXT("STILLSMOKE IN YOUR LUNGS  -  %.0f%% SLOWER"), FMath::Clamp(ChronoSlowRatio, 0.0f, 0.95f) * 100.0f);
 }
 
 FString UDungeoneerPlayerHUDWidget::GetFormattedCombatAndLoopText() const
 {
-	return FString::Printf(TEXT("FLOOR %d | GOLD %d | KILLS %d | [%s]"),
+	FString Line = FString::Printf(TEXT("FLOOR %d   ·   %d GOLD   ·   %d SLAIN"),
 		CachedFloorIndex,
 		CachedGoldBalance,
-		CachedKillsCount,
-		*CachedCombatStateLabel);
+		CachedKillsCount);
+	if (!CachedCombatStateLabel.IsEmpty())
+	{
+		Line += TEXT("   ·   ");
+		Line += CachedCombatStateLabel;
+	}
+	return Line;
 }
 
 FString UDungeoneerPlayerHUDWidget::GetFormattedInteractHintText() const
@@ -686,6 +805,10 @@ void UDungeoneerPlayerHUDWidget::UpdateTextBlocks() noexcept
 	if (PB_Health)
 	{
 		PB_Health->SetPercent(HealthPercent);
+	}
+	if (HurtFlashOverlay)
+	{
+		HurtFlashOverlay->SetBrushColor(FLinearColor(0.7f, 0.0f, 0.0f, 0.22f * CachedHurtFlash * CachedHurtFlash));
 	}
 	if (PB_Battery)
 	{
@@ -717,12 +840,24 @@ void UDungeoneerPlayerHUDWidget::UpdateTextBlocks() noexcept
 	}
 	if (Txt_ChronoSlowReadout)
 	{
-		Txt_ChronoSlowReadout->SetText(FText::FromString(GetFormattedChronoSlowText()));
+		// Only shown while the hero is actually slowed.
+		const bool bSlowed = ChronoSlowRatio > 0.01f;
+		Txt_ChronoSlowReadout->SetVisibility(bSlowed ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (bSlowed)
+		{
+			Txt_ChronoSlowReadout->SetText(FText::FromString(GetFormattedChronoSlowText()));
+		}
 	}
 	if (Txt_SensoryPerksReadout)
 	{
-		Txt_SensoryPerksReadout->SetText(FText::FromString(FString::Printf(TEXT("SENSES [DV:%d  AH:%d  ST:%d]"),
-			DarkVisionTier, AcuteHearingTier, ScentThermalTier)));
+		// Only shown once the Third Eye has woken at least one sense.
+		const bool bAnySense = (DarkVisionTier + AcuteHearingTier + ScentThermalTier) > 0;
+		Txt_SensoryPerksReadout->SetVisibility(bAnySense ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (bAnySense)
+		{
+			Txt_SensoryPerksReadout->SetText(FText::FromString(FString::Printf(TEXT("SIGHT %d/3   HEARING %d/3   SCENT %d/3"),
+				DarkVisionTier, AcuteHearingTier, ScentThermalTier)));
+		}
 	}
 	if (Txt_CombatAndLoopReadout)
 	{
@@ -730,7 +865,9 @@ void UDungeoneerPlayerHUDWidget::UpdateTextBlocks() noexcept
 	}
 	if (Txt_RelicsAndSupplies)
 	{
-		FString RelicsLine = FString::Printf(TEXT("[Q] OIL x%d  |  [C] ANTIDOTE x%d"), CachedOilPhials, CachedAntidotes);
+		FString RelicsLine = CachedSkillsLine.IsEmpty()
+			? FString::Printf(TEXT("OIL x%d  |  ANTIDOTE x%d"), CachedOilPhials, CachedAntidotes)
+			: FString::Printf(TEXT("%s  |  OIL x%d  ANTIDOTE x%d"), *CachedSkillsLine, CachedOilPhials, CachedAntidotes);
 		for (uint8 r = 1; r <= 5; ++r)
 		{
 			if ((CachedRelicMask & static_cast<uint8>(1u << (r - 1u))) != 0)

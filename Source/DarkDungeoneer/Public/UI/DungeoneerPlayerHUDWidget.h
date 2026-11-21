@@ -44,6 +44,11 @@ public:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 
+protected:
+	void BuildCompanionCardLayout(class UCanvasPanel* RootCanvas);
+
+public:
+
 	/** Pushes live character state into HUD readout properties and text blocks (zero Tick allocations). */
 	UFUNCTION(BlueprintCallable, Category = "UI|HUD")
 	void RefreshHUDFromCharacter(const ADungeoneerCharacter* Character) noexcept;
@@ -51,6 +56,18 @@ public:
 	/** Resolves owning ULocalPlayer pawn and updates HUD metrics without cross-viewport leakage. */
 	UFUNCTION(BlueprintCallable, Category = "UI|HUD")
 	void RefreshHUDFromOwningLocalPlayer() noexcept;
+
+	/**
+	 * Turns this widget into a compact vitals card for another local player (top-right, no minimap,
+	 * boss bar or popup layer), drawn on the owning player's screen. Call before adding it to the screen.
+	 */
+	void ConfigureAsCompanionCard(int32 InObservedLocalPlayerIndex) noexcept
+	{
+		bCompanionCard = true;
+		ObservedLocalPlayerIndex = InObservedLocalPlayerIndex;
+	}
+
+	bool IsCompanionCard() const noexcept { return bCompanionCard; }
 
 	UFUNCTION(BlueprintPure, Category = "UI|HUD")
 	float GetHealthPercent() const noexcept { return HealthPercent; }
@@ -95,6 +112,9 @@ public:
 	FString GetCachedCombatStateLabel() const { return CachedCombatStateLabel; }
 
 	UFUNCTION(BlueprintPure, Category = "UI|HUD")
+	FString GetCachedSkillsLine() const { return CachedSkillsLine; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|HUD")
 	int32 GetMinimapRoomCount() const noexcept { return MinimapRoomCount; }
 
 	UFUNCTION(BlueprintPure, Category = "UI|HUD")
@@ -123,6 +143,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BossBarContainer;
+
+	/** Full-screen red wash, alpha driven by the watched hero's hurt flash. */
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> HurtFlashOverlay;
 
 	UPROPERTY(BlueprintReadOnly, Category = "UI|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Txt_BossTitle;
@@ -161,6 +185,9 @@ private:
 	TSharedPtr<SDungeoneerMinimapWidget> MinimapSlateWidget;
 	TSharedPtr<SDungeoneerFloatingPopupWidget> FloatingPopupSlateWidget;
 	TWeakObjectPtr<const ADungeoneerCharacter> ObservedCharacter;
+	int32 ObservedLocalPlayerIndex = -1;
+	float CachedHurtFlash = 0.0f;
+	bool bCompanionCard = false;
 
 	TStaticArray<FDungeoneerMinimapRoomSlot, MaxMinimapRooms> MinimapRooms;
 	int32 MinimapRoomCount = 0;
@@ -192,4 +219,5 @@ private:
 	uint8 CachedRelicMask = 0;
 	FString CachedCombatStateLabel = TEXT("READY");
 	FString CachedInteractHint;
+	FString CachedSkillsLine;
 };

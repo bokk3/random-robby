@@ -2,6 +2,8 @@
 #include "Dungeon/DungeonGeneratorSubsystem.h"
 #include "Core/DungeoneerAssetBootstrapSubsystem.h"
 #include "Core/DungeoneerCharacter.h"
+#include "Core/DungeoneerGameState.h"
+#include "Combat/DungeoneerSkillComponent.h"
 #include "Rendering/SensoryPerkComponent.h"
 #include "Social/DungeoneerInventoryComponent.h"
 #include "Components/BoxComponent.h"
@@ -181,7 +183,7 @@ bool ARestingGroundActor::TriggerSensoryAltarUpgrade(ADungeoneerCharacter* Playe
 	}
 
 	Perks->UpgradePerk(BestPerk);
-	Player->PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 120.0), TEXT("SENSE AWAKENED +1"), EDungeoneerFloatingTextKind::Relic);
+	Player->PushFloatingCombatPopup(GetActorLocation() + FVector(0.0, 0.0, 120.0), TEXT("THE THIRD EYE OPENS A LITTLE WIDER"), EDungeoneerFloatingTextKind::Relic);
 	return true;
 }
 
@@ -418,18 +420,21 @@ void AMajorLootVaultActor::UnlockVaultWithSeed(int32 RoomSeed)
 	VaultRewards.Reset();
 	FRandomStream Stream(RoomSeed);
 
-	static constexpr const TCHAR* HighTierIds[3] =
+	// Last Sunset (Relic_SolarFlashlightCore) only comes from the Colossus, so vaults roll from the other four.
+	static constexpr const TCHAR* VaultRelicIds[4] =
 	{
-		TEXT("Relic_SolarFlashlightCore"),
-		TEXT("Relic_EchoCrown_Tier3"),
-		TEXT("Relic_ChronoAegis_Immunity")
+		TEXT("Relic_SunGlassLens"),
+		TEXT("Relic_ChronoWardBoots"),
+		TEXT("Relic_EchoTunedBlade"),
+		TEXT("Relic_VampireWick")
 	};
+	const int32 FirstPick = Stream.RandRange(0, 3);
 
 	for (int32 i = 0; i < 3; ++i)
 	{
 		FVendorCatalogItem Relic;
 		Relic.ItemGuid = FGuid(Stream.GetUnsignedInt(), Stream.GetUnsignedInt(), Stream.GetUnsignedInt(), Stream.GetUnsignedInt());
-		Relic.ItemId = FName(HighTierIds[i]);
+		Relic.ItemId = FName(VaultRelicIds[(FirstPick + i) & 3]);
 		Relic.GoldPrice = 350 + Stream.RandRange(0, 150);
 		Relic.StockCount = 1;
 		VaultRewards.Add(Relic);
@@ -486,6 +491,17 @@ void ADungeoneerLootPickupActor::ConfigurePickup(
 	EnsurePickupVisualsInitialized();
 }
 
+void ADungeoneerLootPickupActor::ConfigureSkillScroll(const EDungeoneerSkillId InSkillId)
+{
+	DropKind = EDungeoneerLootDropKind::SkillScroll;
+	SkillId = InSkillId;
+	GoldAmount = 0;
+	ConsumableId = EDungeoneerConsumableId::None;
+	RelicId = EDungeoneerRelicId::None;
+	bVisualsApplied = false;
+	EnsurePickupVisualsInitialized();
+}
+
 void ADungeoneerLootPickupActor::EnsurePickupVisualsInitialized()
 {
 	if (bVisualsApplied)
@@ -513,6 +529,13 @@ void ADungeoneerLootPickupActor::EnsurePickupVisualsInitialized()
 			? FLinearColor(0.32f, 0.96f, 0.52f)
 			: FLinearColor(1.0f, 0.68f, 0.22f);
 		ScaleVec = FVector(0.58, 0.58, 0.58);
+	}
+	else if (DropKind == EDungeoneerLootDropKind::SkillScroll)
+	{
+		DiffKey = FName(TEXT("Sanctuary_Shrine_D"));
+		NormKey = FName(TEXT("Sanctuary_Shrine_N"));
+		GlowColor = FLinearColor(0.78f, 0.42f, 1.0f);
+		ScaleVec = FVector(0.6, 0.6, 0.6);
 	}
 
 	EncounterVisualHelper::ApplyEncounter25DSpriteVisual(
@@ -580,6 +603,31 @@ bool ADungeoneerLootPickupActor::CollectByPlayer(ADungeoneerCharacter* Collector
 			GetActorLocation() + FVector(0.0, 0.0, 84.0),
 			FString::Printf(TEXT("RELIC: %s"), UDungeoneerInventoryComponent::GetRelicDisplayName(RelicId)),
 			EDungeoneerFloatingTextKind::Relic);
+	}
+
+	else if (DropKind == EDungeoneerLootDropKind::SkillScroll)
+	{
+		UDungeoneerSkillComponent* Skills = Collector->GetSkillComponent();
+		if (!Skills)
+		{
+			return false;
+		}
+		const EDungeoneerSkillId Dropped = Skills->EquipFoundSkill(SkillId);
+		const TCHAR* Learned = DungeoneerSkills::GetDef(SkillId).DisplayName;
+		Collector->PushFloatingCombatPopup(
+			GetActorLocation() + FVector(0.0, 0.0, 84.0),
+			(Dropped == EDungeoneerSkillId::None)
+				? FString::Printf(TEXT("LEARNED: %s"), Learned)
+				: FString::Printf(TEXT("LEARNED: %s (forgot %s)"), Learned, DungeoneerSkills::GetDef(Dropped).DisplayName),
+			EDungeoneerFloatingTextKind::Relic);
+	}
+
+	if (bMarksSecretFound)
+	{
+		if (ADungeoneerGameState* GS = GetWorld() ? GetWorld()->GetGameState<ADungeoneerGameState>() : nullptr)
+		{
+			GS->AuthorityRecordSecretFound();
+		}
 	}
 
 	bCollected = true;

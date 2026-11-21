@@ -46,6 +46,19 @@ void UDungeoneerInventoryComponent::AuthorityAddItem(const FGuid& ItemGuid, FNam
 	Items.Add(NewItem);
 }
 
+void UDungeoneerInventoryComponent::AuthorityResetForNewRun() noexcept
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+	Items.Reset();
+	GoldBalance = StartingGold;
+	ReplicatedRelicMask = 0;
+	OilPhialCount = StartingOilPhials;
+	AntidoteCount = StartingAntidotes;
+}
+
 bool UDungeoneerInventoryComponent::AuthorityAdjustGold(int32 DeltaGold) noexcept
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority())
@@ -221,11 +234,11 @@ const TCHAR* UDungeoneerInventoryComponent::GetRelicDisplayName(EDungeoneerRelic
 {
 	switch (RelicId)
 	{
-	case EDungeoneerRelicId::SunGlassLens:        return TEXT("SUN-GLASS LENS");
-	case EDungeoneerRelicId::ChronoWardBoots:     return TEXT("CHRONO-WARD BOOTS");
-	case EDungeoneerRelicId::EchoTunedBlade:      return TEXT("ECHO-TUNED BLADE");
-	case EDungeoneerRelicId::SolarFlashlightCore: return TEXT("SOLAR CORE");
-	case EDungeoneerRelicId::VampireWick:         return TEXT("VAMPIRE WICK");
+	case EDungeoneerRelicId::SunGlassLens:        return TEXT("SHAFT-GLASS LENS");
+	case EDungeoneerRelicId::ChronoWardBoots:     return TEXT("RUNNER'S SOLES");
+	case EDungeoneerRelicId::EchoTunedBlade:      return TEXT("CHIMING PANE");
+	case EDungeoneerRelicId::SolarFlashlightCore: return TEXT("LAST SUNSET");
+	case EDungeoneerRelicId::VampireWick:         return TEXT("DRINKING WICK");
 	default:                                      return TEXT("NONE");
 	}
 }

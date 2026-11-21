@@ -50,6 +50,13 @@ public:
 	/** Server-only: adjusts currency safely (returns false if insufficient funds). */
 	bool AuthorityAdjustGold(int32 DeltaGold) noexcept;
 
+	/** Puts gold, relics, consumables and items back to a fresh run's starting values. Authority only. */
+	void AuthorityResetForNewRun() noexcept;
+
+	static constexpr int32 StartingGold = 250;
+	static constexpr int32 StartingOilPhials = 1;
+	static constexpr int32 StartingAntidotes = 1;
+
 	/** Server-only: validates whether an unlocked item with ItemGuid exists. */
 	bool AuthorityHasUnlockedItem(const FGuid& ItemGuid) const noexcept;
 
@@ -93,14 +100,14 @@ protected:
 	TArray<FDungeoneerInventoryItem> Items;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	int32 GoldBalance = 250;
+	int32 GoldBalance = StartingGold;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Inventory|Relics")
 	uint8 ReplicatedRelicMask = 0;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Consumables")
-	int32 OilPhialCount = 1;
+	int32 OilPhialCount = StartingOilPhials;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Consumables")
-	int32 AntidoteCount = 1;
+	int32 AntidoteCount = StartingAntidotes;
 };

@@ -11,28 +11,14 @@ void UDungeoneerGameViewportClient::Init(FWorldContext& WorldContext, UGameInsta
 {
 	Super::Init(WorldContext, OwningGameInstance, bCreateNewAudioDevice);
 	MaxSplitscreenPlayers = MaxLocalSplitscreenPlayers;
-	SetForceDisableSplitscreen(false);
+	SetForceDisableSplitscreen(true);
 }
 
 void UDungeoneerGameViewportClient::UpdateActiveSplitscreenType()
 {
-	const int32 NumLocalPlayers = GameInstance ? GameInstance->GetNumLocalPlayers() : 1;
-	if (NumLocalPlayers <= 1)
-	{
-		ActiveSplitscreenType = ESplitScreenType::None;
-	}
-	else if (NumLocalPlayers == 2)
-	{
-		ActiveSplitscreenType = ESplitScreenType::TwoPlayer_Vertical;
-	}
-	else if (NumLocalPlayers == 3)
-	{
-		ActiveSplitscreenType = ESplitScreenType::ThreePlayer_FavorTop;
-	}
-	else
-	{
-		ActiveSplitscreenType = ESplitScreenType::FourPlayer_Grid;
-	}
+	// Local co-op shares one full-screen view through the party camera. Extra local players keep their
+	// controllers and pawns but get no view of their own (the engine gives them a zero-size area).
+	ActiveSplitscreenType = ESplitScreenType::None;
 }
 
 void UDungeoneerGameViewportClient::SetLocalSplitscreenEnabled(bool bEnable)

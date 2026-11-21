@@ -52,6 +52,10 @@ public:
 	/** Resets Chrono-Leech slow cleanly to zero. */
 	void ClearChronoSlow() noexcept { ChronoSlowRatio = 0.0f; }
 
+	/** Temporary speed multiplier for attacks and skills (heavy charge, whirl). 1 = normal. */
+	void SetActionSpeedScalar(float InScalar) noexcept { ActionSpeedScalar = FMath::Clamp(InScalar, 0.0f, 2.0f); }
+	float GetActionSpeedScalar() const noexcept { return ActionSpeedScalar; }
+
 	/** Applies / queries AnkleDeepStream wading state (uniform 0.88x speed multiplier). */
 	void SetWadingInStream(bool bInWading) noexcept { bIsWadingInStream = bInWading; }
 	bool IsWadingInStream() const noexcept { return bIsWadingInStream; }
@@ -83,6 +87,7 @@ private:
 	// Chrono-Leech debuff ratio S in [0.0, MaxSlowRatio]
 	float ChronoSlowRatio = 0.0f;
 	bool bIsWadingInStream = false;
+	float ActionSpeedScalar = 1.0f;
 
 	// Fixed-step distance accumulator synced to the 4-axis step cycle
 	float StepDistanceAccumulator = 0.0f;
